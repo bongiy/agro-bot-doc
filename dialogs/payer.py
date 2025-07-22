@@ -453,7 +453,7 @@ async def create_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.message.edit_text("Головне меню:", reply_markup=menu_keyboard)
+    await query.message.reply_text("Головне меню:", reply_markup=menu_keyboard)
 
 # ==== 7. CONVERSATION HANDLER ====
 
