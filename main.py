@@ -7,6 +7,8 @@ from telegram import (
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, ContextTypes, ConversationHandler, filters
 )
+from db import database, Payer
+import sqlalchemy
 
 # ======= Константи етапів анкети пайовика =======
 (
@@ -38,9 +40,6 @@ def is_idcard_number(text): return re.fullmatch(r"\d{9}", text)
 def is_idcard_issuer(text): return re.fullmatch(r"\d{4}", text)
 def is_date(text): return re.fullmatch(r"\d{2}\.\d{2}\.\d{4}", text)
 
-# ======= "База" пайовиків (тимчасово у памʼяті) =======
-payers = {}
-
 # ======= FastAPI та Telegram Application =======
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 WEBHOOK_PATH = "/webhook"
@@ -53,10 +52,15 @@ is_initialized = False
 @app.on_event("startup")
 async def on_startup():
     global is_initialized
+    await database.connect()
     if not is_initialized:
         await application.initialize()
         await application.bot.set_webhook(WEBHOOK_URL)
         is_initialized = True
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    await database.disconnect()
 
 # ======= Меню-стартер =======
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -179,10 +183,26 @@ async def add_payer_birth_date(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("❗️ Формат дати: дд.мм.рррр")
         return BIRTH_DATE
     context.user_data["birth_date"] = update.message.text
-    user_id = update.message.from_user.id
-    payers.setdefault(user_id, []).append(context.user_data.copy())
+    data = context.user_data
+    query = Payer.__table__.insert().values(
+        name=data.get("name"),
+        ipn=data.get("ipn"),
+        address=data.get("address"),
+        phone=data.get("phone"),
+        doc_type=data.get("doc_type"),
+        passport_series=data.get("passport_series"),
+        passport_number=data.get("passport_number"),
+        passport_issuer=data.get("passport_issuer"),
+        passport_date=data.get("passport_date"),
+        id_number=data.get("id_number"),
+        unzr=data.get("unzr"),
+        idcard_issuer=data.get("idcard_issuer"),
+        idcard_date=data.get("idcard_date"),
+        birth_date=data.get("birth_date"),
+    )
+    await database.execute(query)
     await update.message.reply_text(
-        f"✅ Пайовика додано!\n\nДані:\n{context.user_data}\n\n/start — в меню.",
+        f"✅ Пайовика додано!\n\n/start — в меню.",
         reply_markup=menu_keyboard
     )
     return ConversationHandler.END
