@@ -511,11 +511,6 @@ ID: {payer.id}
         await edit_payer_menu(update, context)
         return EDIT_SELECT
 
-# Додаєш у states
-# ...
-EDIT_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_field_save)],
-"CONFIRM_EDIT": [CallbackQueryHandler(edit_field_confirm, pattern="^(confirm_edit|cancel_edit)$")],
-# ...
 
 
 # ==== 6. ДОДАТКОВІ ФУНКЦІЇ ====
