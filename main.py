@@ -39,8 +39,11 @@ application.add_handler(MessageHandler(filters.Regex("^Список пайови
 application.add_handler(CallbackQueryHandler(payer_card, pattern=r"^payer_card:"))
 application.add_handler(CallbackQueryHandler(edit_payer_menu, pattern=r"^edit_payer:"))
 application.add_handler(CallbackQueryHandler(edit_field_input, pattern=r"^edit_field:"))
+application.add_handler(CallbackQueryHandler(save_field, pattern=r"^save_field:"))
 application.add_handler(CallbackQueryHandler(create_contract, pattern=r"^create_contract:"))
 application.add_handler(CallbackQueryHandler(to_menu, pattern=r"^to_menu$"))
+
+
 
 async def menu_handler(update: Update, context):
     await update.message.reply_text("Оберіть дію з меню нижче.", reply_markup=menu_keyboard)
