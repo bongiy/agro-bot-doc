@@ -385,7 +385,6 @@ ID: {payer.id}
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
 # ==== 5. КАРТКА, РЕДАГУВАННЯ, ОНОВЛЕННЯ ПОЛІВ (фінальна версія) ====
-
 from telegram.constants import ParseMode
 
 FIELDS = [
@@ -460,6 +459,11 @@ async def edit_field_input(update, context):
     else:
         payer_id = context.user_data.get("edit_payer_id")
         field_key = context.user_data.get("edit_field")
+    # --- ЗАХИСТ ---
+    if payer_id is None or field_key is None:
+        await query.answer("Помилка callback! payer_id або field_key не знайдено!")
+        await query.message.edit_text("⚠️ Технічна помилка. Спробуйте знову.")
+        return ConversationHandler.END
     select = Payer.select().where(Payer.c.id == payer_id)
     payer = await database.fetch_one(select)
     old_value = getattr(payer, field_key, "")
@@ -498,7 +502,6 @@ async def edit_field_save(update, context):
         f"Змінити <b>{dict(FIELDS)[field_key]}</b>:\n<b>{old_value}</b> ➔ <b>{value}</b>?\n\nПідтвердити зміну?",
         reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML
     )
-    # Не завершуй розмову тут! Очікуємо підтвердження:
     return ConversationHandler.END
 
 async def save_field(update, context):
@@ -516,6 +519,7 @@ async def save_field(update, context):
     await query.answer("✅ Зміни збережено!")
     await payer_card(update, context)
 
+# Для кнопки "Назад" (edit_payer_menu)
 async def payer_card_back(update, context):
     query = update.callback_query
     payer_id = int(query.data.split(":")[1])
