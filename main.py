@@ -316,7 +316,7 @@ async def add_payer_birth_date(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data["birth_date"] = update.message.text
     d = context.user_data
     adr = f"{d['oblast']} обл., {d['rayon']} р-н, с. {d['selo']}, вул. {d['vul']}, буд. {d['bud']}, кв. {d['kv']}"
-    query = Payer.__table__.insert().values(
+    query = Payer.insert().values(
         name=d.get("name"),
         ipn=d.get("ipn"),
         address=adr,
