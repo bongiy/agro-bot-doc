@@ -8,7 +8,6 @@ from telegram.ext import (
     Application, CommandHandler, MessageHandler, ContextTypes, ConversationHandler, filters, CallbackQueryHandler
 )
 from db import database, Payer
-import sqlalchemy
 
 (
     FIO, IPN, OBLAST, RAYON, SELO, VUL, BUD, KV,
@@ -315,11 +314,15 @@ async def add_payer_birth_date(update: Update, context: ContextTypes.DEFAULT_TYP
         return BIRTH_DATE
     context.user_data["birth_date"] = update.message.text
     d = context.user_data
-    adr = f"{d['oblast']} обл., {d['rayon']} р-н, с. {d['selo']}, вул. {d['vul']}, буд. {d['bud']}, кв. {d['kv']}"
     query = Payer.insert().values(
         name=d.get("name"),
         ipn=d.get("ipn"),
-        address=adr,
+        oblast=d.get("oblast"),
+        rayon=d.get("rayon"),
+        selo=d.get("selo"),
+        vul=d.get("vul"),
+        bud=d.get("bud"),
+        kv=d.get("kv"),
         phone=d.get("phone"),
         doc_type=d.get("doc_type"),
         passport_series=d.get("passport_series"),
@@ -345,7 +348,7 @@ async def add_payer_birth_date(update: Update, context: ContextTypes.DEFAULT_TYP
 
 # ---- Список, картка, редагування ----
 async def show_payers(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = Payer.__table__.select()
+    query = Payer.select()
     payers = await database.fetch_all(query)
     if not payers:
         await update.message.reply_text("Список порожній!")
@@ -360,16 +363,17 @@ async def show_payers(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def payer_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     payer_id = int(query.data.split(":")[1])
-    select = Payer.__table__.select().where(Payer.id == payer_id)
+    select = Payer.select().where(Payer.c.id == payer_id)
     payer = await database.fetch_one(select)
     if not payer:
         await query.answer("Пайовик не знайдений!")
         return
+    adr = f"{payer.oblast} обл., {payer.rayon} р-н, с. {payer.selo}, вул. {payer.vul}, буд. {payer.bud}, кв. {payer.kv}"
     text = f"""<b>Картка пайовика</b>
 ID: {payer.id}
 ПІБ: {payer.name}
 ІПН: {payer.ipn}
-Адреса: {payer.address}
+Адреса: {adr}
 Телефон: {payer.phone}
 Тип документа: {payer.doc_type}
 Паспорт/ID: {payer.passport_series or ''} {payer.passport_number or ''} {payer.id_number or ''}
@@ -388,7 +392,12 @@ ID: {payer.id}
 FIELDS = [
     ("name", "ПІБ"),
     ("ipn", "ІПН"),
-    ("address", "Адреса"),
+    ("oblast", "Область"),
+    ("rayon", "Район"),
+    ("selo", "Село"),
+    ("vul", "Вулиця"),
+    ("bud", "Будинок"),
+    ("kv", "Квартира"),
     ("phone", "Телефон"),
     ("doc_type", "Тип документа"),
     ("passport_series", "Серія паспорта"),
@@ -437,7 +446,7 @@ async def edit_field_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Формат дати: дд.мм.рррр. Введіть ще раз:")
         return EDIT_VALUE
     # Оновлюємо
-    query = Payer.__table__.update().where(Payer.id == payer_id).values({field_key: value})
+    query = Payer.update().where(Payer.c.id == payer_id).values({field_key: value})
     await database.execute(query)
     await update.message.reply_text("✅ Збережено!", reply_markup=menu_keyboard)
     return ConversationHandler.END
