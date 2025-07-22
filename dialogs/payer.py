@@ -385,7 +385,6 @@ ID: {payer.id}
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
 # ==== 5. КАРТКА, РЕДАГУВАННЯ, ОНОВЛЕННЯ ПОЛІВ (фінальна версія) ====
-# ==== 5. КАРТКА, РЕДАГУВАННЯ, ОНОВЛЕННЯ ПОЛІВ (оновлена фінальна версія для окремих полів адреси) ====
 
 from telegram.constants import ParseMode
 
@@ -515,6 +514,11 @@ async def save_field(update, context):
     query_db = Payer.update().where(Payer.c.id == payer_id).values({field_key: value})
     await database.execute(query_db)
     await query.answer("✅ Зміни збережено!")
+    await payer_card(update, context)
+
+async def payer_card_back(update, context):
+    query = update.callback_query
+    payer_id = int(query.data.split(":")[1])
     await payer_card(update, context)
 
 # ==== 6. ДОДАТКОВІ ФУНКЦІЇ ====
