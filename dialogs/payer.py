@@ -556,6 +556,7 @@ add_payer_conv = ConversationHandler(
         BIRTH_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_payer_birth_date)],
         EDIT_SELECT: [CallbackQueryHandler(edit_field_input, pattern=r"^edit_field:")],
         EDIT_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_field_save)],
+        "CONFIRM_EDIT": [CallbackQueryHandler(edit_field_confirm, pattern="^(confirm_edit|cancel_edit)$")],
     },
     fallbacks=[CommandHandler("start", add_payer_start)],
 )
