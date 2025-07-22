@@ -1,31 +1,39 @@
-import os
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String
+import sqlalchemy
 from databases import Database
+import os
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
-    # Railway іноді видає старий формат URI
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+# Заміни цю стрічку своїм підключенням або використовуй os.environ
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:wnGUJjAIHWwemQmPPoOgESnyRBmgRsYw@tramway.proxy.rlwy.net:58771/railway")
 
 database = Database(DATABASE_URL)
-Base = declarative_base()
+metadata = sqlalchemy.MetaData()
 
-class Payer(Base):
-    __tablename__ = "payers"
+Payer = sqlalchemy.Table(
+    "payer",  # Тільки однина!
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("name", sqlalchemy.String(255)),
+    sqlalchemy.Column("ipn", sqlalchemy.String(10)),
+    sqlalchemy.Column("oblast", sqlalchemy.String(100)),
+    sqlalchemy.Column("rayon", sqlalchemy.String(100)),
+    sqlalchemy.Column("selo", sqlalchemy.String(100)),
+    sqlalchemy.Column("vul", sqlalchemy.String(100)),
+    sqlalchemy.Column("bud", sqlalchemy.String(20)),
+    sqlalchemy.Column("kv", sqlalchemy.String(20)),
+    sqlalchemy.Column("phone", sqlalchemy.String(20)),
+    sqlalchemy.Column("doc_type", sqlalchemy.String(20)),
+    sqlalchemy.Column("passport_series", sqlalchemy.String(10)),
+    sqlalchemy.Column("passport_number", sqlalchemy.String(10)),
+    sqlalchemy.Column("passport_issuer", sqlalchemy.String(255)),
+    sqlalchemy.Column("passport_date", sqlalchemy.String(20)),
+    sqlalchemy.Column("id_number", sqlalchemy.String(20)),
+    sqlalchemy.Column("unzr", sqlalchemy.String(20)),
+    sqlalchemy.Column("idcard_issuer", sqlalchemy.String(10)),
+    sqlalchemy.Column("idcard_date", sqlalchemy.String(20)),
+    sqlalchemy.Column("birth_date", sqlalchemy.String(20)),
+)
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String)
-    ipn = Column(String(10))
-    address = Column(String)
-    phone = Column(String(20))
-    doc_type = Column(String)
-    passport_series = Column(String(2))
-    passport_number = Column(String(6))
-    passport_issuer = Column(String)
-    passport_date = Column(String(10))
-    id_number = Column(String(9))
-    unzr = Column(String(14))
-    idcard_issuer = Column(String(4))
-    idcard_date = Column(String(10))
-    birth_date = Column(String(10))
+# Можеш додати цю функцію для ініціалізації (створення таблиці, якщо вона відсутня)
+async def create_tables():
+    engine = sqlalchemy.create_engine(DATABASE_URL)
+    metadata.create_all(engine)
