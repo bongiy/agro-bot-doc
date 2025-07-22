@@ -42,6 +42,7 @@ application.add_handler(CallbackQueryHandler(edit_field_input, pattern=r"^edit_f
 application.add_handler(CallbackQueryHandler(save_field, pattern=r"^save_field:"))
 application.add_handler(CallbackQueryHandler(create_contract, pattern=r"^create_contract:"))
 application.add_handler(CallbackQueryHandler(to_menu, pattern=r"^to_menu$"))
+application.add_handler(CallbackQueryHandler(payer_card_back, pattern=r"^payer_card:"))
 
 
 
