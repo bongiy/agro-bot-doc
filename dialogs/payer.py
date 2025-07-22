@@ -1,3 +1,4 @@
+# ==== 1. КОНСТАНТИ ТА КЛАВІАТУРИ ====
 from telegram import (
     Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 )
@@ -36,6 +37,30 @@ back_cancel_keyboard = ReplyKeyboardMarkup(
     [["◀️ Назад", "❌ Скасувати"]], resize_keyboard=True
 )
 
+FIELDS = [
+    ("name", "ПІБ"),
+    ("ipn", "ІПН"),
+    ("oblast", "Область"),
+    ("rayon", "Район"),
+    ("selo", "Село"),
+    ("vul", "Вулиця"),
+    ("bud", "Будинок"),
+    ("kv", "Квартира"),
+    ("phone", "Телефон"),
+    ("doc_type", "Тип документа"),
+    ("passport_series", "Серія паспорта"),
+    ("passport_number", "Номер паспорта"),
+    ("passport_issuer", "Ким виданий"),
+    ("passport_date", "Коли виданий"),
+    ("id_number", "ID-картка"),
+    ("unzr", "УНЗР"),
+    ("idcard_issuer", "Код підрозділу"),
+    ("idcard_date", "Дата видачі ID"),
+    ("birth_date", "Дата народження"),
+]
+
+# ==== 2. ВАЛІДАЦІЯ ТА УТИЛІТИ ====
+
 def is_ipn(text): return re.fullmatch(r"\d{10}", text)
 def is_pass_series(text): return re.fullmatch(r"[A-ZА-ЯІЇЄҐ]{2}", text)
 def is_pass_number(text): return re.fullmatch(r"\d{6}", text)
@@ -50,6 +75,8 @@ def normalize_phone(text):
     if re.fullmatch(r"\+380\d{9}", text):
         return text
     return None
+
+# ==== 3. ДОДАВАННЯ ПАЙОВИКА (КРОКИ) ====
 
 async def back_or_cancel(update, context, step_back):
     text = update.message.text
@@ -313,6 +340,9 @@ async def add_payer_birth_date(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data.clear()
     return ConversationHandler.END
 
+# ==== 4. СПИСОК, КАРТКА, РЕДАГУВАННЯ ====
+
+
 async def show_payers(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = Payer.select()
     payers = await database.fetch_all(query)
@@ -354,51 +384,48 @@ ID: {payer.id}
     ]
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
-FIELDS = [
-    ("name", "ПІБ"),
-    ("ipn", "ІПН"),
-    ("oblast", "Область"),
-    ("rayon", "Район"),
-    ("selo", "Село"),
-    ("vul", "Вулиця"),
-    ("bud", "Будинок"),
-    ("kv", "Квартира"),
-    ("phone", "Телефон"),
-    ("doc_type", "Тип документа"),
-    ("passport_series", "Серія паспорта"),
-    ("passport_number", "Номер паспорта"),
-    ("passport_issuer", "Ким виданий"),
-    ("passport_date", "Коли виданий"),
-    ("id_number", "ID-картка"),
-    ("unzr", "УНЗР"),
-    ("idcard_issuer", "Код підрозділу"),
-    ("idcard_date", "Дата видачі ID"),
-    ("birth_date", "Дата народження"),
-]
+# ==== 5. РЕДАГУВАННЯ ПАЙОВИКА (весь блок) ====
 
 async def edit_payer_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    payer_id = int(query.data.split(":")[1])
+    if hasattr(update, "callback_query"):
+        query = update.callback_query
+        payer_id = int(query.data.split(":")[1])
+    else:
+        # якщо повернення з "Назад"
+        payer_id = context.user_data.get("edit_payer_id")
+        query = None
     context.user_data["edit_payer_id"] = payer_id
     keyboard = [
         [InlineKeyboardButton(field_name, callback_data=f"edit_field:{field_key}")]
         for field_key, field_name in FIELDS
     ]
     keyboard.append([InlineKeyboardButton("Назад", callback_data=f"payer_card:{payer_id}")])
-    await query.message.edit_text("Оберіть поле для редагування:", reply_markup=InlineKeyboardMarkup(keyboard))
+    if query:
+        await query.message.edit_text("Оберіть поле для редагування:", reply_markup=InlineKeyboardMarkup(keyboard))
+    else:
+        await update.message.reply_text("Оберіть поле для редагування:", reply_markup=InlineKeyboardMarkup(keyboard))
+    return EDIT_SELECT
 
 async def edit_field_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     field_key = query.data.split(":")[1]
     context.user_data["edit_field"] = field_key
-    await query.message.edit_text(f"Введіть нове значення для поля: {dict(FIELDS)[field_key]}")
+    reply_keyboard = ReplyKeyboardMarkup([["◀️ Назад"]], resize_keyboard=True)
+    await query.message.edit_text(
+        f"Введіть нове значення для поля: {dict(FIELDS)[field_key]}\n(або натисніть 'Назад' для повернення)",
+        reply_markup=None,
+    )
     return EDIT_VALUE
 
 async def edit_field_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     value = update.message.text
+    if value == "◀️ Назад":
+        await edit_payer_menu(update, context)
+        return EDIT_SELECT
+
     payer_id = context.user_data["edit_payer_id"]
     field_key = context.user_data["edit_field"]
-    # Валідація лише на основні поля (можна розширити)
+    # Валідація
     if field_key == "ipn" and not is_ipn(value):
         await update.message.reply_text("ІПН має бути 10 цифр. Введіть ще раз:")
         return EDIT_VALUE
@@ -410,11 +437,13 @@ async def edit_field_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if field_key in ("passport_date", "idcard_date", "birth_date") and not is_date(value):
         await update.message.reply_text("Формат дати: дд.мм.рррр. Введіть ще раз:")
         return EDIT_VALUE
-    # Оновлюємо
+
     query = Payer.update().where(Payer.c.id == payer_id).values({field_key: value})
     await database.execute(query)
     await update.message.reply_text("✅ Збережено!", reply_markup=menu_keyboard)
     return ConversationHandler.END
+
+# ==== 6. ДОДАТКОВІ ФУНКЦІЇ ====
 
 async def create_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -425,6 +454,8 @@ async def create_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.message.edit_text("Головне меню:", reply_markup=menu_keyboard)
+
+# ==== 7. CONVERSATION HANDLER ====
 
 add_payer_conv = ConversationHandler(
     entry_points=[MessageHandler(filters.Regex("^Новий пайовик$"), add_payer_start)],
@@ -448,6 +479,7 @@ add_payer_conv = ConversationHandler(
         IDCARD_ISSUER: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_payer_idcard_issuer)],
         IDCARD_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_payer_idcard_date)],
         BIRTH_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_payer_birth_date)],
+        EDIT_SELECT: [CallbackQueryHandler(edit_field_input, pattern=r"^edit_field:")],
         EDIT_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_field_save)],
     },
     fallbacks=[CommandHandler("start", add_payer_start)],
