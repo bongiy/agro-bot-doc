@@ -467,6 +467,16 @@ async def edit_field_confirm(update, context):
 
 # ==== 6. ДОДАТКОВІ ФУНКЦІЇ ====
 
+async def edit_payer_menu(update, context):
+    query = update.callback_query
+    payer_id = context.user_data.get("edit_payer_id")
+    keyboard = [
+        [InlineKeyboardButton(field_name, callback_data=f"edit_field:{field_key}")]
+        for field_key, field_name in FIELDS
+    ]
+    keyboard.append([InlineKeyboardButton("Назад", callback_data=f"payer_card:{payer_id}")])
+    await query.message.edit_text("Оберіть поле для редагування:", reply_markup=InlineKeyboardMarkup(keyboard))
+
 async def create_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     payer_id = int(query.data.split(":")[1])
