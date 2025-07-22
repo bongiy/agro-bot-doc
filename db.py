@@ -1,12 +1,11 @@
 import os
-import sqlalchemy
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, Date
+from sqlalchemy import Column, Integer, String
 from databases import Database
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
-    # Railway може давати postgres:// замість postgresql://, а asyncpg хоче postgresql://
+    # Railway іноді видає старий формат URI
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 database = Database(DATABASE_URL)
@@ -16,11 +15,11 @@ class Payer(Base):
     __tablename__ = "payers"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    ipn = Column(String(10), nullable=False)
-    address = Column(String, nullable=False)
-    phone = Column(String(20), nullable=False)
-    doc_type = Column(String, nullable=False)
+    name = Column(String)
+    ipn = Column(String(10))
+    address = Column(String)
+    phone = Column(String(20))
+    doc_type = Column(String)
     passport_series = Column(String(2))
     passport_number = Column(String(6))
     passport_issuer = Column(String)
