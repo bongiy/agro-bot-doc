@@ -385,14 +385,19 @@ ID: {payer.id}
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
 # ==== 5. КАРТКА, РЕДАГУВАННЯ, ОНОВЛЕННЯ ПОЛІВ (фінальна версія) ====
-# ==== 5. КАРТКА, РЕДАГУВАННЯ, ОНОВЛЕННЯ ПОЛІВ (оновлена фінальна версія) ====
+# ==== 5. КАРТКА, РЕДАГУВАННЯ, ОНОВЛЕННЯ ПОЛІВ (оновлена фінальна версія для окремих полів адреси) ====
 
 from telegram.constants import ParseMode
 
 FIELDS = [
     ("name", "ПІБ"),
     ("ipn", "ІПН"),
-    ("address", "Адреса"),
+    ("oblast", "Область"),
+    ("rayon", "Район"),
+    ("selo", "Село"),
+    ("vul", "Вулиця"),
+    ("bud", "Будинок"),
+    ("kv", "Квартира"),
     ("phone", "Телефон"),
     ("doc_type", "Тип документа"),
     ("passport_series", "Серія паспорта"),
@@ -418,7 +423,7 @@ async def payer_card(update, context):
 ID: {payer.id}
 ПІБ: {payer.name}
 ІПН: {payer.ipn}
-Адреса: {payer.address}
+Адреса: {payer.oblast} обл., {payer.rayon} р-н, с. {payer.selo}, вул. {payer.vul}, буд. {payer.bud}, кв. {payer.kv}
 Телефон: {payer.phone}
 Тип документа: {payer.doc_type}
 Паспорт/ID: {payer.passport_series or ''} {payer.passport_number or ''} {payer.id_number or ''}
@@ -510,12 +515,6 @@ async def save_field(update, context):
     query_db = Payer.update().where(Payer.c.id == payer_id).values({field_key: value})
     await database.execute(query_db)
     await query.answer("✅ Зміни збережено!")
-    await payer_card(update, context)
-
-# Для кнопки "Назад" (edit_payer_menu)
-async def payer_card_back(update, context):
-    query = update.callback_query
-    payer_id = int(query.data.split(":")[1])
     await payer_card(update, context)
 
 # ==== 6. ДОДАТКОВІ ФУНКЦІЇ ====
