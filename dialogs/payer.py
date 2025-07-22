@@ -385,21 +385,49 @@ ID: {payer.id}
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
 # ==== 5. РЕДАГУВАННЯ ПАЙОВИКА (весь блок) ====
-# ==== 5. РЕДАГУВАННЯ ДАНИХ ПАЙОВИКА ====
 
 from telegram.constants import ParseMode
 
-async def edit_payer_menu(update, context):
-    """Показ вибору поля для редагування"""
+async def edit_field_input(update, context):
+    """Введення нового значення для поля"""
     query = update.callback_query
-    payer_id = int(query.data.split(":")[1])
-    context.user_data["edit_payer_id"] = payer_id
-    keyboard = [
-        [InlineKeyboardButton(field_name, callback_data=f"edit_field:{field_key}")]
-        for field_key, field_name in FIELDS
-    ]
-    keyboard.append([InlineKeyboardButton("Назад", callback_data=f"payer_card:{payer_id}")])
-    await query.message.edit_text("Оберіть поле для редагування:", reply_markup=InlineKeyboardMarkup(keyboard))
+    field_key = query.data.split(":")[1]
+
+    # Гарантовано дістаємо payer_id навіть якщо його нема в context.user_data
+    if "edit_payer_id" in context.user_data:
+        payer_id = context.user_data["edit_payer_id"]
+    else:
+        # Шукаємо payer_id у callback_data батьківської кнопки (наприклад, edit_payer:123)
+        msg = query.message
+        # На попередній кнопці зберігався edit_payer:{payer_id}, тому можливо треба прокидати payer_id
+        # Зберігайте payer_id всюди, де викликаєте edit_field_input!
+        payer_id = None
+        # Можна спробувати знайти останній payer_id, якщо його ще немає
+        for btn_row in msg.reply_markup.inline_keyboard:
+            for btn in btn_row:
+                if btn.callback_data and btn.callback_data.startswith("edit_payer:"):
+                    payer_id = int(btn.callback_data.split(":")[1])
+                    break
+            if payer_id:
+                break
+        if not payer_id:
+            await query.message.edit_text("Виникла помилка: payer_id не знайдено, спробуйте ще раз.")
+            return ConversationHandler.END
+        context.user_data["edit_payer_id"] = payer_id
+
+    context.user_data["edit_field"] = field_key
+
+    # Витягуємо старе значення з БД
+    select = Payer.select().where(Payer.c.id == payer_id)
+    payer = await database.fetch_one(select)
+    old_value = getattr(payer, field_key, "")
+
+    await query.message.edit_text(
+        f"Поточне значення: <b>{old_value if old_value else '(порожньо)'}</b>\n"
+        f"Введіть нове значення для поля: {dict(FIELDS)[field_key]}",
+        parse_mode=ParseMode.HTML
+    )
+    return EDIT_VALUE
 
 async def edit_field_input(update, context):
     """Введення нового значення для поля"""
