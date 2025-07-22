@@ -385,85 +385,125 @@ ID: {payer.id}
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
 # ==== 5. РЕДАГУВАННЯ ПАЙОВИКА (весь блок) ====
-# ======= БЛОК №5: Логіка редагування пайовика =======
+# ==== 5. РЕДАГУВАННЯ ДАНИХ ПАЙОВИКА ====
 
-# Показати інпут для зміни
+from telegram.constants import ParseMode
+
+async def edit_payer_menu(update, context):
+    """Показ вибору поля для редагування"""
+    query = update.callback_query
+    payer_id = int(query.data.split(":")[1])
+    context.user_data["edit_payer_id"] = payer_id
+    keyboard = [
+        [InlineKeyboardButton(field_name, callback_data=f"edit_field:{field_key}")]
+        for field_key, field_name in FIELDS
+    ]
+    keyboard.append([InlineKeyboardButton("Назад", callback_data=f"payer_card:{payer_id}")])
+    await query.message.edit_text("Оберіть поле для редагування:", reply_markup=InlineKeyboardMarkup(keyboard))
+
 async def edit_field_input(update, context):
+    """Введення нового значення для поля"""
     query = update.callback_query
     field_key = query.data.split(":")[1]
-    payer_id = context.user_data.get("edit_payer_id")
     context.user_data["edit_field"] = field_key
+    payer_id = context.user_data["edit_payer_id"]
 
-    # Отримати поточне значення з БД
-    payer = await database.fetch_one(Payer.select().where(Payer.c.id == payer_id))
-    old_value = payer[field_key] if payer and field_key in payer else "(порожньо)"
+    # Витягуємо старе значення з БД
+    select = Payer.select().where(Payer.c.id == payer_id)
+    payer = await database.fetch_one(select)
+    old_value = getattr(payer, field_key, "")
 
-    context.user_data["old_value"] = old_value
-
-    await query.answer()
     await query.message.edit_text(
-        f"Поточне значення: <b>{old_value}</b>\nВведіть нове значення для поля: <b>{dict(FIELDS)[field_key]}</b>",
-        parse_mode="HTML"
+        f"Поточне значення: <b>{old_value if old_value else '(порожньо)'}</b>\n"
+        f"Введіть нове значення для поля: {dict(FIELDS)[field_key]}",
+        parse_mode=ParseMode.HTML
     )
     return EDIT_VALUE
 
-# Отримати нове значення, попросити підтвердження
 async def edit_field_save(update, context):
-    new_value = update.message.text
-    field_key = context.user_data["edit_field"]
+    """Після вводу нового значення - показати підтвердження"""
+    value = update.message.text
     payer_id = context.user_data["edit_payer_id"]
-    old_value = context.user_data["old_value"]
+    field_key = context.user_data["edit_field"]
 
-    # Валідація (тільки основні приклади, можна розширити)
-    if field_key == "ipn" and not is_ipn(new_value):
+    # Витягуємо старе значення з БД
+    select = Payer.select().where(Payer.c.id == payer_id)
+    payer = await database.fetch_one(select)
+    old_value = getattr(payer, field_key, "")
+
+    # Валідація:
+    if field_key == "ipn" and not is_ipn(value):
         await update.message.reply_text("ІПН має бути 10 цифр. Введіть ще раз:")
         return EDIT_VALUE
     if field_key == "phone":
-        value = normalize_phone(new_value)
+        value = normalize_phone(value)
         if not value:
             await update.message.reply_text("Телефон має бути у форматі +380XXXXXXXXX або 0XXXXXXXXXX. Введіть ще раз:")
             return EDIT_VALUE
-        new_value = value
-    if field_key in ("passport_date", "idcard_date", "birth_date") and not is_date(new_value):
+    if field_key in ("passport_date", "idcard_date", "birth_date") and not is_date(value):
         await update.message.reply_text("Формат дати: дд.мм.рррр. Введіть ще раз:")
         return EDIT_VALUE
 
-    context.user_data["new_value"] = new_value
+    context.user_data["pending_value"] = value
 
-    # Показати підтвердження (було → стане)
-    text = (
-        f"Поле: <b>{dict(FIELDS)[field_key]}</b>\n"
-        f"Було: <b>{old_value}</b>\n"
-        f"Стає: <b>{new_value}</b>\n\n"
-        "Підтвердити зміну?"
-    )
-    keyboard = [
+    keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("✅ Підтвердити", callback_data="confirm_edit"),
-            InlineKeyboardButton("❌ Скасувати", callback_data="cancel_edit"),
+            InlineKeyboardButton("❌ Скасувати", callback_data="cancel_edit")
         ]
-    ]
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-    return "CONFIRM_EDIT"
+    ])
+    await update.message.reply_text(
+        f"<b>Було:</b> {old_value if old_value else '(порожньо)'}\n"
+        f"<b>Стає:</b> {value}\n\n"
+        f"Підтвердити зміну?",
+        reply_markup=keyboard,
+        parse_mode=ParseMode.HTML
+    )
+    return None  # чекаємо CallbackQuery
 
-# Реально зберегти в БД або скасувати
-async def edit_field_confirm(update, context):
+async def confirm_edit(update, context):
+    """Підтвердження зміни поля, оновлення БД, показ картки"""
     query = update.callback_query
     payer_id = context.user_data["edit_payer_id"]
     field_key = context.user_data["edit_field"]
-    new_value = context.user_data["new_value"]
+    value = context.user_data["pending_value"]
 
-    if query.data == "confirm_edit":
-        # Оновлюємо в БД
-        q = Payer.update().where(Payer.c.id == payer_id).values({field_key: new_value})
-        await database.execute(q)
-        await query.message.edit_text("✅ Змінено!\nПовертаємось в картку пайовика.")
-        await payer_card(update, context)  # Повернутись в картку
-    else:
-        await query.message.edit_text("Зміну скасовано. Оберіть поле для редагування.")
-        await edit_payer_menu(update, context)
+    # Оновлюємо в БД
+    query_db = Payer.update().where(Payer.c.id == payer_id).values({field_key: value})
+    await database.execute(query_db)
 
+    # Показуємо оновлену картку
+    select = Payer.select().where(Payer.c.id == payer_id)
+    payer = await database.fetch_one(select)
+    text = f"""<b>Картка пайовика</b>
+ID: {payer.id}
+ПІБ: {payer.name}
+ІПН: {payer.ipn}
+Адреса: {payer.address}
+Телефон: {payer.phone}
+Тип документа: {payer.doc_type}
+Паспорт/ID: {payer.passport_series or ''} {payer.passport_number or ''} {payer.id_number or ''}
+Ким виданий: {payer.passport_issuer or payer.idcard_issuer or ''}
+Коли виданий: {payer.passport_date or payer.idcard_date or ''}
+УНЗР: {payer.unzr or '-'}
+Дата народження: {payer.birth_date}
+"""
+    keyboard = [
+        [InlineKeyboardButton("Редагувати", callback_data=f"edit_payer:{payer.id}")],
+        [InlineKeyboardButton("Створити договір оренди", callback_data=f"create_contract:{payer.id}")],
+        [InlineKeyboardButton("До меню", callback_data="to_menu")]
+    ]
+    await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+    context.user_data.pop("pending_value", None)
     return ConversationHandler.END
+
+async def cancel_edit(update, context):
+    """Повернення у меню вибору поля для редагування після скасування зміни"""
+    query = update.callback_query
+    payer_id = context.user_data.get("edit_payer_id")
+    # Повертаємо користувача до меню редагування
+    await edit_payer_menu(update, context)
+    return None
 
 # ==== 6. ДОДАТКОВІ ФУНКЦІЇ ====
 
@@ -513,7 +553,9 @@ add_payer_conv = ConversationHandler(
         BIRTH_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_payer_birth_date)],
         EDIT_SELECT: [CallbackQueryHandler(edit_field_input, pattern=r"^edit_field:")],
         EDIT_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_field_save)],
-        "CONFIRM_EDIT": [CallbackQueryHandler(edit_field_confirm, pattern="^(confirm_edit|cancel_edit)$")],
+ConversationHandler.TIMEOUT: [],
+"CONFIRM_EDIT": [CallbackQueryHandler(confirm_edit, pattern="^confirm_edit$")],
+"CANCEL_EDIT": [CallbackQueryHandler(cancel_edit, pattern="^cancel_edit$")],
     },
     fallbacks=[CommandHandler("start", add_payer_start)],
 )
