@@ -13,8 +13,8 @@ import re
     PHONE, DOC_TYPE,
     PASS_SERIES, PASS_NUMBER, PASS_ISSUER, PASS_DATE,
     IDCARD_NUMBER, IDCARD_UNZR, IDCARD_ISSUER, IDCARD_DATE,
-    BIRTH_DATE, EDIT_SELECT, EDIT_VALUE
-) = range(21)
+    BIRTH_DATE, EDIT_SELECT, EDIT_VALUE, CONFIRM_EDIT
+) = range(22)
 
 menu_keyboard = ReplyKeyboardMarkup(
     [
@@ -385,6 +385,7 @@ ID: {payer.id}
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
 # ==== 5. КАРТКА, РЕДАГУВАННЯ, ОНОВЛЕННЯ ПОЛІВ (фінальна версія) ====
+# ==== 5. КАРТКА, РЕДАГУВАННЯ, ОНОВЛЕННЯ ПОЛІВ (оновлена фінальна версія) ====
 
 from telegram.constants import ParseMode
 
@@ -436,7 +437,6 @@ ID: {payer.id}
 async def edit_payer_menu(update, context):
     query = update.callback_query
     payer_id = int(query.data.split(":")[1])
-    # Зберігаємо ID на цей цикл редагування
     context.user_data["edit_payer_id"] = payer_id
     keyboard = [
         [InlineKeyboardButton(field_name, callback_data=f"edit_field:{payer_id}:{field_key}")]
@@ -456,7 +456,6 @@ async def edit_field_input(update, context):
     else:
         payer_id = context.user_data.get("edit_payer_id")
         field_key = context.user_data.get("edit_field")
-    # Витягуємо старе значення з БД
     select = Payer.select().where(Payer.c.id == payer_id)
     payer = await database.fetch_one(select)
     old_value = getattr(payer, field_key, "")
@@ -495,6 +494,7 @@ async def edit_field_save(update, context):
         f"Змінити <b>{dict(FIELDS)[field_key]}</b>:\n<b>{old_value}</b> ➔ <b>{value}</b>?\n\nПідтвердити зміну?",
         reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML
     )
+    # Не завершуй розмову тут! Очікуємо підтвердження:
     return ConversationHandler.END
 
 async def save_field(update, context):
@@ -503,10 +503,13 @@ async def save_field(update, context):
     payer_id = int(data[1])
     field_key = data[2]
     value = context.user_data.get("edit_new_value")
+    if not (payer_id and field_key and value):
+        await query.answer("Помилка збереження!")
+        return
     # Оновлюємо БД
     query_db = Payer.update().where(Payer.c.id == payer_id).values({field_key: value})
     await database.execute(query_db)
-    # Показуємо картку
+    await query.answer("✅ Зміни збережено!")
     await payer_card(update, context)
 
 # Для кнопки "Назад" (edit_payer_menu)
