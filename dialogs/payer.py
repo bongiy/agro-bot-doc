@@ -567,7 +567,6 @@ add_payer_conv = ConversationHandler(
         EDIT_SELECT: [CallbackQueryHandler(edit_field_input, pattern=r"^edit_field:")],
         EDIT_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_field_save)],
 ConversationHandler.TIMEOUT: [],
-"CANCEL_EDIT": [CallbackQueryHandler(cancel_edit, pattern="^cancel_edit$")],
     },
     fallbacks=[CommandHandler("start", add_payer_start)],
 )
