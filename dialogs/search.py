@@ -1,4 +1,5 @@
 from telegram.ext import ConversationHandler, MessageHandler, CallbackQueryHandler, CommandHandler, filters
+from dialogs.payer import to_menu
 
 SEARCH_INPUT = 1001  # Унікальний стан пошуку
 
