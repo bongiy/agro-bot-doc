@@ -1,12 +1,12 @@
 from telegram import (
-    Update, InlineKeyboardMarkup, InlineKeyboardButton
+    Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
 )
 from telegram.ext import (
     ContextTypes, ConversationHandler, MessageHandler, CommandHandler, filters
 )
 from telegram.constants import ParseMode
 from db import database, Payer
-from keyboards.menu import payers_menu, main_menu  # сучасні меню!
+from keyboards.menu import payers_menu, main_menu
 
 import re
 
@@ -18,12 +18,24 @@ import re
     BIRTH_DATE
 ) = range(19)
 
-doc_type_keyboard = payers_menu  # або залиш, якщо потрібно інше меню для типу документа
-oblast_keyboard = payers_menu    # або окрема клавіатура, якщо потрібно
-rayon_keyboard = payers_menu     # або окрема клавіатура, якщо потрібно
-back_cancel_keyboard = payers_menu  # або окрема клавіатура, якщо потрібно
+# Клавіатури для кроків діалогу:
+doc_type_keyboard = ReplyKeyboardMarkup(
+    [["Паспорт (книжка)", "ID картка"]],
+    resize_keyboard=True
+)
+oblast_keyboard = ReplyKeyboardMarkup(
+    [["Рівненська", "Інша"], ["❌ Скасувати"]],
+    resize_keyboard=True
+)
+rayon_keyboard = ReplyKeyboardMarkup(
+    [["Рівненський", "Дубенський", "Інший"], ["◀️ Назад", "❌ Скасувати"]],
+    resize_keyboard=True
+)
+back_cancel_keyboard = ReplyKeyboardMarkup(
+    [["◀️ Назад", "❌ Скасувати"]],
+    resize_keyboard=True
+)
 
-# =========== Валідації ===========
 def is_ipn(text): return re.fullmatch(r"\d{10}", text)
 def is_pass_series(text): return re.fullmatch(r"[A-ZА-ЯІЇЄҐ]{2}", text)
 def is_pass_number(text): return re.fullmatch(r"\d{6}", text)
@@ -78,7 +90,7 @@ async def add_payer_ipn(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return IPN
     context.user_data["ipn"] = update.message.text
     await update.message.reply_text(
-        "Оберіть область:", reply_markup=back_cancel_keyboard
+        "Оберіть область:", reply_markup=oblast_keyboard
     )
     return OBLAST
 
@@ -86,15 +98,23 @@ async def add_payer_oblast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = await back_or_cancel(update, context, IPN)
     if result is not None:
         return result
-    context.user_data["oblast"] = update.message.text
-    await update.message.reply_text("Оберіть район:", reply_markup=back_cancel_keyboard)
+    text = update.message.text
+    if text == "Інша":
+        await update.message.reply_text("Введіть назву області:", reply_markup=back_cancel_keyboard)
+        return OBLAST
+    context.user_data["oblast"] = text
+    await update.message.reply_text("Оберіть район:", reply_markup=rayon_keyboard)
     return RAYON
 
 async def add_payer_rayon(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = await back_or_cancel(update, context, OBLAST)
     if result is not None:
         return result
-    context.user_data["rayon"] = update.message.text
+    text = update.message.text
+    if text == "Інший":
+        await update.message.reply_text("Введіть назву району:", reply_markup=back_cancel_keyboard)
+        return RAYON
+    context.user_data["rayon"] = text
     await update.message.reply_text("Введіть назву села:", reply_markup=back_cancel_keyboard)
     return SELO
 
@@ -142,7 +162,7 @@ async def add_payer_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❗️ Введіть номер у форматі +380XXXXXXXXX або 0XXXXXXXXXX")
         return PHONE
     context.user_data["phone"] = phone
-    await update.message.reply_text("Оберіть тип документа:", reply_markup=back_cancel_keyboard)
+    await update.message.reply_text("Оберіть тип документа:", reply_markup=doc_type_keyboard)
     return DOC_TYPE
 
 async def add_payer_doc_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -156,7 +176,7 @@ async def add_payer_doc_type(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("Введіть номер ID-картки (9 цифр):", reply_markup=back_cancel_keyboard)
         return IDCARD_NUMBER
     else:
-        await update.message.reply_text("❗️ Оберіть тип документа через кнопки:", reply_markup=back_cancel_keyboard)
+        await update.message.reply_text("❗️ Оберіть тип документа через кнопки:", reply_markup=doc_type_keyboard)
         return DOC_TYPE
 
 async def add_payer_pass_series(update: Update, context: ContextTypes.DEFAULT_TYPE):
