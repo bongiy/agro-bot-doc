@@ -420,6 +420,7 @@ async def edit_field_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return EDIT_VALUE
 
 async def edit_field_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("DEBUG: edit_field_save start!", flush=True)
     value = update.message.text.strip()
     payer_id = context.user_data.get("edit_payer_id")
     field_key = context.user_data.get("edit_field")
