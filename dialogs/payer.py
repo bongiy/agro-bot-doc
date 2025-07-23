@@ -395,22 +395,29 @@ async def payer_search_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.message.text.strip()
     results = []
     found_ids = set()
-    if q.isdigit():
-        res = await database.fetch_all(Payer.select().where(Payer.c.id == int(q)))
-        results.extend([r for r in res if r.id not in found_ids])
-        found_ids.update([r.id for r in res])
+    # 1. Якщо ІПН (рівно 10 цифр)
     if re.fullmatch(r"\d{10}", q):
         res = await database.fetch_all(Payer.select().where(Payer.c.ipn == q))
         results.extend([r for r in res if r.id not in found_ids])
         found_ids.update([r.id for r in res])
+    # 2. Якщо телефон
     if re.fullmatch(r"(\+380|0)\d{9}", q):
         phone = normalize_phone(q)
         res = await database.fetch_all(Payer.select().where(Payer.c.phone == phone))
         results.extend([r for r in res if r.id not in found_ids])
         found_ids.update([r.id for r in res])
-    if not results:
+    # 3. Якщо ID (і він в межах int32)
+    if q.isdigit():
+        q_int = int(q)
+        if -(2**31) <= q_int <= 2**31-1:
+            res = await database.fetch_all(Payer.select().where(Payer.c.id == q_int))
+            results.extend([r for r in res if r.id not in found_ids])
+            found_ids.update([r.id for r in res])
+    # 4. Фрагмент ПІБ (регістр неважливий)
+    if not results or True:  # Завжди додаємо до вже знайдених
         res = await database.fetch_all(Payer.select().where(Payer.c.name.ilike(f"%{q}%")))
         results.extend([r for r in res if r.id not in found_ids])
+        found_ids.update([r.id for r in res])
     if not results:
         await update.message.reply_text("Пайовика не знайдено.")
         return
