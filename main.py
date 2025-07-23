@@ -1,10 +1,9 @@
 import os
 from fastapi import FastAPI, Request
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from dialogs.payer import (
-    menu_keyboard, add_payer_conv, show_payers, payer_card, edit_payer_menu, edit_field_input, edit_field_save,
-    create_contract, to_menu,
+    menu_keyboard, add_payer_conv, show_payers,
 )
 from db import database
 
@@ -33,14 +32,14 @@ async def start(update: Update, context):
     await update.message.reply_text("Вітаємо! Оберіть дію:", reply_markup=menu_keyboard)
     context.user_data.clear()
 
+# Оголошуємо menu_handler до його використання!
+async def menu_handler(update: Update, context):
+    await update.message.reply_text("Оберіть дію з меню нижче.", reply_markup=menu_keyboard)
+
+# Handler-и (зверху до низу, без дублікатів)
 application.add_handler(CommandHandler("start", start))
 application.add_handler(add_payer_conv)
 application.add_handler(MessageHandler(filters.Regex("^Список пайовиків$"), show_payers))
-application.add_handler(MessageHandler(filters.TEXT, menu_handler))
-
-
-async def menu_handler(update: Update, context):
-    await update.message.reply_text("Оберіть дію з меню нижче.", reply_markup=menu_keyboard)
 application.add_handler(MessageHandler(filters.TEXT, menu_handler))
 
 @app.post(WEBHOOK_PATH)
