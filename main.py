@@ -3,7 +3,8 @@ from fastapi import FastAPI, Request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 from dialogs.payer import (
-    menu_keyboard, add_payer_conv, show_payers, payer_card,
+    menu_keyboard, add_payer_conv, show_payers, payer_card, delete_payer,
+    payer_search_start, payer_search_do,
 )
 from db import database
 
@@ -35,13 +36,16 @@ async def start(update: Update, context):
 async def menu_handler(update: Update, context):
     await update.message.reply_text("Оберіть дію з меню нижче.", reply_markup=menu_keyboard)
 
-# === Додаємо handlers (ПОРЯДОК ВАЖЛИВИЙ) ===
+# === Додаємо handlers ===
 
 application.add_handler(CommandHandler("start", start))
 application.add_handler(add_payer_conv)
 application.add_handler(MessageHandler(filters.Regex("^Список пайовиків$"), show_payers))
+application.add_handler(MessageHandler(filters.Regex("^Пошук пайовика$"), payer_search_start))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, payer_search_do))
 application.add_handler(CallbackQueryHandler(payer_card, pattern=r"^payer_card:"))
-application.add_handler(MessageHandler(filters.TEXT, menu_handler))
+application.add_handler(CallbackQueryHandler(delete_payer, pattern=r"^delete_payer:"))
+application.add_handler(MessageHandler(filters.TEXT, menu_handler)) # Як fallback, на останок
 
 @app.post(WEBHOOK_PATH)
 async def telegram_webhook(request: Request):
