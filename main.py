@@ -3,10 +3,12 @@ from fastapi import FastAPI, Request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 from dialogs.payer import (
-    menu_keyboard, add_payer_conv, show_payers, payer_card, delete_payer, create_contract, to_menu, edit_payer_menu, edit_field_input
+    menu_keyboard, add_payer_conv, show_payers, payer_card, delete_payer,
+    create_contract, to_menu
 )
-from db import database
+from dialogs.edit_payer import edit_payer_conv
 from dialogs.search import search_payer_conv
+from db import database
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 WEBHOOK_PATH = "/webhook"
@@ -41,18 +43,15 @@ async def menu_handler(update: Update, context):
 application.add_handler(CommandHandler("start", start))
 application.add_handler(add_payer_conv)
 application.add_handler(search_payer_conv)
+application.add_handler(edit_payer_conv)
 application.add_handler(MessageHandler(filters.Regex("^Список пайовиків$"), show_payers))
-# Більше НІЯКИХ filters.TEXT!!! (окрім FSM)
 # Далі тільки CallbackQueryHandler-и:
 application.add_handler(CallbackQueryHandler(payer_card, pattern=r"^payer_card:"))
 application.add_handler(CallbackQueryHandler(delete_payer, pattern=r"^delete_payer:"))
 application.add_handler(CallbackQueryHandler(to_menu, pattern=r"^to_menu$"))
 application.add_handler(CallbackQueryHandler(create_contract, pattern=r"^create_contract:"))
-application.add_handler(CallbackQueryHandler(edit_payer_menu, pattern=r"^edit_payer:\d+$"))
-application.add_handler(CallbackQueryHandler(edit_field_input, pattern=r"^edit_field:\d+:\w+$"))
 # fallback:
 application.add_handler(MessageHandler(filters.COMMAND, menu_handler))
-
 
 @app.post(WEBHOOK_PATH)
 async def telegram_webhook(request: Request):
