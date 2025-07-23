@@ -42,17 +42,17 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(add_payer_conv)
 application.add_handler(MessageHandler(filters.Regex("^Список пайовиків$"), show_payers))
 application.add_handler(MessageHandler(filters.Regex("^Пошук пайовика$"), payer_search_start))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, payer_search_do))
-
-# Глобальні CallbackQueryHandler-и для всіх callback-кнопок (важливо: не дублюються у FSM)
+# Більше НІЯКИХ filters.TEXT!!! (окрім FSM)
+# Далі тільки CallbackQueryHandler-и:
 application.add_handler(CallbackQueryHandler(payer_card, pattern=r"^payer_card:"))
 application.add_handler(CallbackQueryHandler(delete_payer, pattern=r"^delete_payer:"))
 application.add_handler(CallbackQueryHandler(to_menu, pattern=r"^to_menu$"))
 application.add_handler(CallbackQueryHandler(create_contract, pattern=r"^create_contract:"))
 application.add_handler(CallbackQueryHandler(edit_payer_menu, pattern=r"^edit_payer:\d+$"))
 application.add_handler(CallbackQueryHandler(edit_field_input, pattern=r"^edit_field:\d+:\w+$"))
+# fallback:
+application.add_handler(MessageHandler(filters.COMMAND, menu_handler))
 
-application.add_handler(MessageHandler(filters.COMMAND, menu_handler)) # fallback
 
 @app.post(WEBHOOK_PATH)
 async def telegram_webhook(request: Request):
