@@ -5,14 +5,17 @@ from telegram.ext import (
     Application, CommandHandler, MessageHandler, CallbackQueryHandler,
     filters, ConversationHandler
 )
+from handlers.menu import (
+    start, to_main_menu, payers_menu_handler, lands_menu_handler, fields_menu_handler,
+    contracts_menu_handler, payments_menu_handler, reports_menu_handler, search_menu_handler, restart_bot
+)
+
 from dialogs.payer import (
-    menu_keyboard, add_payer_conv, show_payers, payer_card, delete_payer,
+    add_payer_conv, show_payers, payer_card, delete_payer,
     create_contract, to_menu
 )
 from dialogs.edit_payer import edit_payer_conv
 from dialogs.search import search_payer_conv
-
-# --- нові діалоги для полів і ділянок ---
 from dialogs.field import add_field_conv, show_fields
 from dialogs.land import add_land_conv, show_lands
 
@@ -39,36 +42,36 @@ async def on_startup():
 async def on_shutdown():
     await database.disconnect()
 
-async def start(update: Update, context):
-    await update.message.reply_text("Вітаємо! Оберіть дію:", reply_markup=menu_keyboard)
-    context.user_data.clear()
-
-async def menu_handler(update: Update, context):
-    await update.message.reply_text("Оберіть дію з меню нижче.", reply_markup=menu_keyboard)
-
 # === Основні handlers ===
 
 application.add_handler(CommandHandler("start", start))
+application.add_handler(MessageHandler(filters.Regex("^◀️ Назад$"), to_main_menu))
+application.add_handler(MessageHandler(filters.Regex("^🔹 Пайовики$"), payers_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^🔹 Ділянки$"), lands_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^🔹 Поля$"), fields_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^🔹 Договори$"), contracts_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^🔹 Виплати$"), payments_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^🔹 Звіти$"), reports_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^🔹 Пошук$"), search_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^🔄 Перезавантажити$"), restart_bot))
 
+# --- підключаєш лише ті діалоги, які вже переведені на нову архітектуру
 application.add_handler(add_payer_conv)
 application.add_handler(search_payer_conv)
 application.add_handler(edit_payer_conv)
-application.add_handler(MessageHandler(filters.Regex("^Список пайовиків$"), show_payers))
-
-# --- НОВІ ХЕНДЛЕРИ ДЛЯ ПОЛІВ/ДІЛЯНОК ---
 application.add_handler(add_field_conv)
 application.add_handler(CommandHandler("fields", show_fields))
 application.add_handler(add_land_conv)
 application.add_handler(CommandHandler("lands", show_lands))
 
-# CallbackQueryHandler-и:
+# CallbackQueryHandler-и — як є, доки не переведені на нову систему:
 application.add_handler(CallbackQueryHandler(payer_card, pattern=r"^payer_card:"))
 application.add_handler(CallbackQueryHandler(delete_payer, pattern=r"^delete_payer:"))
 application.add_handler(CallbackQueryHandler(to_menu, pattern=r"^to_menu$"))
 application.add_handler(CallbackQueryHandler(create_contract, pattern=r"^create_contract:"))
 
-# fallback:
-application.add_handler(MessageHandler(filters.COMMAND, menu_handler))
+# fallback: обробляємо всі невідомі команди поверненням у головне меню
+application.add_handler(MessageHandler(filters.COMMAND, to_main_menu))
 
 @app.post(WEBHOOK_PATH)
 async def telegram_webhook(request: Request):
