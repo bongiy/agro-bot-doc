@@ -404,30 +404,37 @@ async def payer_search_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def payer_search_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.message.text.strip()
-    query = None
-
+    results = []
+    found_ids = set()
+    # ID (ціле число)
     if q.isdigit():
-        query = Payer.select().where(Payer.c.id == int(q))
-    elif re.fullmatch(r"\d{10}", q):
-        query = Payer.select().where(Payer.c.ipn == q)
-    elif re.fullmatch(r"(\+380|0)\d{9}", q):
+        res = await database.fetch_all(Payer.select().where(Payer.c.id == int(q)))
+        results.extend([r for r in res if r.id not in found_ids])
+        found_ids.update([r.id for r in res])
+    # ІПН (10 цифр)
+    if re.fullmatch(r"\d{10}", q):
+        res = await database.fetch_all(Payer.select().where(Payer.c.ipn == q))
+        results.extend([r for r in res if r.id not in found_ids])
+        found_ids.update([r.id for r in res])
+    # Телефон
+    if re.fullmatch(r"(\+380|0)\d{9}", q):
         phone = normalize_phone(q)
-        query = Payer.select().where(Payer.c.phone == phone)
-    else:
-        query = Payer.select().where(Payer.c.name.ilike(f"%{q}%"))
-
-    results = await database.fetch_all(query)
+        res = await database.fetch_all(Payer.select().where(Payer.c.phone == phone))
+        results.extend([r for r in res if r.id not in found_ids])
+        found_ids.update([r.id for r in res])
+    # ПІБ (або частина ПІБ, якщо попереднє не знайдено)
+    if not results:
+        res = await database.fetch_all(Payer.select().where(Payer.c.name.ilike(f"%{q}%")))
+        results.extend([r for r in res if r.id not in found_ids])
     if not results:
         await update.message.reply_text("Пайовика не знайдено.")
         return
-
     for p in results:
         btn = InlineKeyboardButton(f"Картка", callback_data=f"payer_card:{p.id}")
         await update.message.reply_text(
             f"{p.id}. {p.name} (ІПН: {p.ipn})",
             reply_markup=InlineKeyboardMarkup([[btn]])
         )
-
 # ---- РЕДАГУВАННЯ ----
 
 async def edit_payer_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
