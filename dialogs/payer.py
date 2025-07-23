@@ -1,4 +1,3 @@
-# ==== 1. ІМПОРТИ, КОНСТАНТИ ТА КЛАВІАТУРИ ====
 from telegram import (
     Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 )
@@ -63,8 +62,6 @@ FIELDS = [
 ]
 allowed_fields = [f[0] for f in FIELDS]
 
-# ==== ВАЛІДАЦІЯ ТА УТИЛІТИ ====
-
 def is_ipn(text): return re.fullmatch(r"\d{10}", text)
 def is_pass_series(text): return re.fullmatch(r"[A-ZА-ЯІЇЄҐ]{2}", text)
 def is_pass_number(text): return re.fullmatch(r"\d{6}", text)
@@ -80,7 +77,7 @@ def normalize_phone(text):
         return text
     return None
 
-# ==== ДОДАВАННЯ ПАЙОВИКА (FSM, STEP-BY-STEP) ====
+# --- Додавання пайовика (FSM) ---
 
 async def back_or_cancel(update, context, step_back):
     text = update.message.text
@@ -214,7 +211,7 @@ async def add_payer_doc_type(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("❗️ Оберіть тип документа через кнопки:", reply_markup=doc_type_keyboard)
         return DOC_TYPE
 
-# ---- Паспорт ----
+# --- Паспорт ---
 async def add_payer_pass_series(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = await back_or_cancel(update, context, DOC_TYPE)
     if result is not None:
@@ -256,7 +253,7 @@ async def add_payer_pass_date(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text("Введіть дату народження пайовика (дд.мм.рррр):", reply_markup=back_cancel_keyboard)
     return BIRTH_DATE
 
-# ---- ID-картка ----
+# --- ID-картка ---
 async def add_payer_idcard_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = await back_or_cancel(update, context, DOC_TYPE)
     if result is not None:
@@ -301,7 +298,6 @@ async def add_payer_idcard_date(update: Update, context: ContextTypes.DEFAULT_TY
     await update.message.reply_text("Введіть дату народження пайовика (дд.мм.рррр):", reply_markup=back_cancel_keyboard)
     return BIRTH_DATE
 
-# ---- Завершення анкети ----
 async def add_payer_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = await back_or_cancel(update, context, PASS_DATE if context.user_data.get("doc_type") == "passport" else IDCARD_DATE)
     if result is not None:
@@ -343,7 +339,7 @@ async def add_payer_birth_date(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data.clear()
     return ConversationHandler.END
 
-# ==== СПИСОК, КАРТКА, РЕДАГУВАННЯ, ВИДАЛЕННЯ, ПОШУК ====
+# --- Список, картка, пошук, редагування, видалення ---
 
 async def show_payers(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = Payer.select()
@@ -397,7 +393,6 @@ async def delete_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.message.edit_text("Пайовика видалено.")
     return ConversationHandler.END
 
-# --- ПОШУК ---
 async def payer_search_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Введіть ID, ПІБ, ІПН або телефон пайовика:")
 
@@ -405,23 +400,19 @@ async def payer_search_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.message.text.strip()
     results = []
     found_ids = set()
-    # ID (ціле число)
     if q.isdigit():
         res = await database.fetch_all(Payer.select().where(Payer.c.id == int(q)))
         results.extend([r for r in res if r.id not in found_ids])
         found_ids.update([r.id for r in res])
-    # ІПН (10 цифр)
     if re.fullmatch(r"\d{10}", q):
         res = await database.fetch_all(Payer.select().where(Payer.c.ipn == q))
         results.extend([r for r in res if r.id not in found_ids])
         found_ids.update([r.id for r in res])
-    # Телефон
     if re.fullmatch(r"(\+380|0)\d{9}", q):
         phone = normalize_phone(q)
         res = await database.fetch_all(Payer.select().where(Payer.c.phone == phone))
         results.extend([r for r in res if r.id not in found_ids])
         found_ids.update([r.id for r in res])
-    # ПІБ (або частина ПІБ, якщо попереднє не знайдено)
     if not results:
         res = await database.fetch_all(Payer.select().where(Payer.c.name.ilike(f"%{q}%")))
         results.extend([r for r in res if r.id not in found_ids])
@@ -434,8 +425,6 @@ async def payer_search_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"{p.id}. {p.name} (ІПН: {p.ipn})",
             reply_markup=InlineKeyboardMarkup([[btn]])
         )
-
-# --- РЕДАГУВАННЯ ---
 
 async def edit_payer_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -472,12 +461,9 @@ async def edit_field_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     value = update.message.text
     payer_id = context.user_data.get("edit_payer_id")
     field_key = context.user_data.get("edit_field")
-
     if field_key not in allowed_fields:
         await update.message.reply_text("⚠️ Неможливо оновити це поле.")
         return await edit_payer_menu_from_save(update, context)
-
-    # Валідація
     if field_key == "ipn" and not is_ipn(value):
         await update.message.reply_text("ІПН має бути 10 цифр. Введіть ще раз:")
         return EDIT_VALUE
@@ -489,7 +475,6 @@ async def edit_field_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if field_key in ("passport_date", "idcard_date", "birth_date") and not is_date(value):
         await update.message.reply_text("Формат дати: дд.мм.рррр. Введіть ще раз:")
         return EDIT_VALUE
-
     query_db = Payer.update().where(Payer.c.id == payer_id).values({field_key: value})
     await database.execute(query_db)
     await update.message.reply_text("✅ Зміни збережено!")
@@ -518,8 +503,6 @@ async def to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.message.reply_text("Головне меню:", reply_markup=menu_keyboard)
     return ConversationHandler.END
-
-# ==== FSM HANDLER ====
 
 add_payer_conv = ConversationHandler(
     entry_points=[MessageHandler(filters.Regex("^Новий пайовик$"), add_payer_start)],
