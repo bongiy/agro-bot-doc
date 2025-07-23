@@ -1,4 +1,4 @@
-from telegram.ext import ConversationHandler, MessageHandler, filters
+from telegram.ext import ConversationHandler, MessageHandler, CallbackQueryHandler, CommandHandler, filters
 
 SEARCH_INPUT = 1001  # Унікальний стан пошуку
 
