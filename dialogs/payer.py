@@ -417,9 +417,11 @@ async def edit_field_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return EDIT_VALUE
 
 async def edit_field_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(f"DEBUG: edit_field_save START. user_data={context.user_data}")
     value = update.message.text
     payer_id = context.user_data.get("edit_payer_id")
     field_key = context.user_data.get("edit_field")
+    await update.message.reply_text(f"DEBUG: payer_id={payer_id}, field_key={field_key}, value={value}")
     if not payer_id or not field_key:
         await update.message.reply_text("⚠️ Технічна помилка! payer_id або поле не задано.")
         return ConversationHandler.END
