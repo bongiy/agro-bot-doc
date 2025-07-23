@@ -1,47 +1,50 @@
-from aiogram import Router, types
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import StatesGroup, State
-from db import Session, Field
+from telegram import Update, ReplyKeyboardRemove
+from telegram.ext import (
+    ConversationHandler, CommandHandler, MessageHandler, filters, ContextTypes
+)
+from db import database, Field
+import sqlalchemy
 
-router = Router()
+ASK_FIELD_NAME, ASK_FIELD_AREA = range(2)
 
-class AddFieldState(StatesGroup):
-    waiting_for_name = State()
-    waiting_for_area = State()
+async def start_add_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Введіть назву поля:")
+    return ASK_FIELD_NAME
 
-@router.message(commands=["add_field"])
-async def cmd_add_field(message: types.Message, state: FSMContext):
-    await message.answer("Введіть назву поля:")
-    await state.set_state(AddFieldState.waiting_for_name)
+async def field_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["field_name"] = update.message.text.strip()
+    await update.message.reply_text("Введіть фактичну площу поля, га:")
+    return ASK_FIELD_AREA
 
-@router.message(AddFieldState.waiting_for_name)
-async def field_name_entered(message: types.Message, state: FSMContext):
-    await state.update_data(name=message.text.strip())
-    await message.answer("Введіть фактичну площу поля, га:")
-    await state.set_state(AddFieldState.waiting_for_area)
-
-@router.message(AddFieldState.waiting_for_area)
-async def field_area_entered(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    name = data["name"]
+async def field_area(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        area = float(message.text.replace(",", "."))
+        area = float(update.message.text.replace(",", "."))
     except ValueError:
-        await message.answer("Некоректне число. Введіть площу ще раз:")
-        return
-    session = Session()
-    field = Field(name=name, area_actual=area)
-    session.add(field)
-    session.commit()
-    await message.answer(f"Поле “{name}” ({area:.4f} га) додано.")
-    await state.clear()
+        await update.message.reply_text("Некоректна площа. Введіть ще раз:")
+        return ASK_FIELD_AREA
+    name = context.user_data["field_name"]
+    query = Field.insert().values(name=name, area_actual=area)
+    await database.execute(query)
+    await update.message.reply_text(
+        f"Поле '{name}' ({area:.4f} га) додано.",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return ConversationHandler.END
 
-@router.message(commands=["fields"])
-async def list_fields(message: types.Message):
-    session = Session()
-    fields = session.query(Field).all()
+add_field_conv = ConversationHandler(
+    entry_points=[CommandHandler("add_field", start_add_field)],
+    states={
+        ASK_FIELD_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, field_name)],
+        ASK_FIELD_AREA: [MessageHandler(filters.TEXT & ~filters.COMMAND, field_area)],
+    },
+    fallbacks=[]
+)
+
+async def show_fields(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = sqlalchemy.select(Field)
+    fields = await database.fetch_all(query)
     if not fields:
-        await message.answer("Поля ще не створені.")
+        await update.message.reply_text("Поля ще не створені.")
         return
-    text = "\n".join([f"{fld.id}. {fld.name} — {fld.area_actual:.4f} га" for fld in fields])
-    await message.answer(f"Список полів:\n{text}")
+    text = "\n".join([f"{f['id']}. {f['name']} — {f['area_actual']:.4f} га" for f in fields])
+    await update.message.reply_text(f"Список полів:\n{text}")
