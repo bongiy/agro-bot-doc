@@ -55,10 +55,13 @@ application.add_handler(MessageHandler(filters.Regex("^🔹 Звіти$"), repor
 application.add_handler(MessageHandler(filters.Regex("^🔹 Пошук$"), search_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^🔄 Перезавантажити$"), restart_bot))
 
-# --- підключаєш лише ті діалоги, які вже переведені на нову архітектуру
+# --- ПАЙОВИКИ: Підключаємо діалоги до підменю пайовиків
 application.add_handler(add_payer_conv)
+application.add_handler(MessageHandler(filters.Regex("^📋 Список пайовиків$"), show_payers))
 application.add_handler(search_payer_conv)
 application.add_handler(edit_payer_conv)
+
+# --- ДІЛЯНКИ/ПОЛЯ (можна залишити, якщо сценарії вже є)
 application.add_handler(add_field_conv)
 application.add_handler(CommandHandler("fields", show_fields))
 application.add_handler(add_land_conv)
