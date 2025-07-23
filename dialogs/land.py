@@ -1,77 +1,89 @@
-from aiogram import Router, types
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import StatesGroup, State
-from db import Session, LandPlot, Field
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram.ext import (
+    ConversationHandler, CommandHandler, MessageHandler, filters, ContextTypes
+)
+from db import database, LandPlot, Field
+import sqlalchemy
 
-router = Router()
+ASK_CADASTER, ASK_AREA, ASK_NGO, ASK_FIELD = range(4)
 
-class AddLandState(StatesGroup):
-    waiting_for_cadaster = State()
-    waiting_for_area = State()
-    waiting_for_ngo = State()
-    waiting_for_field = State()
+async def start_add_land(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Введіть кадастровий номер ділянки (19 цифр):")
+    return ASK_CADASTER
 
-@router.message(commands=["add_land"])
-async def cmd_add_land(message: types.Message, state: FSMContext):
-    await message.answer("Введіть кадастровий номер ділянки (19 цифр):")
-    await state.set_state(AddLandState.waiting_for_cadaster)
-
-@router.message(AddLandState.waiting_for_cadaster)
-async def land_cadaster_entered(message: types.Message, state: FSMContext):
-    cad = message.text.strip()
-    # простий контроль довжини, можна додати форматування
+async def cadaster(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    cad = update.message.text.strip()
     if len(cad.replace(":", "")) != 19:
-        await message.answer("Кадастровий номер має містити 19 цифр. Спробуйте ще раз.")
-        return
-    await state.update_data(cadaster=cad)
-    await message.answer("Введіть площу ділянки, га:")
-    await state.set_state(AddLandState.waiting_for_area)
+        await update.message.reply_text("Кадастровий номер має містити 19 цифр. Спробуйте ще раз:")
+        return ASK_CADASTER
+    context.user_data["cadaster"] = cad
+    await update.message.reply_text("Введіть площу ділянки, га:")
+    return ASK_AREA
 
-@router.message(AddLandState.waiting_for_area)
-async def land_area_entered(message: types.Message, state: FSMContext):
+async def area(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        area = float(message.text.replace(",", "."))
+        area = float(update.message.text.replace(",", "."))
     except ValueError:
-        await message.answer("Некоректне число. Введіть площу ще раз:")
-        return
-    await state.update_data(area=area)
-    await message.answer("Введіть НГО (можна пропустити):")
-    await state.set_state(AddLandState.waiting_for_ngo)
+        await update.message.reply_text("Некоректна площа. Введіть ще раз:")
+        return ASK_AREA
+    context.user_data["area"] = area
+    await update.message.reply_text("Введіть НГО (можна пропустити):")
+    return ASK_NGO
 
-@router.message(AddLandState.waiting_for_ngo)
-async def land_ngo_entered(message: types.Message, state: FSMContext):
+async def ngo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        ngo = float(message.text.replace(",", "."))
+        ngo = float(update.message.text.replace(",", "."))
     except ValueError:
         ngo = None
-    await state.update_data(ngo=ngo)
-    # вибір поля (всі з БД)
-    session = Session()
-    fields = session.query(Field).all()
-    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    for f in fields:
-        kb.add(f"{f.id}: {f.name}")
-    await state.update_data(fields={f"{f.id}: {f.name}": f.id for f in fields})
-    await message.answer("Оберіть поле для ділянки:", reply_markup=kb)
-    await state.set_state(AddLandState.waiting_for_field)
+    context.user_data["ngo"] = ngo
+    # Показати вибір поля
+    query = sqlalchemy.select(Field)
+    fields = await database.fetch_all(query)
+    if not fields:
+        await update.message.reply_text("Спочатку створіть хоча б одне поле командою /add_field!")
+        return ConversationHandler.END
+    kb = ReplyKeyboardMarkup(
+        [[f"{f['id']}: {f['name']}"] for f in fields], resize_keyboard=True
+    )
+    context.user_data["fields"] = {f"{f['id']}: {f['name']}": f["id"] for f in fields}
+    await update.message.reply_text("Оберіть поле для ділянки:", reply_markup=kb)
+    return ASK_FIELD
 
-@router.message(AddLandState.waiting_for_field)
-async def land_field_chosen(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    fields_dict = data.get("fields", {})
-    field_id = fields_dict.get(message.text)
+async def choose_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    field_id = context.user_data["fields"].get(update.message.text)
     if not field_id:
-        await message.answer("Оберіть поле зі списку (натиснувши на кнопку):")
-        return
+        await update.message.reply_text("Оберіть поле зі списку (натисніть кнопку):")
+        return ASK_FIELD
     # Зберігаємо ділянку
-    session = Session()
-    plot = LandPlot(
-        cadaster=data["cadaster"],
-        area=data["area"],
-        ngo=data.get("ngo"),
+    query = LandPlot.insert().values(
+        cadaster=context.user_data["cadaster"],
+        area=context.user_data["area"],
+        ngo=context.user_data["ngo"],
         field_id=field_id
     )
-    session.add(plot)
-    session.commit()
-    await message.answer("Ділянка додана!", reply_markup=types.ReplyKeyboardRemove())
-    await state.clear()
+    await database.execute(query)
+    await update.message.reply_text("Ділянка додана!", reply_markup=ReplyKeyboardRemove())
+    return ConversationHandler.END
+
+add_land_conv = ConversationHandler(
+    entry_points=[CommandHandler("add_land", start_add_land)],
+    states={
+        ASK_CADASTER: [MessageHandler(filters.TEXT & ~filters.COMMAND, cadaster)],
+        ASK_AREA: [MessageHandler(filters.TEXT & ~filters.COMMAND, area)],
+        ASK_NGO: [MessageHandler(filters.TEXT & ~filters.COMMAND, ngo)],
+        ASK_FIELD: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_field)],
+    },
+    fallbacks=[]
+)
+
+async def show_lands(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = sqlalchemy.select(LandPlot)
+    lands = await database.fetch_all(query)
+    if not lands:
+        await update.message.reply_text("Ділянки ще не створені.")
+        return
+    text = "\n".join([
+        f"{l['id']}. {l['cadaster']} — {l['area']:.4f} га, поле {l['field_id']}"
+        for l in lands
+    ])
+    await update.message.reply_text(f"Список ділянок:\n{text}")
