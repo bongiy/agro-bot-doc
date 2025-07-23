@@ -4,7 +4,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 from dialogs.payer import (
     menu_keyboard, add_payer_conv, show_payers, payer_card, edit_payer_menu, edit_field_input, edit_field_save,
-    create_contract, to_menu, save_field, payer_card_back
+    create_contract, to_menu, save_field,
 )
 from db import database
 
