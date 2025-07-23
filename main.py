@@ -7,6 +7,7 @@ from dialogs.payer import (
     payer_search_start, payer_search_do, create_contract, to_menu, edit_payer_menu, edit_field_input
 )
 from db import database
+from dialogs.search import search_payer_conv
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 WEBHOOK_PATH = "/webhook"
@@ -40,8 +41,8 @@ async def menu_handler(update: Update, context):
 
 application.add_handler(CommandHandler("start", start))
 application.add_handler(add_payer_conv)
+application.add_handler(search_payer_conv)
 application.add_handler(MessageHandler(filters.Regex("^Список пайовиків$"), show_payers))
-application.add_handler(MessageHandler(filters.Regex("^Пошук пайовика$"), payer_search_start))
 # Більше НІЯКИХ filters.TEXT!!! (окрім FSM)
 # Далі тільки CallbackQueryHandler-и:
 application.add_handler(CallbackQueryHandler(payer_card, pattern=r"^payer_card:"))
