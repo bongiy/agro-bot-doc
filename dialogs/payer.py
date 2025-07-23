@@ -1,11 +1,13 @@
-# ==== 1. КОНСТАНТИ ТА КЛАВІАТУРИ ====
+# ==== 1. ІМПОРТИ, КОНСТАНТИ ТА КЛАВІАТУРИ ====
 from telegram import (
     Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 )
 from telegram.ext import (
     ContextTypes, ConversationHandler, MessageHandler, CommandHandler, CallbackQueryHandler, filters
 )
-from db import database, Payer
+from telegram.constants import ParseMode
+from db import database, Payer  # Твоя модель
+
 import re
 
 (
@@ -13,8 +15,8 @@ import re
     PHONE, DOC_TYPE,
     PASS_SERIES, PASS_NUMBER, PASS_ISSUER, PASS_DATE,
     IDCARD_NUMBER, IDCARD_UNZR, IDCARD_ISSUER, IDCARD_DATE,
-    BIRTH_DATE, EDIT_SELECT, EDIT_VALUE, CONFIRM_EDIT
-) = range(22)
+    BIRTH_DATE, EDIT_SELECT, EDIT_VALUE
+) = range(21)
 
 menu_keyboard = ReplyKeyboardMarkup(
     [
@@ -76,7 +78,7 @@ def normalize_phone(text):
         return text
     return None
 
-# ==== 3. ДОДАВАННЯ ПАЙОВИКА (КРОКИ) ====
+# ==== 3. ДОДАВАННЯ ПАЙОВИКА (FSM, STEP-BY-STEP) ====
 
 async def back_or_cancel(update, context, step_back):
     text = update.message.text
@@ -94,7 +96,6 @@ async def add_payer_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Введіть ПІБ пайовика:",
         reply_markup=back_cancel_keyboard
     )
-    context.user_data["step"] = FIO
     return FIO
 
 async def add_payer_fio(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -211,7 +212,7 @@ async def add_payer_doc_type(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("❗️ Оберіть тип документа через кнопки:", reply_markup=doc_type_keyboard)
         return DOC_TYPE
 
-# ---- Паспорт ----
+# ---- 3.1 Паспорт ----
 async def add_payer_pass_series(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = await back_or_cancel(update, context, DOC_TYPE)
     if result is not None:
@@ -253,7 +254,7 @@ async def add_payer_pass_date(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text("Введіть дату народження пайовика (дд.мм.рррр):", reply_markup=back_cancel_keyboard)
     return BIRTH_DATE
 
-# ---- ID-картка ----
+# ---- 3.2 ID-картка ----
 async def add_payer_idcard_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = await back_or_cancel(update, context, DOC_TYPE)
     if result is not None:
@@ -298,7 +299,7 @@ async def add_payer_idcard_date(update: Update, context: ContextTypes.DEFAULT_TY
     await update.message.reply_text("Введіть дату народження пайовика (дд.мм.рррр):", reply_markup=back_cancel_keyboard)
     return BIRTH_DATE
 
-# ---- Завершення анкети ----
+# ---- 3.3 Завершення анкети ----
 async def add_payer_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = await back_or_cancel(update, context, PASS_DATE if context.user_data.get("doc_type") == "passport" else IDCARD_DATE)
     if result is not None:
@@ -340,8 +341,7 @@ async def add_payer_birth_date(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data.clear()
     return ConversationHandler.END
 
-# ==== 4. СПИСОК, КАРТКА, РЕДАГУВАННЯ ====
-
+# ==== 4. СПИСОК, КАРТКА, РЕДАГУВАННЯ ПАЙОВИКА ====
 
 async def show_payers(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = Payer.select()
@@ -363,7 +363,7 @@ async def payer_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     payer = await database.fetch_one(select)
     if not payer:
         await query.answer("Пайовик не знайдений!")
-        return
+        return ConversationHandler.END
     text = f"""<b>Картка пайовика</b>
 ID: {payer.id}
 ПІБ: {payer.name}
@@ -382,78 +382,12 @@ ID: {payer.id}
         [InlineKeyboardButton("Створити договір оренди", callback_data=f"create_contract:{payer.id}")],
         [InlineKeyboardButton("До меню", callback_data="to_menu")]
     ]
-    await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-
-# ==== 5. КАРТКА, РЕДАГУВАННЯ, ОНОВЛЕННЯ ПОЛІВ (оновлена фінальна версія) ====
-
-from telegram.constants import ParseMode
-
-FIELDS = [
-    ("name", "ПІБ"),
-    ("ipn", "ІПН"),
-    ("oblast", "Область"),
-    ("rayon", "Район"),
-    ("selo", "Село"),
-    ("vul", "Вулиця"),
-    ("bud", "Будинок"),
-    ("kv", "Квартира"),
-    ("phone", "Телефон"),
-    ("doc_type", "Тип документа"),
-    ("passport_series", "Серія паспорта"),
-    ("passport_number", "Номер паспорта"),
-    ("passport_issuer", "Ким виданий"),
-    ("passport_date", "Коли виданий"),
-    ("id_number", "ID-картка"),
-    ("unzr", "УНЗР"),
-    ("idcard_issuer", "Код підрозділу"),
-    ("idcard_date", "Дата видачі ID"),
-    ("birth_date", "Дата народження"),
-]
-
-async def payer_card(update, context):
-    query = update.callback_query
-    data = query.data.split(":")
-    try:
-        payer_id = int(data[1])
-    except (IndexError, ValueError):
-        await query.answer("Технічна помилка (payer_id).")
-        await query.message.edit_text("⚠️ Технічна помилка. Спробуйте через меню.")
-        return
-    select = Payer.select().where(Payer.c.id == payer_id)
-    payer = await database.fetch_one(select)
-    if not payer:
-        await query.answer("Пайовик не знайдений!")
-        return
-    text = (
-        f"<b>Картка пайовика</b>\n"
-        f"ID: {payer.id}\n"
-        f"ПІБ: {payer.name}\n"
-        f"ІПН: {payer.ipn}\n"
-        f"Адреса: {payer.oblast} обл., {payer.rayon} р-н, с. {payer.selo}, вул. {payer.vul}, буд. {payer.bud}, кв. {payer.kv}\n"
-        f"Телефон: {payer.phone}\n"
-        f"Тип документа: {payer.doc_type}\n"
-        f"Паспорт/ID: {payer.passport_series or ''} {payer.passport_number or ''} {payer.id_number or ''}\n"
-        f"Ким виданий: {payer.passport_issuer or payer.idcard_issuer or ''}\n"
-        f"Коли виданий: {payer.passport_date or payer.idcard_date or ''}\n"
-        f"УНЗР: {payer.unzr or '-'}\n"
-        f"Дата народження: {payer.birth_date}\n"
-    )
-    keyboard = [
-        [InlineKeyboardButton("Редагувати", callback_data=f"edit_payer:{payer.id}")],
-        [InlineKeyboardButton("Створити договір оренди", callback_data=f"create_contract:{payer.id}")],
-        [InlineKeyboardButton("До меню", callback_data="to_menu")]
-    ]
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+    return EDIT_SELECT
 
-async def edit_payer_menu(update, context):
+async def edit_payer_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    data = query.data.split(":")
-    try:
-        payer_id = int(data[1])
-    except (IndexError, ValueError):
-        await query.answer("Технічна помилка (payer_id).")
-        await query.message.edit_text("⚠️ Технічна помилка. Спробуйте через меню.")
-        return
+    payer_id = int(query.data.split(":")[1])
     context.user_data["edit_payer_id"] = payer_id
     keyboard = [
         [InlineKeyboardButton(field_name, callback_data=f"edit_field:{payer_id}:{field_key}")]
@@ -461,32 +395,19 @@ async def edit_payer_menu(update, context):
     ]
     keyboard.append([InlineKeyboardButton("Назад", callback_data=f"payer_card:{payer_id}")])
     await query.message.edit_text("Оберіть поле для редагування:", reply_markup=InlineKeyboardMarkup(keyboard))
+    return EDIT_SELECT
 
-async def edit_field_input(update, context):
+async def edit_field_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    data = query.data.split(":")
-    if len(data) == 3:
-        _, payer_id, field_key = data
-        try:
-            payer_id = int(payer_id)
-        except ValueError:
-            await query.answer("Технічна помилка (payer_id).")
-            await query.message.edit_text("⚠️ Технічна помилка. Спробуйте через меню.")
-            return
-        context.user_data["edit_payer_id"] = payer_id
-        context.user_data["edit_field"] = field_key
-    else:
-        payer_id = context.user_data.get("edit_payer_id")
-        field_key = context.user_data.get("edit_field")
-    if not payer_id or not field_key:
-        await query.answer("Технічна помилка: відсутній payer_id або поле.")
-        await query.message.edit_text("⚠️ Технічна помилка. Спробуйте через меню.")
-        return
+    _, payer_id, field_key = query.data.split(":")
+    payer_id = int(payer_id)
+    context.user_data["edit_payer_id"] = payer_id
+    context.user_data["edit_field"] = field_key
     select = Payer.select().where(Payer.c.id == payer_id)
     payer = await database.fetch_one(select)
     if not payer:
         await query.answer("Пайовик не знайдений!")
-        return
+        return ConversationHandler.END
     old_value = getattr(payer, field_key, "")
     context.user_data["old_value"] = old_value if old_value is not None else ""
     await query.message.edit_text(
@@ -496,7 +417,7 @@ async def edit_field_input(update, context):
     )
     return EDIT_VALUE
 
-async def edit_field_save(update, context):
+async def edit_field_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     value = update.message.text
     payer_id = context.user_data.get("edit_payer_id")
     field_key = context.user_data.get("edit_field")
@@ -518,6 +439,8 @@ async def edit_field_save(update, context):
         return EDIT_VALUE
     # Підтвердження змін
     context.user_data["edit_new_value"] = value
+    payer_id = context.user_data["edit_payer_id"]
+    field_key = context.user_data["edit_field"]
     keyboard = [
         [InlineKeyboardButton("✅ Так, зберегти", callback_data=f"save_field:{payer_id}:{field_key}")],
         [InlineKeyboardButton("❌ Скасувати", callback_data=f"edit_payer:{payer_id}")]
@@ -526,50 +449,26 @@ async def edit_field_save(update, context):
         f"Змінити <b>{dict(FIELDS)[field_key]}</b>:\n<b>{old_value}</b> ➔ <b>{value}</b>?\n\nПідтвердити зміну?",
         reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML
     )
-    return ConversationHandler.END
+    return EDIT_SELECT
 
-async def save_field(update, context):
+async def save_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    data = query.data.split(":")
-    try:
-        payer_id = int(data[1])
-        field_key = data[2]
-    except (IndexError, ValueError):
-        await query.answer("Технічна помилка при збереженні!")
-        return
+    _, payer_id, field_key = query.data.split(":")
+    payer_id = int(payer_id)
     value = context.user_data.get("edit_new_value")
-    if not (payer_id and field_key and value):
+    if not (payer_id and field_key and value is not None):
         await query.answer("Помилка збереження!")
-        return
+        return ConversationHandler.END
     # Оновлюємо БД
     query_db = Payer.update().where(Payer.c.id == payer_id).values({field_key: value})
     await database.execute(query_db)
     await query.answer("✅ Зміни збережено!")
+    # Очищаємо дані редагування, повертаємо до картки
+    context.user_data.pop("edit_field", None)
+    context.user_data.pop("edit_new_value", None)
+    context.user_data.pop("old_value", None)
     await payer_card(update, context)
-
-# Для кнопки "Назад" (edit_payer_menu)
-async def payer_card_back(update, context):
-    query = update.callback_query
-    data = query.data.split(":")
-    try:
-        payer_id = int(data[1])
-    except (IndexError, ValueError):
-        await query.answer("Технічна помилка (payer_id).")
-        await query.message.edit_text("⚠️ Технічна помилка. Спробуйте через меню.")
-        return
-    await payer_card(update, context)
-
-# ==== 6. ДОДАТКОВІ ФУНКЦІЇ ====
-
-async def edit_payer_menu(update, context):
-    query = update.callback_query
-    payer_id = context.user_data.get("edit_payer_id")
-    keyboard = [
-        [InlineKeyboardButton(field_name, callback_data=f"edit_field:{field_key}")]
-        for field_key, field_name in FIELDS
-    ]
-    keyboard.append([InlineKeyboardButton("Назад", callback_data=f"payer_card:{payer_id}")])
-    await query.message.edit_text("Оберіть поле для редагування:", reply_markup=InlineKeyboardMarkup(keyboard))
+    return EDIT_SELECT
 
 async def create_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -580,8 +479,9 @@ async def create_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.message.reply_text("Головне меню:", reply_markup=menu_keyboard)
+    return ConversationHandler.END
 
-# ==== 7. CONVERSATION HANDLER ====
+# ==== 5. HANDLER ====
 
 add_payer_conv = ConversationHandler(
     entry_points=[MessageHandler(filters.Regex("^Новий пайовик$"), add_payer_start)],
@@ -605,9 +505,20 @@ add_payer_conv = ConversationHandler(
         IDCARD_ISSUER: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_payer_idcard_issuer)],
         IDCARD_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_payer_idcard_date)],
         BIRTH_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_payer_birth_date)],
-        EDIT_SELECT: [CallbackQueryHandler(edit_field_input, pattern=r"^edit_field:\d+:\w+$")],
-        EDIT_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_field_save)],
-ConversationHandler.TIMEOUT: [],
+        EDIT_SELECT: [
+            CallbackQueryHandler(edit_field_input, pattern=r"^edit_field:\d+:\w+$"),
+            CallbackQueryHandler(edit_payer_menu, pattern=r"^edit_payer:\d+$"),
+            CallbackQueryHandler(payer_card, pattern=r"^payer_card:\d+$"),
+        ],
+        EDIT_VALUE: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, edit_field_save),
+            CallbackQueryHandler(save_field, pattern=r"^save_field:\d+:\w+$"),
+            CallbackQueryHandler(edit_payer_menu, pattern=r"^edit_payer:\d+$"),
+        ],
     },
-    fallbacks=[CommandHandler("start", add_payer_start)],
+    fallbacks=[CommandHandler("start", to_menu)],
 )
+
+# ==== 6. ДОДАТИ HANDLER ДО APP ====
+# application.add_handler(add_payer_conv)
+# Додати show_payers як окрему команду або кнопку, якщо потрібно.
