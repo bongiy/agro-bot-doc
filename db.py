@@ -6,6 +6,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 database = Database(DATABASE_URL)
 metadata = sqlalchemy.MetaData()
 
+# === Таблиця пайовика ===
 Payer = sqlalchemy.Table(
     "payer",  # Таблиця в однині!
     metadata,
@@ -29,4 +30,24 @@ Payer = sqlalchemy.Table(
     sqlalchemy.Column("idcard_issuer", sqlalchemy.String),
     sqlalchemy.Column("idcard_date", sqlalchemy.String),
     sqlalchemy.Column("birth_date", sqlalchemy.String),
+)
+
+# === Таблиця Поле ===
+Field = sqlalchemy.Table(
+    "field",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("name", sqlalchemy.String(100), unique=True, nullable=False),
+    sqlalchemy.Column("area_actual", sqlalchemy.Float, nullable=False),
+)
+
+# === Таблиця Ділянка ===
+LandPlot = sqlalchemy.Table(
+    "land_plot",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("cadaster", sqlalchemy.String(25), unique=True, nullable=False),
+    sqlalchemy.Column("area", sqlalchemy.Float, nullable=False),
+    sqlalchemy.Column("ngo", sqlalchemy.Float),  # можна null
+    sqlalchemy.Column("field_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("field.id")),  # зв'язок з полем
 )
