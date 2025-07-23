@@ -8,6 +8,7 @@ async def payer_search_start(update, context):
     return SEARCH_INPUT
 
 async def payer_search_do(update, context):
+    print("DEBUG: payer_search_do start!", flush=True)
     q = update.message.text.strip()
     results = []
     found_ids = set()
