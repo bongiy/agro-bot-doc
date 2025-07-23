@@ -14,8 +14,8 @@ import re
     PHONE, DOC_TYPE,
     PASS_SERIES, PASS_NUMBER, PASS_ISSUER, PASS_DATE,
     IDCARD_NUMBER, IDCARD_UNZR, IDCARD_ISSUER, IDCARD_DATE,
-    BIRTH_DATE, EDIT_SELECT, EDIT_VALUE
-) = range(21)
+    BIRTH_DATE
+) = range(19)
 
 menu_keyboard = ReplyKeyboardMarkup(
     [
@@ -377,7 +377,7 @@ ID: {payer.id}
         [InlineKeyboardButton("До меню", callback_data="to_menu")]
     ]
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
-    return EDIT_SELECT
+    return ConversationHandler.END
 
 async def delete_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
