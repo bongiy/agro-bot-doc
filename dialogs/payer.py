@@ -1,11 +1,12 @@
 from telegram import (
-    Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
+    Update, InlineKeyboardMarkup, InlineKeyboardButton
 )
 from telegram.ext import (
-    ContextTypes, ConversationHandler, MessageHandler, CommandHandler, CallbackQueryHandler, filters
+    ContextTypes, ConversationHandler, MessageHandler, CommandHandler, filters
 )
 from telegram.constants import ParseMode
 from db import database, Payer
+from keyboards.menu import payers_menu, main_menu  # сучасні меню!
 
 import re
 
@@ -17,51 +18,12 @@ import re
     BIRTH_DATE
 ) = range(19)
 
-menu_keyboard = ReplyKeyboardMarkup(
-    [
-        ["Новий пайовик", "Список пайовиків"],
-        ["Пошук пайовика"],
-        ["Додати ділянку", "Таблиця виплат"],
-        ["Довідка"],
-    ],
-    resize_keyboard=True
-)
-doc_type_keyboard = ReplyKeyboardMarkup(
-    [["Паспорт (книжка)", "ID картка"]], resize_keyboard=True
-)
-oblast_keyboard = ReplyKeyboardMarkup(
-    [["Рівненська", "Інша"], ["❌ Скасувати"]], resize_keyboard=True
-)
-rayon_keyboard = ReplyKeyboardMarkup(
-    [["Рівненський", "Дубенський", "Інший"], ["◀️ Назад", "❌ Скасувати"]], resize_keyboard=True
-)
-back_cancel_keyboard = ReplyKeyboardMarkup(
-    [["◀️ Назад", "❌ Скасувати"]], resize_keyboard=True
-)
+doc_type_keyboard = payers_menu  # або залиш, якщо потрібно інше меню для типу документа
+oblast_keyboard = payers_menu    # або окрема клавіатура, якщо потрібно
+rayon_keyboard = payers_menu     # або окрема клавіатура, якщо потрібно
+back_cancel_keyboard = payers_menu  # або окрема клавіатура, якщо потрібно
 
-FIELDS = [
-    ("name", "ПІБ"),
-    ("ipn", "ІПН"),
-    ("oblast", "Область"),
-    ("rayon", "Район"),
-    ("selo", "Село"),
-    ("vul", "Вулиця"),
-    ("bud", "Будинок"),
-    ("kv", "Квартира"),
-    ("phone", "Телефон"),
-    ("doc_type", "Тип документа"),
-    ("passport_series", "Серія паспорта"),
-    ("passport_number", "Номер паспорта"),
-    ("passport_issuer", "Ким виданий"),
-    ("passport_date", "Коли виданий"),
-    ("id_number", "ID-картка"),
-    ("unzr", "УНЗР"),
-    ("idcard_issuer", "Код підрозділу"),
-    ("idcard_date", "Дата видачі ID"),
-    ("birth_date", "Дата народження"),
-]
-allowed_fields = [f[0] for f in FIELDS]
-
+# =========== Валідації ===========
 def is_ipn(text): return re.fullmatch(r"\d{10}", text)
 def is_pass_series(text): return re.fullmatch(r"[A-ZА-ЯІЇЄҐ]{2}", text)
 def is_pass_number(text): return re.fullmatch(r"\d{6}", text)
@@ -81,7 +43,7 @@ def normalize_phone(text):
 async def back_or_cancel(update, context, step_back):
     text = update.message.text
     if text == "❌ Скасувати":
-        await update.message.reply_text("Додавання скасовано.", reply_markup=menu_keyboard)
+        await update.message.reply_text("Додавання скасовано.", reply_markup=payers_menu)
         context.user_data.clear()
         return ConversationHandler.END
     if text == "◀️ Назад":
@@ -116,36 +78,23 @@ async def add_payer_ipn(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return IPN
     context.user_data["ipn"] = update.message.text
     await update.message.reply_text(
-        "Оберіть область:", reply_markup=oblast_keyboard
+        "Оберіть область:", reply_markup=back_cancel_keyboard
     )
     return OBLAST
 
 async def add_payer_oblast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-    if text == "❌ Скасувати":
-        await update.message.reply_text("Додавання скасовано.", reply_markup=menu_keyboard)
-        context.user_data.clear()
-        return ConversationHandler.END
-    if text == "Інша":
-        await update.message.reply_text("Введіть назву області:", reply_markup=back_cancel_keyboard)
-        return OBLAST
-    context.user_data["oblast"] = text
-    await update.message.reply_text("Оберіть район:", reply_markup=rayon_keyboard)
+    result = await back_or_cancel(update, context, IPN)
+    if result is not None:
+        return result
+    context.user_data["oblast"] = update.message.text
+    await update.message.reply_text("Оберіть район:", reply_markup=back_cancel_keyboard)
     return RAYON
 
 async def add_payer_rayon(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-    if text == "❌ Скасувати":
-        await update.message.reply_text("Додавання скасовано.", reply_markup=menu_keyboard)
-        context.user_data.clear()
-        return ConversationHandler.END
-    if text == "◀️ Назад":
-        await update.message.reply_text("Оберіть область:", reply_markup=oblast_keyboard)
-        return OBLAST
-    if text == "Інший":
-        await update.message.reply_text("Введіть назву району:", reply_markup=back_cancel_keyboard)
-        return RAYON
-    context.user_data["rayon"] = text
+    result = await back_or_cancel(update, context, OBLAST)
+    if result is not None:
+        return result
+    context.user_data["rayon"] = update.message.text
     await update.message.reply_text("Введіть назву села:", reply_markup=back_cancel_keyboard)
     return SELO
 
@@ -193,7 +142,7 @@ async def add_payer_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❗️ Введіть номер у форматі +380XXXXXXXXX або 0XXXXXXXXXX")
         return PHONE
     context.user_data["phone"] = phone
-    await update.message.reply_text("Оберіть тип документа:", reply_markup=doc_type_keyboard)
+    await update.message.reply_text("Оберіть тип документа:", reply_markup=back_cancel_keyboard)
     return DOC_TYPE
 
 async def add_payer_doc_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -207,8 +156,9 @@ async def add_payer_doc_type(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("Введіть номер ID-картки (9 цифр):", reply_markup=back_cancel_keyboard)
         return IDCARD_NUMBER
     else:
-        await update.message.reply_text("❗️ Оберіть тип документа через кнопки:", reply_markup=doc_type_keyboard)
+        await update.message.reply_text("❗️ Оберіть тип документа через кнопки:", reply_markup=back_cancel_keyboard)
         return DOC_TYPE
+
 async def add_payer_pass_series(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = await back_or_cancel(update, context, DOC_TYPE)
     if result is not None:
@@ -335,7 +285,7 @@ async def add_payer_birth_date(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data.clear()
     return ConversationHandler.END
 
-# ==== СПИСОК, КАРТКА, ПОШУК, РЕДАГУВАННЯ, ВИДАЛЕННЯ ====
+# ==== СПИСОК, КАРТКА, РЕДАГУВАННЯ, ВИДАЛЕННЯ ====
 async def show_payers(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = Payer.select()
     payers = await database.fetch_all(query)
@@ -396,11 +346,11 @@ async def create_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.message.reply_text("Головне меню:", reply_markup=menu_keyboard)
+    await query.message.reply_text("Головне меню:", reply_markup=main_menu)
     return ConversationHandler.END
 
 add_payer_conv = ConversationHandler(
-    entry_points=[MessageHandler(filters.Regex("^Новий пайовик$"), add_payer_start)],
+    entry_points=[MessageHandler(filters.Regex("^➕ Додати пайовика$"), add_payer_start)],
     states={
         FIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_payer_fio)],
         IPN: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_payer_ipn)],
@@ -421,7 +371,6 @@ add_payer_conv = ConversationHandler(
         IDCARD_ISSUER: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_payer_idcard_issuer)],
         IDCARD_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_payer_idcard_date)],
         BIRTH_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_payer_birth_date)],
-        
     },
     fallbacks=[CommandHandler("start", to_menu)],
 )
