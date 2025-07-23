@@ -61,10 +61,9 @@ FIELDS = [
     ("idcard_date", "Дата видачі ID"),
     ("birth_date", "Дата народження"),
 ]
-
 allowed_fields = [f[0] for f in FIELDS]
 
-# ==== 2. ВАЛІДАЦІЯ ТА УТИЛІТИ ====
+# ==== ВАЛІДАЦІЯ ТА УТИЛІТИ ====
 
 def is_ipn(text): return re.fullmatch(r"\d{10}", text)
 def is_pass_series(text): return re.fullmatch(r"[A-ZА-ЯІЇЄҐ]{2}", text)
@@ -81,7 +80,7 @@ def normalize_phone(text):
         return text
     return None
 
-# ==== 3. ДОДАВАННЯ ПАЙОВИКА (FSM, STEP-BY-STEP) ====
+# ==== ДОДАВАННЯ ПАЙОВИКА (FSM, STEP-BY-STEP) ====
 
 async def back_or_cancel(update, context, step_back):
     text = update.message.text
@@ -344,7 +343,7 @@ async def add_payer_birth_date(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data.clear()
     return ConversationHandler.END
 
-# ==== 4. СПИСОК, КАРТКА, РЕДАГУВАННЯ, ВИДАЛЕННЯ, ПОШУК ====
+# ==== СПИСОК, КАРТКА, РЕДАГУВАННЯ, ВИДАЛЕННЯ, ПОШУК ====
 
 async def show_payers(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = Payer.select()
@@ -435,7 +434,8 @@ async def payer_search_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"{p.id}. {p.name} (ІПН: {p.ipn})",
             reply_markup=InlineKeyboardMarkup([[btn]])
         )
-# ---- РЕДАГУВАННЯ ----
+
+# --- РЕДАГУВАННЯ ---
 
 async def edit_payer_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -490,7 +490,6 @@ async def edit_field_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Формат дати: дд.мм.рррр. Введіть ще раз:")
         return EDIT_VALUE
 
-    # UPDATE в Postgres
     query_db = Payer.update().where(Payer.c.id == payer_id).values({field_key: value})
     await database.execute(query_db)
     await update.message.reply_text("✅ Зміни збережено!")
@@ -520,7 +519,7 @@ async def to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.message.reply_text("Головне меню:", reply_markup=menu_keyboard)
     return ConversationHandler.END
 
-# ==== 5. HANDLER ====
+# ==== FSM HANDLER ====
 
 add_payer_conv = ConversationHandler(
     entry_points=[MessageHandler(filters.Regex("^Новий пайовик$"), add_payer_start)],
