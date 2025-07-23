@@ -384,7 +384,8 @@ ID: {payer.id}
     ]
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
-# ==== 5. КАРТКА, РЕДАГУВАННЯ, ОНОВЛЕННЯ ПОЛІВ (фінальна версія) ====
+# ==== 5. КАРТКА, РЕДАГУВАННЯ, ОНОВЛЕННЯ ПОЛІВ (оновлена фінальна версія) ====
+
 from telegram.constants import ParseMode
 
 FIELDS = [
@@ -411,25 +412,32 @@ FIELDS = [
 
 async def payer_card(update, context):
     query = update.callback_query
-    payer_id = int(query.data.split(":")[1])
+    data = query.data.split(":")
+    try:
+        payer_id = int(data[1])
+    except (IndexError, ValueError):
+        await query.answer("Технічна помилка (payer_id).")
+        await query.message.edit_text("⚠️ Технічна помилка. Спробуйте через меню.")
+        return
     select = Payer.select().where(Payer.c.id == payer_id)
     payer = await database.fetch_one(select)
     if not payer:
         await query.answer("Пайовик не знайдений!")
         return
-    text = f"""<b>Картка пайовика</b>
-ID: {payer.id}
-ПІБ: {payer.name}
-ІПН: {payer.ipn}
-Адреса: {payer.oblast} обл., {payer.rayon} р-н, с. {payer.selo}, вул. {payer.vul}, буд. {payer.bud}, кв. {payer.kv}
-Телефон: {payer.phone}
-Тип документа: {payer.doc_type}
-Паспорт/ID: {payer.passport_series or ''} {payer.passport_number or ''} {payer.id_number or ''}
-Ким виданий: {payer.passport_issuer or payer.idcard_issuer or ''}
-Коли виданий: {payer.passport_date or payer.idcard_date or ''}
-УНЗР: {payer.unzr or '-'}
-Дата народження: {payer.birth_date}
-"""
+    text = (
+        f"<b>Картка пайовика</b>\n"
+        f"ID: {payer.id}\n"
+        f"ПІБ: {payer.name}\n"
+        f"ІПН: {payer.ipn}\n"
+        f"Адреса: {payer.oblast} обл., {payer.rayon} р-н, с. {payer.selo}, вул. {payer.vul}, буд. {payer.bud}, кв. {payer.kv}\n"
+        f"Телефон: {payer.phone}\n"
+        f"Тип документа: {payer.doc_type}\n"
+        f"Паспорт/ID: {payer.passport_series or ''} {payer.passport_number or ''} {payer.id_number or ''}\n"
+        f"Ким виданий: {payer.passport_issuer or payer.idcard_issuer or ''}\n"
+        f"Коли виданий: {payer.passport_date or payer.idcard_date or ''}\n"
+        f"УНЗР: {payer.unzr or '-'}\n"
+        f"Дата народження: {payer.birth_date}\n"
+    )
     keyboard = [
         [InlineKeyboardButton("Редагувати", callback_data=f"edit_payer:{payer.id}")],
         [InlineKeyboardButton("Створити договір оренди", callback_data=f"create_contract:{payer.id}")],
@@ -439,7 +447,13 @@ ID: {payer.id}
 
 async def edit_payer_menu(update, context):
     query = update.callback_query
-    payer_id = int(query.data.split(":")[1])
+    data = query.data.split(":")
+    try:
+        payer_id = int(data[1])
+    except (IndexError, ValueError):
+        await query.answer("Технічна помилка (payer_id).")
+        await query.message.edit_text("⚠️ Технічна помилка. Спробуйте через меню.")
+        return
     context.user_data["edit_payer_id"] = payer_id
     keyboard = [
         [InlineKeyboardButton(field_name, callback_data=f"edit_field:{payer_id}:{field_key}")]
@@ -453,19 +467,26 @@ async def edit_field_input(update, context):
     data = query.data.split(":")
     if len(data) == 3:
         _, payer_id, field_key = data
-        payer_id = int(payer_id)
+        try:
+            payer_id = int(payer_id)
+        except ValueError:
+            await query.answer("Технічна помилка (payer_id).")
+            await query.message.edit_text("⚠️ Технічна помилка. Спробуйте через меню.")
+            return
         context.user_data["edit_payer_id"] = payer_id
         context.user_data["edit_field"] = field_key
     else:
         payer_id = context.user_data.get("edit_payer_id")
         field_key = context.user_data.get("edit_field")
-    # --- ЗАХИСТ ---
-    if payer_id is None or field_key is None:
-        await query.answer("Помилка callback! payer_id або field_key не знайдено!")
-        await query.message.edit_text("⚠️ Технічна помилка. Спробуйте знову.")
-        return ConversationHandler.END
+    if not payer_id or not field_key:
+        await query.answer("Технічна помилка: відсутній payer_id або поле.")
+        await query.message.edit_text("⚠️ Технічна помилка. Спробуйте через меню.")
+        return
     select = Payer.select().where(Payer.c.id == payer_id)
     payer = await database.fetch_one(select)
+    if not payer:
+        await query.answer("Пайовик не знайдений!")
+        return
     old_value = getattr(payer, field_key, "")
     context.user_data["old_value"] = old_value if old_value is not None else ""
     await query.message.edit_text(
@@ -480,6 +501,9 @@ async def edit_field_save(update, context):
     payer_id = context.user_data.get("edit_payer_id")
     field_key = context.user_data.get("edit_field")
     old_value = context.user_data.get("old_value")
+    if not payer_id or not field_key:
+        await update.message.reply_text("⚠️ Технічна помилка! payer_id або поле не задано.")
+        return EDIT_VALUE
     # Валідація
     if field_key == "ipn" and not is_ipn(value):
         await update.message.reply_text("ІПН має бути 10 цифр. Введіть ще раз:")
@@ -507,8 +531,12 @@ async def edit_field_save(update, context):
 async def save_field(update, context):
     query = update.callback_query
     data = query.data.split(":")
-    payer_id = int(data[1])
-    field_key = data[2]
+    try:
+        payer_id = int(data[1])
+        field_key = data[2]
+    except (IndexError, ValueError):
+        await query.answer("Технічна помилка при збереженні!")
+        return
     value = context.user_data.get("edit_new_value")
     if not (payer_id and field_key and value):
         await query.answer("Помилка збереження!")
@@ -522,7 +550,13 @@ async def save_field(update, context):
 # Для кнопки "Назад" (edit_payer_menu)
 async def payer_card_back(update, context):
     query = update.callback_query
-    payer_id = int(query.data.split(":")[1])
+    data = query.data.split(":")
+    try:
+        payer_id = int(data[1])
+    except (IndexError, ValueError):
+        await query.answer("Технічна помилка (payer_id).")
+        await query.message.edit_text("⚠️ Технічна помилка. Спробуйте через меню.")
+        return
     await payer_card(update, context)
 
 # ==== 6. ДОДАТКОВІ ФУНКЦІЇ ====
