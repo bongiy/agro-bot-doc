@@ -48,6 +48,7 @@ application.add_handler(CallbackQueryHandler(delete_payer, pattern=r"^delete_pay
 application.add_handler(CallbackQueryHandler(to_menu, pattern=r"^to_menu$"))
 application.add_handler(CallbackQueryHandler(create_contract, pattern=r"^create_contract:"))
 application.add_handler(CallbackQueryHandler(edit_payer_menu, pattern=r"^edit_payer:\d+$"))
+application.add_handler(CallbackQueryHandler(edit_field_input, pattern=r"^edit_field:\d+:\w+$"))
 application.add_handler(MessageHandler(filters.TEXT, menu_handler)) # fallback, на останок
 
 @app.post(WEBHOOK_PATH)
