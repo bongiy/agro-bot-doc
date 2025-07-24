@@ -1,6 +1,6 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ConversationHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
-from db import database, Land_Plot, Payer
+from db import database, LandPlot, Payer
 import sqlalchemy
 
 ASK_OWNER_SEARCH, ASK_OWNER_SELECT = range(2)
