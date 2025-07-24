@@ -50,4 +50,5 @@ LandPlot = sqlalchemy.Table(
     sqlalchemy.Column("area", sqlalchemy.Float, nullable=False),
     sqlalchemy.Column("ngo", sqlalchemy.Float),  # можна null
     sqlalchemy.Column("field_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("field.id")),  # зв'язок з полем
+    sqlalchemy.Column("payer_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("payer.id"), nullable=True),  # <-- ДОДАЙ ЦЕ!
 )
