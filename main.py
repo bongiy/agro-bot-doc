@@ -1,4 +1,11 @@
 import os
+# Якщо GOOGLE_CREDS_JSON є в змінних оточення — створити credentials.json
+if "GOOGLE_CREDS_JSON" in os.environ:
+    # Перевіряємо чи файл вже існує (щоб не перезаписувати при кожному запуску)
+    if not os.path.isfile("credentials.json"):
+        with open("credentials.json", "w") as f:
+            f.write(os.environ["GOOGLE_CREDS_JSON"])
+
 from fastapi import FastAPI, Request
 from telegram import Update
 from telegram.ext import (
