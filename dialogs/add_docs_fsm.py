@@ -5,8 +5,8 @@ from telegram.ext import (
 )
 from PIL import Image
 from fpdf import FPDF
-from db import database, Payer, LandPlot  # Contract додай, коли буде
-from drive_utils import upload_pdf_to_drive  # додаємо Google Drive утиліту
+from db import database, Payer, LandPlot, UploadedDocs  # додано UploadedDocs
+from drive_utils import upload_pdf_to_drive
 
 SELECT_DOC_TYPE, COLLECT_PHOTO = range(2)
 
@@ -26,7 +26,7 @@ async def start_add_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["entity_type"] = entity_type
     context.user_data["entity_id"] = entity_id
 
-    # --- Людська назва для Google Drive ---
+    # --- "людська" назва для Google Drive ---
     if entity_type.startswith("payer"):
         payer = await database.fetch_one(Payer.select().where(Payer.c.id == int(entity_id)))
         if not payer:
@@ -80,6 +80,9 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     folder_name = context.user_data["gdrive_folder"]
     doc_type = context.user_data["current_doc_type"]
     photos = context.user_data.get("photos", [])
+    entity_type = context.user_data["entity_type"]
+    entity_id = int(context.user_data["entity_id"])
+
     if not photos:
         await query.message.reply_text("Ви не надіслали жодного фото. Скасовано.")
         return ConversationHandler.END
@@ -117,9 +120,27 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"[Відкрити PDF]({web_link})",
         parse_mode="Markdown"
     )
-
-    # Видаляємо тимчасовий файл
     os.remove(pdf_path)
+
+    # --- Зберігаємо file_id та web_link у БД ---
+    import sqlalchemy
+    # Видаляємо старий запис (doc_type для entity_type/entity_id унікальний)
+    await database.execute(
+        UploadedDocs.delete().where(
+            (UploadedDocs.c.entity_type == entity_type) &
+            (UploadedDocs.c.entity_id == entity_id) &
+            (UploadedDocs.c.doc_type == doc_type)
+        )
+    )
+    await database.execute(
+        UploadedDocs.insert().values(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            doc_type=doc_type,
+            gdrive_file_id=file_id,
+            web_link=web_link
+        )
+    )
     return ConversationHandler.END
 
 add_docs_conv = ConversationHandler(
