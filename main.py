@@ -22,7 +22,7 @@ from dialogs.edit_field import edit_field_conv
 from dialogs.edit_land import edit_land_conv
 from dialogs.edit_land_owner import edit_land_owner_conv
 
-from dialogs.add_docs_fsm import send_pdf
+from dialogs.add_docs_fsm import send_pdf, dd_docs_conv
 
 from db import database
 
@@ -85,7 +85,8 @@ application.add_handler(edit_land_conv)
 application.add_handler(edit_land_owner_conv)
 
 # --- PDF ---
-application.add_handler(CallbackQueryHandler(send_pdf, pattern=r"^view_pdf:\w+:\d+:.+"))
+application.add_handler(add_docs_conv)
+application.add_handler(CallbackQueryHandler(send_pdf, pattern=r"^view_pdf:\w+:\d+:.+")))
 
 # CallbackQueryHandler-и — як є, доки не переведені на нову систему:
 application.add_handler(CallbackQueryHandler(payer_card, pattern=r"^payer_card:"))
