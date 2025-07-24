@@ -327,6 +327,7 @@ async def payer_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not payer:
         await query.answer("Пайовик не знайдений!")
         return ConversationHandler.END
+
     text = f"""<b>Картка пайовика</b>
 ID: {payer.id}
 ПІБ: {payer.name}
@@ -340,13 +341,35 @@ ID: {payer.id}
 УНЗР: {payer.unzr or '-'}
 Дата народження: {payer.birth_date}
 """
-    keyboard = [
+
+    keyboard = []
+
+    # 1. Додаємо кнопку "Додати документи" (тип визначаємо динамічно)
+    payer_doc_type = "payer_passport" if payer.doc_type == "passport" else "payer_id"
+    keyboard.append([InlineKeyboardButton(
+        "📷 Додати документи", callback_data=f"add_docs:{payer_doc_type}:{payer.id}"
+    )])
+
+    # 2. Додаємо кнопки для всіх наявних PDF-документів пайовика
+    pdf_dir = f"files/{payer_doc_type}/{payer.id}"
+    if os.path.exists(pdf_dir):
+        for fname in os.listdir(pdf_dir):
+            if fname.lower().endswith(".pdf"):
+                keyboard.append([
+                    InlineKeyboardButton(f"📄 {fname}", callback_data=f"view_pdf:{payer_doc_type}:{payer.id}:{fname}")
+                ])
+
+    # 3. Стандартні кнопки
+    keyboard.extend([
         [InlineKeyboardButton("Редагувати", callback_data=f"edit_payer:{payer.id}")],
         [InlineKeyboardButton("Видалити", callback_data=f"delete_payer:{payer.id}")],
         [InlineKeyboardButton("Створити договір оренди", callback_data=f"create_contract:{payer.id}")],
         [InlineKeyboardButton("До меню", callback_data="to_menu")]
-    ]
-    await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)
+    ])
+
+    await query.message.edit_text(
+        text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML
+    )
     return ConversationHandler.END
 
 async def delete_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
