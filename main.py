@@ -16,8 +16,8 @@ from dialogs.payer import (
 )
 from dialogs.edit_payer import edit_payer_conv
 from dialogs.search import search_payer_conv
-from dialogs.field import add_field_conv, show_fields, delete_field
-from dialogs.land import add_land_conv, show_lands, delete_land
+from dialogs.field import add_field_conv, show_fields, delete_field, to_fields_list
+from dialogs.land import add_land_conv, show_lands, delete_land, to_lands_list
 
 from db import database
 
@@ -66,8 +66,14 @@ application.add_handler(add_field_conv)
 application.add_handler(MessageHandler(filters.Regex("^📋 Список полів$"), show_fields))
 application.add_handler(add_land_conv)
 application.add_handler(MessageHandler(filters.Regex("^📋 Список ділянок$"), show_lands))
+
+application.add_handler(CallbackQueryHandler(field_card, pattern=r"^field_card:"))
 application.add_handler(CallbackQueryHandler(delete_field, pattern=r"^delete_field:"))
+application.add_handler(CallbackQueryHandler(to_fields_list, pattern=r"^to_fields_list$"))
+
+application.add_handler(CallbackQueryHandler(land_card, pattern=r"^land_card:"))
 application.add_handler(CallbackQueryHandler(delete_land, pattern=r"^delete_land:"))
+application.add_handler(CallbackQueryHandler(to_lands_list, pattern=r"^to_lands_list$"))
 
 
 # CallbackQueryHandler-и — як є, доки не переведені на нову систему:
