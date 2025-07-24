@@ -319,6 +319,11 @@ async def show_payers(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup([[button]])
         )
 
+import os
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.constants import ParseMode
+# ...інші імпорти...
+
 async def payer_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     payer_id = int(query.data.split(":")[1])
@@ -344,22 +349,23 @@ ID: {payer.id}
 
     keyboard = []
 
-    # 1. Додаємо кнопку "Додати документи" (тип визначаємо динамічно)
+    # --- Додати документи ---
     payer_doc_type = "payer_passport" if payer.doc_type == "passport" else "payer_id"
     keyboard.append([InlineKeyboardButton(
         "📷 Додати документи", callback_data=f"add_docs:{payer_doc_type}:{payer.id}"
     )])
 
-    # 2. Додаємо кнопки для всіх наявних PDF-документів пайовика
-    pdf_dir = f"files/{payer_doc_type}/{payer.id}"
+    # --- Кнопки перегляду/видалення PDF ---
+    pdf_dir = f"files/payer/{payer.name.replace(' ', '_')}_{payer.id}"
     if os.path.exists(pdf_dir):
         for fname in os.listdir(pdf_dir):
             if fname.lower().endswith(".pdf"):
                 keyboard.append([
-                    InlineKeyboardButton(f"📄 {fname}", callback_data=f"view_pdf:{payer_doc_type}:{payer.id}:{fname}")
+                    InlineKeyboardButton(f"📄 {fname}", callback_data=f"view_pdf:{payer_doc_type}:{payer.id}:{fname}"),
+                    InlineKeyboardButton(f"🗑 Видалити {fname}", callback_data=f"delete_pdf:{payer_doc_type}:{payer.id}:{fname}")
                 ])
 
-    # 3. Стандартні кнопки
+    # --- Інші кнопки ---
     keyboard.extend([
         [InlineKeyboardButton("Редагувати", callback_data=f"edit_payer:{payer.id}")],
         [InlineKeyboardButton("Видалити", callback_data=f"delete_payer:{payer.id}")],
