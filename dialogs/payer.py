@@ -1,3 +1,5 @@
+import os
+
 from telegram import (
     Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
 )
@@ -318,11 +320,6 @@ async def show_payers(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"{p.id}. {p.name} (ІПН: {p.ipn})",
             reply_markup=InlineKeyboardMarkup([[button]])
         )
-
-import os
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.constants import ParseMode
-# ...інші імпорти...
 
 async def payer_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
