@@ -17,7 +17,7 @@ from dialogs.payer import (
 from dialogs.edit_payer import edit_payer_conv
 from dialogs.search import search_payer_conv
 from dialogs.field import add_field_conv, show_fields, delete_field, to_fields_list
-from dialogs.land import add_land_conv, show_lands, delete_land, to_lands_list
+from dialogs.land import add_land_conv, show_lands, land_card, delete_land, to_lands_list, edit_land
 
 from db import database
 
