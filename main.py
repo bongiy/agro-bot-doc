@@ -18,6 +18,8 @@ from dialogs.edit_payer import edit_payer_conv
 from dialogs.search import search_payer_conv
 from dialogs.field import add_field_conv, show_fields, delete_field, to_fields_list, field_card, edit_field
 from dialogs.land import add_land_conv, show_lands, land_card, delete_land, to_lands_list, edit_land
+from dialogs.edit_field import edit_field_conv
+from dialogs.edit_land import edit_land_conv
 
 from db import database
 
@@ -75,6 +77,8 @@ application.add_handler(CallbackQueryHandler(land_card, pattern=r"^land_card:"))
 application.add_handler(CallbackQueryHandler(delete_land, pattern=r"^delete_land:"))
 application.add_handler(CallbackQueryHandler(to_lands_list, pattern=r"^to_lands_list$"))
 
+application.add_handler(edit_field_conv)
+application.add_handler(edit_land_conv)
 
 # CallbackQueryHandler-и — як є, доки не переведені на нову систему:
 application.add_handler(CallbackQueryHandler(payer_card, pattern=r"^payer_card:"))
