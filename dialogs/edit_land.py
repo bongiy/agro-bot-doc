@@ -1,6 +1,6 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ConversationHandler, MessageHandler, CallbackQueryHandler, CommandHandler, filters, ContextTypes
-from db import database, Land_Plot, Field
+from db import database, LandPlot, Field
 
 EDIT_SELECT, EDIT_VALUE = range(2)
 
