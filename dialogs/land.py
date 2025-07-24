@@ -78,13 +78,23 @@ add_land_conv = ConversationHandler(
 )
 
 async def show_lands(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    import sqlalchemy
+    from db import Field  # переконайся, що імпортував Field!
     query = sqlalchemy.select(LandPlot)
     lands = await database.fetch_all(query)
     if not lands:
         await update.message.reply_text("Ділянки ще не створені.", reply_markup=lands_menu)
         return
+
+    # Отримаємо всі поля разом, щоб не робити запит для кожної ділянки
+    field_ids = {l['field_id'] for l in lands if l['field_id']}
+    fields_map = {}
+    if field_ids:
+        fields = await database.fetch_all(sqlalchemy.select(Field).where(Field.c.id.in_(field_ids)))
+        fields_map = {f['id']: f['name'] for f in fields}
+
     text = "\n".join([
-        f"{l['id']}. {l['cadaster']} — {l['area']:.4f} га, поле {l['field_id']}"
+        f"{l['id']}. {l['cadaster']} — {l['area']:.4f} га, поле: {fields_map.get(l['field_id'], '—')}"
         for l in lands
     ])
     await update.message.reply_text(f"Список ділянок:\n{text}", reply_markup=lands_menu)
