@@ -1,3 +1,4 @@
+import os
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove
 )
@@ -152,10 +153,7 @@ async def show_lands(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"{l['id']}. {l['cadaster']} — {l['area']:.4f} га, поле: {fname}",
             reply_markup=InlineKeyboardMarkup([[btn]])
         )
-
-import os
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
+# --- Картка ділянки ---
 async def land_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     land_id = int(query.data.split(":")[1])
@@ -186,27 +184,27 @@ async def land_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     buttons = []
 
-    # 1. Кнопка "Додати документи"
+    # --- Додати документи ---
+    cadaster = land['cadaster'].replace(':', '_')
     buttons.append([InlineKeyboardButton(
         "📷 Додати документи", callback_data=f"add_docs:land:{land['id']}"
     )])
 
-    # 2. Кнопки для перегляду всіх PDF-документів ділянки
-    pdf_dir = f"files/land/{land['id']}"
+    # --- Кнопки перегляду/видалення PDF ---
+    pdf_dir = f"files/land/{cadaster}"
     if os.path.exists(pdf_dir):
         for fname in os.listdir(pdf_dir):
             if fname.lower().endswith(".pdf"):
                 buttons.append([
-                    InlineKeyboardButton(f"📄 {fname}", callback_data=f"view_pdf:land:{land['id']}:{fname}")
+                    InlineKeyboardButton(f"📄 {fname}", callback_data=f"view_pdf:land:{land['id']}:{fname}"),
+                    InlineKeyboardButton(f"🗑 Видалити {fname}", callback_data=f"delete_pdf:land:{land['id']}:{fname}")
                 ])
 
-    # 3. Кнопки для власника
+    # --- Кнопки власника, інші кнопки ---
     if land['payer_id']:
         buttons.append([InlineKeyboardButton("✏️ Змінити власника", callback_data=f"edit_land_owner:{land['id']}")])
     else:
         buttons.append([InlineKeyboardButton("➕ Додати власника", callback_data=f"edit_land_owner:{land['id']}")])
-
-    # 4. Інші стандартні кнопки
     buttons.extend([
         [InlineKeyboardButton("✏️ Редагувати", callback_data=f"edit_land:{land['id']}")],
         [InlineKeyboardButton("🗑 Видалити", callback_data=f"delete_land:{land['id']}")],
