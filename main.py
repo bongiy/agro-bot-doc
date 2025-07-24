@@ -95,6 +95,7 @@ application.add_handler(edit_land_owner_conv)
 application.add_handler(add_docs_conv)
 application.add_handler(CallbackQueryHandler(send_pdf, pattern=r"^view_pdf:\w+:\d+:.+"))
 application.add_handler(CallbackQueryHandler(delete_pdf, pattern=r"^delete_pdf:\w+:\d+:.+"))
+application.add_handler(CallbackQueryHandler(delete_pdf_db, pattern=r"^delete_pdf_db:\d+$"))
 
 # CallbackQueryHandler-и — як є, доки не переведені на нову систему:
 application.add_handler(CallbackQueryHandler(payer_card, pattern=r"^payer_card:"))
