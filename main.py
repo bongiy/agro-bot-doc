@@ -61,11 +61,12 @@ application.add_handler(MessageHandler(filters.Regex("^📋 Список пай�
 application.add_handler(search_payer_conv)
 application.add_handler(edit_payer_conv)
 
-# --- ДІЛЯНКИ/ПОЛЯ (можна залишити, якщо сценарії вже є)
+# --- ДІЛЯНКИ/ПОЛЯ ---
 application.add_handler(add_field_conv)
-application.add_handler(CommandHandler("fields", show_fields))
+application.add_handler(MessageHandler(filters.Regex("^📋 Список полів$"), show_fields))
 application.add_handler(add_land_conv)
-application.add_handler(CommandHandler("lands", show_lands))
+application.add_handler(MessageHandler(filters.Regex("^📋 Список ділянок$"), show_lands))
+
 
 # CallbackQueryHandler-и — як є, доки не переведені на нову систему:
 application.add_handler(CallbackQueryHandler(payer_card, pattern=r"^payer_card:"))
