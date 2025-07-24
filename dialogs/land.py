@@ -1,4 +1,4 @@
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ConversationHandler, MessageHandler, filters, ContextTypes
 )
@@ -77,9 +77,10 @@ add_land_conv = ConversationHandler(
     fallbacks=[]
 )
 
+
 async def show_lands(update: Update, context: ContextTypes.DEFAULT_TYPE):
     import sqlalchemy
-    from db import Field  # переконайся, що імпортував Field!
+    from db import Field
     query = sqlalchemy.select(LandPlot)
     lands = await database.fetch_all(query)
     if not lands:
@@ -93,8 +94,18 @@ async def show_lands(update: Update, context: ContextTypes.DEFAULT_TYPE):
         fields = await database.fetch_all(sqlalchemy.select(Field).where(Field.c.id.in_(field_ids)))
         fields_map = {f['id']: f['name'] for f in fields}
 
-    text = "\n".join([
-        f"{l['id']}. {l['cadaster']} — {l['area']:.4f} га, поле: {fields_map.get(l['field_id'], '—')}"
-        for l in lands
-    ])
-    await update.message.reply_text(f"Список ділянок:\n{text}", reply_markup=lands_menu)
+    for l in lands:
+        fname = fields_map.get(l['field_id'], '—')
+        buttons = [
+            [InlineKeyboardButton("🗑 Видалити", callback_data=f"delete_land:{l['id']}")]
+        ]
+        await update.message.reply_text(
+            f"{l['id']}. {l['cadaster']} — {l['area']:.4f} га, поле: {fname}",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+async def delete_land(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    land_id = int(query.data.split(":")[1])
+    await database.execute(LandPlot.delete().where(LandPlot.c.id == land_id))
+    await query.answer("Ділянку видалено!")
+    await query.message.edit_text("Ділянку видалено.")
