@@ -153,7 +153,9 @@ async def show_lands(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup([[btn]])
         )
 
-# ==== КАРТКА ДІЛЯНКИ ====
+import os
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
 async def land_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     land_id = int(query.data.split(":")[1])
@@ -171,6 +173,7 @@ async def land_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not land:
         await query.answer("Ділянка не знайдена!")
         return
+
     text = (
         f"<b>Картка ділянки</b>\n"
         f"ID: {land['id']}\n"
@@ -180,16 +183,36 @@ async def land_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Поле: {field_name}\n"
         f"Власник: {payer_name}"
     )
-    buttons = [
+
+    buttons = []
+
+    # 1. Кнопка "Додати документи"
+    buttons.append([InlineKeyboardButton(
+        "📷 Додати документи", callback_data=f"add_docs:land:{land['id']}"
+    )])
+
+    # 2. Кнопки для перегляду всіх PDF-документів ділянки
+    pdf_dir = f"files/land/{land['id']}"
+    if os.path.exists(pdf_dir):
+        for fname in os.listdir(pdf_dir):
+            if fname.lower().endswith(".pdf"):
+                buttons.append([
+                    InlineKeyboardButton(f"📄 {fname}", callback_data=f"view_pdf:land:{land['id']}:{fname}")
+                ])
+
+    # 3. Кнопки для власника
+    if land['payer_id']:
+        buttons.append([InlineKeyboardButton("✏️ Змінити власника", callback_data=f"edit_land_owner:{land['id']}")])
+    else:
+        buttons.append([InlineKeyboardButton("➕ Додати власника", callback_data=f"edit_land_owner:{land['id']}")])
+
+    # 4. Інші стандартні кнопки
+    buttons.extend([
         [InlineKeyboardButton("✏️ Редагувати", callback_data=f"edit_land:{land['id']}")],
         [InlineKeyboardButton("🗑 Видалити", callback_data=f"delete_land:{land['id']}")],
         [InlineKeyboardButton("⬅️ До списку", callback_data="to_lands_list")]
-    ]
-    # Кнопка для додавання/зміни власника
-    if land['payer_id']:
-        buttons.insert(0, [InlineKeyboardButton("✏️ Змінити власника", callback_data=f"edit_land_owner:{land['id']}")])
-    else:
-        buttons.insert(0, [InlineKeyboardButton("➕ Додати власника", callback_data=f"edit_land_owner:{land['id']}")])
+    ])
+
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons), parse_mode="HTML")
 
 # ==== ВИДАЛЕННЯ ДІЛЯНКИ ====
