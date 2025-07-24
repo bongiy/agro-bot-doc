@@ -1,4 +1,6 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
+from telegram import (
+    Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
+)
 from telegram.ext import (
     ContextTypes, ConversationHandler, MessageHandler, filters
 )
@@ -46,14 +48,15 @@ add_field_conv = ConversationHandler(
 
 # ==== СПИСОК ПОЛІВ ====
 async def show_fields(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message if update.message else update.callback_query.message
     query = sqlalchemy.select(Field)
     fields = await database.fetch_all(query)
     if not fields:
-        await update.message.reply_text("Поля ще не створені.", reply_markup=fields_menu)
+        await msg.reply_text("Поля ще не створені.", reply_markup=fields_menu)
         return
     for f in fields:
         btn = InlineKeyboardButton("Картка", callback_data=f"field_card:{f['id']}")
-        await update.message.reply_text(
+        await msg.reply_text(
             f"{f['id']}. {f['name']} — {f['area_actual']:.4f} га",
             reply_markup=InlineKeyboardMarkup([[btn]])
         )
@@ -98,7 +101,7 @@ async def delete_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def to_fields_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_fields(update, context)
 
-# ==== РЕДАГУВАННЯ ПОЛЯ (ЗАГЛУШКА — допишемо окремо через FSM!) ====
+# ==== РЕДАГУВАННЯ ПОЛЯ (ЗАГЛУШКА — перенеси в edit_field.py) ====
 async def edit_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     field_id = int(query.data.split(":")[1])
