@@ -1,17 +1,18 @@
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
-    ConversationHandler, CommandHandler, MessageHandler, filters, ContextTypes
+    ConversationHandler, MessageHandler, filters, ContextTypes
 )
+from keyboards.menu import lands_menu
 from db import database, LandPlot, Field
 import sqlalchemy
 
 ASK_CADASTER, ASK_AREA, ASK_NGO, ASK_FIELD = range(4)
 
-async def start_add_land(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Введіть кадастровий номер ділянки (19 цифр):")
+async def add_land_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Введіть кадастровий номер ділянки (19 цифр):", reply_markup=ReplyKeyboardRemove())
     return ASK_CADASTER
 
-async def cadaster(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def land_cadaster(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cad = update.message.text.strip()
     if len(cad.replace(":", "")) != 19:
         await update.message.reply_text("Кадастровий номер має містити 19 цифр. Спробуйте ще раз:")
@@ -20,7 +21,7 @@ async def cadaster(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Введіть площу ділянки, га:")
     return ASK_AREA
 
-async def area(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def land_area(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         area = float(update.message.text.replace(",", "."))
     except ValueError:
@@ -30,7 +31,7 @@ async def area(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Введіть НГО (можна пропустити):")
     return ASK_NGO
 
-async def ngo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def land_ngo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         ngo = float(update.message.text.replace(",", "."))
     except ValueError:
@@ -40,7 +41,7 @@ async def ngo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = sqlalchemy.select(Field)
     fields = await database.fetch_all(query)
     if not fields:
-        await update.message.reply_text("Спочатку створіть хоча б одне поле командою /add_field!")
+        await update.message.reply_text("Спочатку створіть хоча б одне поле командою ➕ Додати поле!", reply_markup=lands_menu)
         return ConversationHandler.END
     kb = ReplyKeyboardMarkup(
         [[f"{f['id']}: {f['name']}"] for f in fields], resize_keyboard=True
@@ -54,7 +55,6 @@ async def choose_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not field_id:
         await update.message.reply_text("Оберіть поле зі списку (натисніть кнопку):")
         return ASK_FIELD
-    # Зберігаємо ділянку
     query = LandPlot.insert().values(
         cadaster=context.user_data["cadaster"],
         area=context.user_data["area"],
@@ -62,15 +62,16 @@ async def choose_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
         field_id=field_id
     )
     await database.execute(query)
-    await update.message.reply_text("Ділянка додана!", reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text("Ділянка додана!", reply_markup=lands_menu)
+    context.user_data.clear()
     return ConversationHandler.END
 
 add_land_conv = ConversationHandler(
-    entry_points=[CommandHandler("add_land", start_add_land)],
+    entry_points=[MessageHandler(filters.Regex("^➕ Додати ділянку$"), add_land_start)],
     states={
-        ASK_CADASTER: [MessageHandler(filters.TEXT & ~filters.COMMAND, cadaster)],
-        ASK_AREA: [MessageHandler(filters.TEXT & ~filters.COMMAND, area)],
-        ASK_NGO: [MessageHandler(filters.TEXT & ~filters.COMMAND, ngo)],
+        ASK_CADASTER: [MessageHandler(filters.TEXT & ~filters.COMMAND, land_cadaster)],
+        ASK_AREA: [MessageHandler(filters.TEXT & ~filters.COMMAND, land_area)],
+        ASK_NGO: [MessageHandler(filters.TEXT & ~filters.COMMAND, land_ngo)],
         ASK_FIELD: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_field)],
     },
     fallbacks=[]
@@ -80,10 +81,10 @@ async def show_lands(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = sqlalchemy.select(LandPlot)
     lands = await database.fetch_all(query)
     if not lands:
-        await update.message.reply_text("Ділянки ще не створені.")
+        await update.message.reply_text("Ділянки ще не створені.", reply_markup=lands_menu)
         return
     text = "\n".join([
         f"{l['id']}. {l['cadaster']} — {l['area']:.4f} га, поле {l['field_id']}"
         for l in lands
     ])
-    await update.message.reply_text(f"Список ділянок:\n{text}")
+    await update.message.reply_text(f"Список ділянок:\n{text}", reply_markup=lands_menu)
