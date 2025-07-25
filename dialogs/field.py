@@ -5,7 +5,7 @@ from telegram.ext import (
     ContextTypes, ConversationHandler, MessageHandler, filters
 )
 from keyboards.menu import fields_menu
-from db import database, Field
+from db import database, Field, UploadedDocs
 import sqlalchemy
 
 # --- Стани для FSM додавання ---
@@ -62,7 +62,11 @@ async def show_fields(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 # ==== КАРТКА ПОЛЯ ====
-async def field_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
+import sqlalchemy
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from db import database, Field, UploadedDocs
+
+async def field_card(update, context):
     query = update.callback_query
     field_id = int(query.data.split(":")[1])
     field = await database.fetch_one(sqlalchemy.select(Field).where(Field.c.id == field_id))
@@ -75,27 +79,48 @@ async def field_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Назва: {field['name']}\n"
         f"Площа фактична: {field['area_actual']:.4f} га"
     )
-    kb = [
+    kb = []
+
+    # Додати документи до поля (можна додати за потреби)
+    kb.append([InlineKeyboardButton(
+        "📷 Додати документи", callback_data=f"add_docs:field:{field['id']}"
+    )])
+
+    # Кнопки перегляду/видалення PDF для поля
+    docs = await database.fetch_all(
+        sqlalchemy.select(UploadedDocs)
+        .where((UploadedDocs.c.entity_type == "field") & (UploadedDocs.c.entity_id == field_id))
+    )
+    for doc in docs:
+        kb.append([
+            InlineKeyboardButton(f"📄 {doc['doc_type']}", url=doc['web_link']),
+            InlineKeyboardButton(f"🗑 Видалити", callback_data=f"delete_pdf_db:{doc['id']}")
+        ])
+
+    # Інші кнопки
+    kb.extend([
         [InlineKeyboardButton("✏️ Редагувати", callback_data=f"edit_field:{field['id']}")],
         [InlineKeyboardButton("🗑 Видалити", callback_data=f"delete_field:{field['id']}")],
         [InlineKeyboardButton("⬅️ До списку", callback_data="to_fields_list")]
-    ]
+    ])
+
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
 
 # ==== ВИДАЛЕННЯ ПОЛЯ ====
-async def delete_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def delete_pdf_db(update, context):
     query = update.callback_query
-    field_id = int(query.data.split(":")[1])
-    from db import LandPlot
-    linked = await database.fetch_one(
-        sqlalchemy.select(LandPlot).where(LandPlot.c.field_id == field_id)
-    )
-    if linked:
-        await query.answer("Не можна видалити поле — до нього прив'язані ділянки.", show_alert=True)
-        return
-    await database.execute(Field.delete().where(Field.c.id == field_id))
-    await query.answer("Поле видалено!")
-    await query.message.edit_text("Поле видалено.")
+    doc_id = int(query.data.split(":")[1])
+    from db import UploadedDocs
+    import sqlalchemy
+    row = await database.fetch_one(sqlalchemy.select(UploadedDocs).where(UploadedDocs.c.id == doc_id))
+    if row:
+        from drive_utils import delete_pdf_from_drive
+        delete_pdf_from_drive(row['gdrive_file_id'])
+        await database.execute(UploadedDocs.delete().where(UploadedDocs.c.id == doc_id))
+        await query.answer("Документ видалено!")
+        await query.message.edit_text("Документ видалено. Оновіть картку для перегляду змін.")
+    else:
+        await query.answer("Документ не знайдено!", show_alert=True)
 
 # ==== ПОВЕРНЕННЯ ДО СПИСКУ ====
 async def to_fields_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
