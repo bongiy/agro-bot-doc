@@ -107,6 +107,21 @@ async def field_card(update, context):
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
 
 # ==== ВИДАЛЕННЯ ПОЛЯ ====
+async def delete_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    field_id = int(query.data.split(":")[1])
+    from db import LandPlot
+    linked = await database.fetch_one(
+        sqlalchemy.select(LandPlot).where(LandPlot.c.field_id == field_id)
+    )
+    if linked:
+        await query.answer("Не можна видалити поле — до нього прив'язані ділянки.", show_alert=True)
+        return
+    await database.execute(Field.delete().where(Field.c.id == field_id))
+    await query.answer("Поле видалено!")
+    await query.message.edit_text("Поле видалено.")
+
+# ==== ВИДАЛЕННЯ ПОЛЯ ====
 async def delete_pdf_db(update, context):
     query = update.callback_query
     doc_id = int(query.data.split(":")[1])
