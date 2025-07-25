@@ -1,13 +1,14 @@
 import os
 from telegram import (
-    Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove
+    Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove, InputFile
 )
 from telegram.ext import (
     ContextTypes, ConversationHandler, MessageHandler, filters
 )
 from keyboards.menu import lands_menu
-from db import database, LandPlot, Field, Payer
+from db import database, LandPlot, Field, Payer, UploadedDocs
 import sqlalchemy
+from ftp_utils import download_file_ftp, delete_file_ftp
 
 # --- Стани для FSM додавання ділянки ---
 ASK_CADASTER, ASK_AREA, ASK_NGO, ASK_FIELD, ASK_PAYER = range(5)
@@ -77,7 +78,6 @@ async def choose_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def choose_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     if text == "Пропустити — додати власника пізніше":
-        # Створюємо ділянку без власника
         query = LandPlot.insert().values(
             cadaster=context.user_data["cadaster"],
             area=context.user_data["area"],
@@ -90,7 +90,6 @@ async def choose_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         return ConversationHandler.END
 
-    # Пошук пайовика (простий: вибір з перших N пайовиків)
     payers = await database.fetch_all(sqlalchemy.select(Payer).limit(20))
     if not payers:
         await update.message.reply_text("Спочатку додайте хоча б одного пайовика!", reply_markup=lands_menu)
@@ -101,7 +100,7 @@ async def choose_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     context.user_data["payers"] = {f"{p['id']}: {p['name']}": p["id"] for p in payers}
     await update.message.reply_text("Оберіть власника (пайовика) для ділянки:", reply_markup=kb)
-    return ASK_PAYER + 1  # Наступний стан
+    return ASK_PAYER + 1
 
 async def set_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     payer_id = context.user_data["payers"].get(update.message.text)
@@ -153,6 +152,7 @@ async def show_lands(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"{l['id']}. {l['cadaster']} — {l['area']:.4f} га, поле: {fname}",
             reply_markup=InlineKeyboardMarkup([[btn]])
         )
+
 # --- Картка ділянки ---
 async def land_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -183,23 +183,20 @@ async def land_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     buttons = []
-
     # --- Додати документи ---
-    cadaster = land['cadaster'].replace(':', '_')
     buttons.append([InlineKeyboardButton(
         "📷 Додати документи", callback_data=f"add_docs:land:{land['id']}"
     )])
-
     # --- Кнопки перегляду/видалення PDF ---
-    pdf_dir = f"files/land/{cadaster}"
-    if os.path.exists(pdf_dir):
-        for fname in os.listdir(pdf_dir):
-            if fname.lower().endswith(".pdf"):
-                buttons.append([
-                    InlineKeyboardButton(f"📄 {fname}", callback_data=f"view_pdf:land:{land['id']}:{fname}"),
-                    InlineKeyboardButton(f"🗑 Видалити {fname}", callback_data=f"delete_pdf:land:{land['id']}:{fname}")
-                ])
-
+    docs = await database.fetch_all(
+        sqlalchemy.select(UploadedDocs)
+        .where((UploadedDocs.c.entity_type == "land") & (UploadedDocs.c.entity_id == land_id))
+    )
+    for doc in docs:
+        buttons.append([
+            InlineKeyboardButton("⬇️ Завантажити PDF", callback_data=f"send_pdf:{doc['id']}"),
+            InlineKeyboardButton("🗑 Видалити", callback_data=f"delete_pdf_db:{doc['id']}")
+        ])
     # --- Кнопки власника, інші кнопки ---
     if land['payer_id']:
         buttons.append([InlineKeyboardButton("✏️ Змінити власника", callback_data=f"edit_land_owner:{land['id']}")])
@@ -220,6 +217,41 @@ async def delete_land(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await database.execute(LandPlot.delete().where(LandPlot.c.id == land_id))
     await query.answer("Ділянку видалено!")
     await query.message.edit_text("Ділянку видалено.")
+
+# ==== ВИДАЛЕННЯ PDF через FTP ====
+async def delete_pdf(update, context):
+    query = update.callback_query
+    doc_id = int(query.data.split(":")[1])
+    row = await database.fetch_one(sqlalchemy.select(UploadedDocs).where(UploadedDocs.c.id == doc_id))
+    if row:
+        try:
+            delete_file_ftp(row['remote_path'])
+        except Exception:
+            pass
+        await database.execute(UploadedDocs.delete().where(UploadedDocs.c.id == doc_id))
+        await query.answer("Документ видалено!")
+        await query.message.edit_text("Документ видалено. Оновіть картку для перегляду змін.")
+    else:
+        await query.answer("Документ не знайдено!", show_alert=True)
+
+# ==== СКАЧУВАННЯ PDF через FTP ====
+async def send_pdf(update, context):
+    query = update.callback_query
+    doc_id = int(query.data.split(":")[1])
+    row = await database.fetch_one(sqlalchemy.select(UploadedDocs).where(UploadedDocs.c.id == doc_id))
+    if row:
+        remote_path = row['remote_path']
+        filename = remote_path.split('/')[-1]
+        tmp_path = f"temp_docs/{filename}"
+        try:
+            os.makedirs("temp_docs", exist_ok=True)
+            download_file_ftp(remote_path, tmp_path)
+            await query.message.reply_document(document=InputFile(tmp_path), filename=filename)
+            os.remove(tmp_path)
+        except Exception as e:
+            await query.answer(f"Помилка при скачуванні файлу: {e}", show_alert=True)
+    else:
+        await query.answer("Документ не знайдено!", show_alert=True)
 
 # ==== ПОВЕРНЕННЯ ДО СПИСКУ ====
 async def to_lands_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
