@@ -1,11 +1,4 @@
 import os
-# Якщо GOOGLE_CREDS_JSON є в змінних оточення — створити credentials.json
-if "GOOGLE_CREDS_JSON" in os.environ:
-    # Перевіряємо чи файл вже існує (щоб не перезаписувати при кожному запуску)
-    if not os.path.isfile("credentials.json"):
-        with open("credentials.json", "w") as f:
-            f.write(os.environ["GOOGLE_CREDS_JSON"])
-
 from fastapi import FastAPI, Request
 from telegram import Update
 from telegram.ext import (
@@ -29,7 +22,7 @@ from dialogs.edit_field import edit_field_conv
 from dialogs.edit_land import edit_land_conv
 from dialogs.edit_land_owner import edit_land_owner_conv
 
-from dialogs.add_docs_fsm import add_docs_conv, send_pdf, delete_pdf
+from dialogs.add_docs_fsm import add_docs_conv, send_pdf, delete_pdf  # тільки FTP!
 
 from db import database
 
@@ -91,9 +84,9 @@ application.add_handler(edit_field_conv)
 application.add_handler(edit_land_conv)
 application.add_handler(edit_land_owner_conv)
 
-# --- PDF ---
+# --- PDF через FTP ---
 application.add_handler(add_docs_conv)
-application.add_handler(CallbackQueryHandler(send_pdf, pattern=r"^view_pdf:\w+:\d+:.+"))
+application.add_handler(CallbackQueryHandler(send_pdf, pattern=r"^send_pdf:\d+$"))
 application.add_handler(CallbackQueryHandler(delete_pdf, pattern=r"^delete_pdf_db:\d+$"))
 
 # CallbackQueryHandler-и — як є, доки не переведені на нову систему:
