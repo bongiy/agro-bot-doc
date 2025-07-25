@@ -353,14 +353,15 @@ ID: {payer.id}
     )])
 
     # --- Кнопки перегляду/видалення PDF ---
-    pdf_dir = f"files/payer/{payer.name.replace(' ', '_')}_{payer.id}"
-    if os.path.exists(pdf_dir):
-        for fname in os.listdir(pdf_dir):
-            if fname.lower().endswith(".pdf"):
-                keyboard.append([
-                    InlineKeyboardButton(f"📄 {fname}", callback_data=f"view_pdf:{payer_doc_type}:{payer.id}:{fname}"),
-                    InlineKeyboardButton(f"🗑 Видалити {fname}", callback_data=f"delete_pdf:{payer_doc_type}:{payer.id}:{fname}")
-                ])
+    docs = await database.fetch_all(
+        sqlalchemy.select(UploadedDocs)
+        .where((UploadedDocs.c.entity_type == payer_doc_type) & (UploadedDocs.c.entity_id == payer.id))
+    )
+    for doc in docs:
+        keyboard.append([
+            InlineKeyboardButton(f"📄 {doc['doc_type']}", url=doc['web_link']),
+            InlineKeyboardButton(f"🗑 Видалити", callback_data=f"delete_pdf_db:{doc['id']}")
+        ])
 
     # --- Інші кнопки ---
     keyboard.extend([
