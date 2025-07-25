@@ -29,7 +29,7 @@ from dialogs.edit_field import edit_field_conv
 from dialogs.edit_land import edit_land_conv
 from dialogs.edit_land_owner import edit_land_owner_conv
 
-from dialogs.add_docs_fsm import add_docs_conv, send_pdf, delete_pdf_db
+from dialogs.add_docs_fsm import add_docs_conv, send_pdf, delete_pdf
 
 from db import database
 
