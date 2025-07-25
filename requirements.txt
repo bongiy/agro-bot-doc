@@ -1,4 +1,4 @@
-﻿annotated-types==0.7.0
+annotated-types==0.7.0
 anyio==4.7.0
 certifi==2024.12.14
 click==8.1.7
@@ -42,9 +42,5 @@ wsproto==1.2.0
 sqlalchemy
 databases
 asyncpg
-google-api-python-client
-google-auth
-google-auth-httplib2
-google-auth-oauthlib
 Pillow
 fpdf
