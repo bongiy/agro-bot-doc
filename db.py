@@ -53,7 +53,7 @@ LandPlot = sqlalchemy.Table(
     sqlalchemy.Column("payer_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("payer.id"), nullable=True),  # <-- ДОДАЙ ЦЕ!
 )
 
-# === GOOGLE DRIVE ===
+# === FTP FILES ===
 UploadedDocs = sqlalchemy.Table(
     "uploaded_docs",
     metadata,
@@ -61,6 +61,5 @@ UploadedDocs = sqlalchemy.Table(
     sqlalchemy.Column("entity_type", sqlalchemy.String(32)),  # 'payer_passport', 'land', 'contract'
     sqlalchemy.Column("entity_id", sqlalchemy.Integer),
     sqlalchemy.Column("doc_type", sqlalchemy.String(64)),
-    sqlalchemy.Column("gdrive_file_id", sqlalchemy.String(128)),
-    sqlalchemy.Column("web_link", sqlalchemy.String(512)),
+    sqlalchemy.Column("remote_path", sqlalchemy.String(255)),
 )
