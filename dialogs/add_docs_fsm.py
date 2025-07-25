@@ -159,6 +159,20 @@ async def send_pdf(update, context):
     else:
         await query.answer("Документ не знайдено!", show_alert=True)
 
+async def delete_pdf(update, context):
+    query = update.callback_query
+    doc_id = int(query.data.split(":")[1])
+    from db import UploadedDocs
+    import sqlalchemy
+    row = await database.fetch_one(sqlalchemy.select(UploadedDocs).where(UploadedDocs.c.id == doc_id))
+    if row:
+        from drive_utils import delete_pdf_from_drive
+        delete_pdf_from_drive(row['gdrive_file_id'])
+        await database.execute(UploadedDocs.delete().where(UploadedDocs.c.id == doc_id))
+        await query.answer("Документ видалено!")
+        await query.message.edit_text("Документ видалено. Оновіть картку для перегляду змін.")
+    else:
+        await query.answer("Документ не знайдено!", show_alert=True)
 
 add_docs_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(start_add_docs, pattern=r"^add_docs:\w+:\d+$")],
