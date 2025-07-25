@@ -1,5 +1,5 @@
 from telegram import (
-    Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
+    Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove, InputFile
 )
 from telegram.ext import (
     ContextTypes, ConversationHandler, MessageHandler, filters
@@ -7,6 +7,7 @@ from telegram.ext import (
 from keyboards.menu import fields_menu
 from db import database, Field, UploadedDocs
 import sqlalchemy
+from ftp_utils import download_file_ftp, delete_file_ftp  # <-- додаємо FTP-утиліти
 
 # --- Стани для FSM додавання ---
 ASK_FIELD_NAME, ASK_FIELD_AREA = range(2)
@@ -62,10 +63,6 @@ async def show_fields(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 # ==== КАРТКА ПОЛЯ ====
-import sqlalchemy
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from db import database, Field, UploadedDocs
-
 async def field_card(update, context):
     query = update.callback_query
     field_id = int(query.data.split(":")[1])
@@ -81,7 +78,7 @@ async def field_card(update, context):
     )
     kb = []
 
-    # Додати документи до поля (можна додати за потреби)
+    # Додати документи до поля
     kb.append([InlineKeyboardButton(
         "📷 Додати документи", callback_data=f"add_docs:field:{field['id']}"
     )])
@@ -93,7 +90,7 @@ async def field_card(update, context):
     )
     for doc in docs:
         kb.append([
-            InlineKeyboardButton(f"📄 {doc['doc_type']}", url=doc['web_link']),
+            InlineKeyboardButton(f"⬇️ Завантажити PDF", callback_data=f"send_pdf:{doc['id']}"),
             InlineKeyboardButton(f"🗑 Видалити", callback_data=f"delete_pdf_db:{doc['id']}")
         ])
 
@@ -121,19 +118,38 @@ async def delete_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer("Поле видалено!")
     await query.message.edit_text("Поле видалено.")
 
-# ==== ВИДАЛЕННЯ ПОЛЯ ====
-async def delete_pdf_db(update, context):
+# ==== ВИДАЛЕННЯ PDF (через FTP) ====
+async def delete_pdf(update, context):
     query = update.callback_query
     doc_id = int(query.data.split(":")[1])
-    from db import UploadedDocs
-    import sqlalchemy
     row = await database.fetch_one(sqlalchemy.select(UploadedDocs).where(UploadedDocs.c.id == doc_id))
     if row:
-        from drive_utils import delete_pdf_from_drive
-        delete_pdf_from_drive(row['gdrive_file_id'])
+        try:
+            delete_file_ftp(row['remote_path'])
+        except Exception:
+            pass  # ігноруємо, якщо не знайдено на FTP
         await database.execute(UploadedDocs.delete().where(UploadedDocs.c.id == doc_id))
         await query.answer("Документ видалено!")
         await query.message.edit_text("Документ видалено. Оновіть картку для перегляду змін.")
+    else:
+        await query.answer("Документ не знайдено!", show_alert=True)
+
+# ==== СКАЧУВАННЯ PDF через FTP ====
+async def send_pdf(update, context):
+    query = update.callback_query
+    doc_id = int(query.data.split(":")[1])
+    row = await database.fetch_one(sqlalchemy.select(UploadedDocs).where(UploadedDocs.c.id == doc_id))
+    if row:
+        remote_path = row['remote_path']
+        filename = remote_path.split('/')[-1]
+        tmp_path = f"temp_docs/{filename}"
+        try:
+            os.makedirs("temp_docs", exist_ok=True)
+            download_file_ftp(remote_path, tmp_path)
+            await query.message.reply_document(document=InputFile(tmp_path), filename=filename)
+            os.remove(tmp_path)
+        except Exception as e:
+            await query.answer(f"Помилка при скачуванні файлу: {e}", show_alert=True)
     else:
         await query.answer("Документ не знайдено!", show_alert=True)
 
