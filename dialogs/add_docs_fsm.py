@@ -7,6 +7,7 @@ from PIL import Image
 from fpdf import FPDF
 from db import database, Payer, LandPlot, UploadedDocs
 from ftp_utils import upload_file_ftp, download_file_ftp, delete_file_ftp
+import sqlalchemy
 
 SELECT_DOC_TYPE, COLLECT_PHOTO = range(2)
 
