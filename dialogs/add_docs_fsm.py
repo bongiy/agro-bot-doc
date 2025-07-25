@@ -5,8 +5,8 @@ from telegram.ext import (
 )
 from PIL import Image
 from fpdf import FPDF
-from db import database, Payer, LandPlot, UploadedDocs  # додано UploadedDocs
-from drive_utils import upload_pdf_to_drive
+from db import database, Payer, LandPlot, UploadedDocs
+from ftp_utils import upload_file_ftp, download_file_ftp, delete_file_ftp
 
 SELECT_DOC_TYPE, COLLECT_PHOTO = range(2)
 
@@ -26,7 +26,7 @@ async def start_add_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["entity_type"] = entity_type
     context.user_data["entity_id"] = entity_id
 
-    # --- "людська" назва для Google Drive ---
+    # --- "людська" назва для папки/шляху ---
     if entity_type.startswith("payer"):
         payer = await database.fetch_one(Payer.select().where(Payer.c.id == int(entity_id)))
         if not payer:
@@ -44,7 +44,7 @@ async def start_add_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         folder_name = f"{entity_type}_{entity_id}"
 
-    context.user_data["gdrive_folder"] = folder_name
+    context.user_data["ftp_folder"] = folder_name
 
     doc_types = DOC_TYPES.get(entity_type, DOC_TYPES["land"])
     keyboard = [[InlineKeyboardButton(dt, callback_data=f"doc_type:{dt}")] for dt in doc_types]
@@ -77,7 +77,7 @@ async def collect_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    folder_name = context.user_data["gdrive_folder"]
+    folder_name = context.user_data["ftp_folder"]
     doc_type = context.user_data["current_doc_type"]
     photos = context.user_data.get("photos", [])
     entity_type = context.user_data["entity_type"]
@@ -112,19 +112,15 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.remove(image)
     pdf.output(pdf_path)
 
-    # --- Google Drive Upload ---
-    file_name = f"{doc_type}.pdf"
-    file_id, web_link = upload_pdf_to_drive(pdf_path, file_name)
-    await query.message.reply_text(
-        f"Документ «{doc_type}» додано на Google Drive.\n"
-        f"[Відкрити PDF]({web_link})",
-        parse_mode="Markdown"
-    )
+    # === Завантаження на FTP ===
+    remote_dir = f"{entity_type}s/{folder_name}/"
+    remote_file = f"{remote_dir}{doc_type}.pdf".replace(" ", "_").replace("/", "_")
+    upload_file_ftp(pdf_path, remote_file)
+
     os.remove(pdf_path)
 
-    # --- Зберігаємо file_id та web_link у БД ---
+    # Оновлюємо БД
     import sqlalchemy
-    # Видаляємо старий запис (doc_type для entity_type/entity_id унікальний)
     await database.execute(
         UploadedDocs.delete().where(
             (UploadedDocs.c.entity_type == entity_type) &
@@ -137,37 +133,45 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
             entity_type=entity_type,
             entity_id=entity_id,
             doc_type=doc_type,
-            gdrive_file_id=file_id,
-            web_link=web_link
+            remote_path=remote_file
         )
+    )
+
+    await query.message.reply_text(
+        f"Документ «{doc_type}» додано та збережено у системі."
     )
     return ConversationHandler.END
 
+# ==== ВІДПРАВКА PDF з FTP ====
 async def send_pdf(update, context):
-    # Дістаємо ID документа з callback_data і знаходимо файл у БД
     query = update.callback_query
     doc_id = int(query.data.split(":")[1])
-    from db import UploadedDocs
-    import sqlalchemy
     row = await database.fetch_one(sqlalchemy.select(UploadedDocs).where(UploadedDocs.c.id == doc_id))
     if row:
-        # Отримати web_link (Google Drive) — просто надсилай url, або згенеруй короткий лінк
-        await query.message.reply_text(
-            f"[Відкрити PDF]({row['web_link']})",
-            parse_mode="Markdown"
-        )
+        remote_path = row['remote_path']
+        filename = remote_path.split('/')[-1]
+        tmp_path = f"temp_docs/{filename}"
+        try:
+            os.makedirs("temp_docs", exist_ok=True)
+            download_file_ftp(remote_path, tmp_path)
+            from telegram import InputFile
+            await query.message.reply_document(document=InputFile(tmp_path), filename=filename)
+            os.remove(tmp_path)
+        except Exception as e:
+            await query.answer(f"Помилка при скачуванні файлу: {e}", show_alert=True)
     else:
         await query.answer("Документ не знайдено!", show_alert=True)
 
+# ==== ВИДАЛЕННЯ PDF з FTP ====
 async def delete_pdf(update, context):
     query = update.callback_query
     doc_id = int(query.data.split(":")[1])
-    from db import UploadedDocs
-    import sqlalchemy
     row = await database.fetch_one(sqlalchemy.select(UploadedDocs).where(UploadedDocs.c.id == doc_id))
     if row:
-        from drive_utils import delete_pdf_from_drive
-        delete_pdf_from_drive(row['gdrive_file_id'])
+        try:
+            delete_file_ftp(row['remote_path'])
+        except Exception:
+            pass
         await database.execute(UploadedDocs.delete().where(UploadedDocs.c.id == doc_id))
         await query.answer("Документ видалено!")
         await query.message.edit_text("Документ видалено. Оновіть картку для перегляду змін.")
