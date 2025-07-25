@@ -143,6 +143,23 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 
+async def send_pdf(update, context):
+    # Дістаємо ID документа з callback_data і знаходимо файл у БД
+    query = update.callback_query
+    doc_id = int(query.data.split(":")[1])
+    from db import UploadedDocs
+    import sqlalchemy
+    row = await database.fetch_one(sqlalchemy.select(UploadedDocs).where(UploadedDocs.c.id == doc_id))
+    if row:
+        # Отримати web_link (Google Drive) — просто надсилай url, або згенеруй короткий лінк
+        await query.message.reply_text(
+            f"[Відкрити PDF]({row['web_link']})",
+            parse_mode="Markdown"
+        )
+    else:
+        await query.answer("Документ не знайдено!", show_alert=True)
+
+
 add_docs_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(start_add_docs, pattern=r"^add_docs:\w+:\d+$")],
     states={
