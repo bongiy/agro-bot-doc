@@ -321,7 +321,7 @@ async def show_payers(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup([[button]])
         )
 
-async def payer_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def payer_card(update, context):
     query = update.callback_query
     payer_id = int(query.data.split(":")[1])
     select = Payer.select().where(Payer.c.id == payer_id)
@@ -346,13 +346,13 @@ ID: {payer.id}
 
     keyboard = []
 
-    # --- Додати документи ---
+    # Додаємо кнопку додати документи
     payer_doc_type = "payer_passport" if payer.doc_type == "passport" else "payer_id"
     keyboard.append([InlineKeyboardButton(
         "📷 Додати документи", callback_data=f"add_docs:{payer_doc_type}:{payer.id}"
     )])
 
-    # --- Кнопки перегляду/видалення PDF ---
+    # Кнопки перегляду/видалення PDF із БД
     docs = await database.fetch_all(
         sqlalchemy.select(UploadedDocs)
         .where((UploadedDocs.c.entity_type == payer_doc_type) & (UploadedDocs.c.entity_id == payer.id))
@@ -363,7 +363,7 @@ ID: {payer.id}
             InlineKeyboardButton(f"🗑 Видалити", callback_data=f"delete_pdf_db:{doc['id']}")
         ])
 
-    # --- Інші кнопки ---
+    # Інші кнопки
     keyboard.extend([
         [InlineKeyboardButton("Редагувати", callback_data=f"edit_payer:{payer.id}")],
         [InlineKeyboardButton("Видалити", callback_data=f"delete_payer:{payer.id}")],
@@ -375,6 +375,21 @@ ID: {payer.id}
         text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML
     )
     return ConversationHandler.END
+    
+async def delete_pdf_db(update, context):
+    query = update.callback_query
+    doc_id = int(query.data.split(":")[1])
+    from db import UploadedDocs
+    import sqlalchemy
+    row = await database.fetch_one(sqlalchemy.select(UploadedDocs).where(UploadedDocs.c.id == doc_id))
+    if row:
+        from drive_utils import delete_pdf_from_drive
+        delete_pdf_from_drive(row['gdrive_file_id'])
+        await database.execute(UploadedDocs.delete().where(UploadedDocs.c.id == doc_id))
+        await query.answer("Документ видалено!")
+        await query.message.edit_text("Документ видалено. Оновіть картку для перегляду змін.")
+    else:
+        await query.answer("Документ не знайдено!", show_alert=True)
 
 async def delete_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
