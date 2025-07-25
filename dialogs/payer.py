@@ -7,11 +7,11 @@ from telegram.ext import (
     ContextTypes, ConversationHandler, MessageHandler, CommandHandler, filters
 )
 from telegram.constants import ParseMode
-from db import database, Payer
+from db import database, Payer, UploadedDocs
 from keyboards.menu import payers_menu, main_menu
 
 import re
-
+import sqlalchemy
 (
     FIO, IPN, OBLAST, RAYON, SELO, VUL, BUD, KV,
     PHONE, DOC_TYPE,
