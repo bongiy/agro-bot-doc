@@ -11,6 +11,8 @@ from fpdf import FPDF
 from db import database, Payer, LandPlot, UploadedDocs
 from ftp_utils import upload_file_ftp, download_file_ftp, delete_file_ftp
 import sqlalchemy
+from PyPDF2 import PdfReader, PdfWriter
+
 
 SELECT_DOC_TYPE, COLLECT_PHOTO = range(2)
 
@@ -47,6 +49,18 @@ def to_latin(text, default="file"):
     name = re.sub(r'[^A-Za-z0-9]+', '_', name)
     name = name.strip('_')
     return name or default
+    
+def repack_pdf(input_path, output_path):
+    reader = PdfReader(input_path)
+    writer = PdfWriter()
+    for page in reader.pages:
+        writer.add_page(page)
+    writer.add_metadata({
+        '/Title': 'Документ',
+        '/Producer': 'AgroBot',
+    })
+    with open(output_path, "wb") as f:
+        writer.write(f)
 
 async def start_add_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -143,17 +157,15 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         remote_file = f"{remote_dir}/{doc_type_file}"
     elif entity_type == "field":
         field_id = str(entity_id)
-        # Якщо є назва поля — використай, інакше "field_..."
         field = await database.fetch_one(Field.select().where(Field.c.id == entity_id))
         field_name = field.name if field and hasattr(field, "name") and field.name else f"field_{field_id}"
-        folder_name = field_name  # назва поля кирилицею чи латиницею — як заведено в БД
+        folder_name = field_name
         doc_type_file = to_latin(f"{field_id}_{doc_type}_{int(time.time())}")
         if not doc_type_file.lower().endswith('.pdf'):
             doc_type_file += ".pdf"
         remote_dir = f"fields/{folder_name}"
         remote_file = f"{remote_dir}/{doc_type_file}"
     elif entity_type == "contract":
-        # Якщо є пайовик — папка по ПІБ, файл по ІПН
         payer = await database.fetch_one(Payer.select().where(Payer.c.id == payer_id))
         pib = payer.name if payer else f"payer_{entity_id}"
         ipn = str(payer.ipn) if payer and payer.ipn else str(entity_id)
@@ -194,6 +206,9 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         img.close()
         os.remove(image)
     pdf.output(pdf_path)
+
+    # === Repack через PyPDF2 для Telegram! ===
+    repack_pdf(pdf_path, pdf_path)
 
     # === Завантажуємо на FTP ===
     upload_file_ftp(pdf_path, remote_file)
