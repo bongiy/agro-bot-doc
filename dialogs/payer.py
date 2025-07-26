@@ -363,15 +363,17 @@ ID: {payer.id}
     )])
 
     # Кнопки перегляду/видалення PDF із БД
-    docs = await database.fetch_all(
-        sqlalchemy.select(UploadedDocs)
-        .where((UploadedDocs.c.entity_type == payer_doc_type) & (UploadedDocs.c.entity_id == payer.id))
-    )
-    for doc in docs:
-        keyboard.append([
-            InlineKeyboardButton("⬇️ Завантажити PDF", callback_data=f"send_pdf:{doc['id']}"),
-            InlineKeyboardButton("🗑 Видалити", callback_data=f"delete_pdf_db:{doc['id']}")
-        ])
+    # Додаємо кнопки перегляду/видалення PDF по назві документу
+docs = await database.fetch_all(
+    sqlalchemy.select(UploadedDocs)
+    .where((UploadedDocs.c.entity_type == payer_doc_type) & (UploadedDocs.c.entity_id == payer.id))
+)
+for doc in docs:
+    doc_type = doc['doc_type']
+    keyboard.append([
+        InlineKeyboardButton(f"⬇️ {doc_type}", callback_data=f"send_pdf:{doc['id']}"),
+        InlineKeyboardButton("🗑 Видалити", callback_data=f"delete_pdf_db:{doc['id']}")
+    ])
 
     keyboard.extend([
         [InlineKeyboardButton("Редагувати", callback_data=f"edit_payer:{payer.id}")],
