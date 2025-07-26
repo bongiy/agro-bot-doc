@@ -1,4 +1,6 @@
 import os
+import unicodedata
+import re
 
 from telegram import (
     Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, InputFile
@@ -53,7 +55,15 @@ def normalize_phone(text):
     if re.fullmatch(r"\+380\d{9}", text):
         return text
     return None
-
+def to_latin_filename(text, default="document.pdf"):
+    name = unicodedata.normalize('NFKD', str(text)).encode('ascii', 'ignore').decode('ascii')
+    name = name.replace(" ", "_")
+    name = re.sub(r'[^A-Za-z0-9_.-]', '', name)
+    if not name or name.startswith(".pdf") or name.lower() == ".pdf":
+        return default
+    if not name.lower().endswith('.pdf'):
+        name += ".pdf"
+    return name
 # ==== ДОДАВАННЯ ПАЙОВИКА ====
 async def back_or_cancel(update, context, step_back):
     text = update.message.text
@@ -398,7 +408,7 @@ async def send_pdf(update, context):
     row = await database.fetch_one(sqlalchemy.select(UploadedDocs).where(UploadedDocs.c.id == doc_id))
     if row:
         remote_path = row['remote_path']
-        filename = remote_path.split('/')[-1]
+        filename = to_latin_filename(remote_path.split('/')[-1])
         tmp_path = f"temp_docs/{filename}"
         try:
             os.makedirs("temp_docs", exist_ok=True)
