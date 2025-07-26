@@ -363,7 +363,7 @@ ID: {payer.id}
     )])
 
     # Додаємо кнопки перегляду/видалення PDF по назві документу
-     docs = await database.fetch_all(
+    docs = await database.fetch_all(
         sqlalchemy.select(UploadedDocs)
         .where((UploadedDocs.c.entity_type == payer_doc_type) & (UploadedDocs.c.entity_id == payer.id))
     )
