@@ -96,7 +96,7 @@ async def field_card(update, context):
     )])
 
 # Кнопки перегляду/видалення PDF для поля з назвою типу документа
-docs = await database.fetch_all(
+    docs = await database.fetch_all(
     sqlalchemy.select(UploadedDocs)
     .where((UploadedDocs.c.entity_type == "field") & (UploadedDocs.c.entity_id == field_id))
 )
