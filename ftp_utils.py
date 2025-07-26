@@ -1,7 +1,30 @@
 import os
 from ftplib import FTP, error_perm
 from os import getenv
+from io import BytesIO
 
+def download_file_ftp_to_memory(remote_file):
+    """
+    Скачує файл з FTP у пам'ять (RAM), повертає BytesIO-об'єкт і ім'я файла.
+    """
+    from os import getenv
+    from ftplib import FTP
+    import os
+
+    ftp = FTP(getenv('FTP_HOST'))
+    ftp.login(getenv('FTP_USER'), getenv('FTP_PASS'))
+
+    remote_dir = os.path.dirname(remote_file)
+    filename = os.path.basename(remote_file)
+    if remote_dir:
+        ftp.cwd(remote_dir)
+
+    bio = BytesIO()
+    ftp.retrbinary(f'RETR {filename}', bio.write)
+    ftp.quit()
+    bio.seek(0)
+    return bio, filename
+    
 def get_ftp():
     """Повертає з'єднання з FTP-сервером з ENV."""
     ftp = FTP(os.getenv('FTP_HOST'))
