@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import unicodedata
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import (
@@ -40,6 +41,12 @@ def to_latin_folder(text, default="doc_folder"):
     if not name:
         return default
     return name
+
+def to_latin(text, default="file"):
+    name = unicodedata.normalize('NFKD', str(text)).encode('ascii', 'ignore').decode('ascii')
+    name = re.sub(r'[^A-Za-z0-9]+', '_', name)
+    name = name.strip('_')
+    return name or default
 
 async def start_add_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -109,38 +116,47 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("Ви не надіслали жодного фото. Скасовано.")
         return ConversationHandler.END
 
-    # === Формування імені та шляху ===
+    # === Формування ПІБ для папки (КИРИЛИЦЯ), імʼя PDF — латиницею ===
     if entity_type.startswith("payer"):
         payer = await database.fetch_one(Payer.select().where(Payer.c.id == entity_id))
+        pib = payer.name if payer else f"payer_{entity_id}"  # кирилиця для папки
         ipn = str(payer.ipn) if payer and payer.ipn else str(entity_id)
-        folder_name = to_latin_folder(ipn)
-        doc_type_file = to_latin_filename(f"{ipn}_{doc_type}")
+        folder_name = pib  # Папка кирилицею
+        doc_type_file = to_latin(f"{ipn}_{doc_type}.pdf")
         remote_dir = f"payer_ids/{folder_name}"
         remote_file = f"{remote_dir}/{doc_type_file}"
     elif entity_type == "land":
         land = await database.fetch_one(LandPlot.select().where(LandPlot.c.id == entity_id))
         cad = land.cadaster.replace(':', '_') if land else str(entity_id)
-        folder_name = to_latin_folder(cad)
-        doc_type_file = to_latin_filename(f"{cad}_{doc_type}")
+        # Якщо ділянка має власника — ПІБ власника
+        if land and getattr(land, "payer_id", None):
+            payer = await database.fetch_one(Payer.select().where(Payer.c.id == land.payer_id))
+            pib = payer.name if payer else "landowner"
+        else:
+            pib = "landowner"
+        folder_name = pib  # Папка кирилицею
+        doc_type_file = to_latin(f"{cad}_{doc_type}.pdf")
         remote_dir = f"lands/{folder_name}"
         remote_file = f"{remote_dir}/{doc_type_file}"
     elif entity_type == "field":
         field_id = str(entity_id)
-        folder_name = to_latin_folder(f"field_{field_id}")
-        doc_type_file = to_latin_filename(f"field_{field_id}_{doc_type}_{int(time.time())}")
+        field = await database.fetch_one(Field.select().where(Field.c.id == entity_id))
+        field_name = field.name if field and hasattr(field, "name") and field.name else f"field_{field_id}"
+        folder_name = field_name  # Папка кирилицею (може бути і латиницею, якщо так заведено)
+        doc_type_file = to_latin(f"{field_id}_{doc_type}_{int(time.time())}.pdf")
         remote_dir = f"fields/{folder_name}"
         remote_file = f"{remote_dir}/{doc_type_file}"
     elif entity_type == "contract":
-        # Якщо є зв'язок із payer — використай IPN, інакше contract_id
-        # (Можна доробити додатково, якщо треба)
-        folder_name = to_latin_folder(str(entity_id))
-        doc_type_file = to_latin_filename(f"{entity_id}_{doc_type}")
+        payer = await database.fetch_one(Payer.select().where(Payer.c.id == payer_id))
+        pib = payer.name if payer else f"payer_{entity_id}"
+        ipn = str(payer.ipn) if payer and payer.ipn else str(entity_id)
+        folder_name = pib
+        doc_type_file = to_latin(f"{ipn}_{entity_id}_{doc_type}.pdf")
         remote_dir = f"contracts/{folder_name}"
         remote_file = f"{remote_dir}/{doc_type_file}"
     else:
-        # fallback
-        folder_name = to_latin_folder(f"{entity_type}_{entity_id}")
-        doc_type_file = to_latin_filename(f"{entity_type}_{entity_id}_{doc_type}")
+        folder_name = f"{entity_type}_{entity_id}"
+        doc_type_file = to_latin(f"{entity_type}_{entity_id}_{doc_type}.pdf")
         remote_dir = f"{entity_type}s/{folder_name}"
         remote_file = f"{remote_dir}/{doc_type_file}"
 
@@ -193,7 +209,6 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Документ «{doc_type}» додано та збережено у системі."
     )
     return ConversationHandler.END
-
 
 # ==== ВІДПРАВКА PDF з FTP ====
 async def send_pdf(update, context):
