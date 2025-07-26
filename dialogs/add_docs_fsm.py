@@ -114,8 +114,8 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pdf.output(pdf_path)
 
     # === Завантаження на FTP ===
-    remote_dir = f"{entity_type}s/{folder_name}/"
-    remote_file = f"{remote_dir}{doc_type}.pdf".replace(" ", "_").replace("/", "_")
+    remote_dir = f"{entity_type}s/{folder_name}"
+remote_file = f"{remote_dir}/{doc_type}.pdf".replace(" ", "_")
     upload_file_ftp(pdf_path, remote_file)
 
     os.remove(pdf_path)
