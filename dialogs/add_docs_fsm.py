@@ -1,5 +1,7 @@
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+import re
+import unicodedata
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import (
     ConversationHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 )
@@ -21,29 +23,48 @@ DOC_TYPES = {
     "contract": ["Скан договору", "Витяг про реєстрацію права оренди", "Додаткові угоди", "Заяви та звернення"],
 }
 
+def to_latin_filename(text, default="document.pdf"):
+    # Транслітерація у латиницю, заміна пробілів і видалення небезпечних символів
+    name = unicodedata.normalize('NFKD', str(text)).encode('ascii', 'ignore').decode('ascii')
+    name = name.replace(" ", "_")
+    name = re.sub(r'[^A-Za-z0-9_.-]', '', name)
+    if not name or name.startswith(".pdf") or name.lower() == ".pdf":
+        return default
+    if not name.lower().endswith('.pdf'):
+        name += ".pdf"
+    return name
+
+def to_latin_folder(text, default="doc_folder"):
+    name = unicodedata.normalize('NFKD', str(text)).encode('ascii', 'ignore').decode('ascii')
+    name = name.replace(" ", "_")
+    name = re.sub(r'[^A-Za-z0-9_.-]', '', name)
+    if not name:
+        return default
+    return name
+
 async def start_add_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     _, entity_type, entity_id = query.data.split(":")
     context.user_data["entity_type"] = entity_type
     context.user_data["entity_id"] = entity_id
 
-    # --- "людська" назва для папки/шляху ---
+    # --- "людська" назва для папки/шляху, одразу латиницею ---
     if entity_type.startswith("payer"):
         payer = await database.fetch_one(Payer.select().where(Payer.c.id == int(entity_id)))
         if not payer:
             await query.message.reply_text("Пайовик не знайдений.")
             return ConversationHandler.END
-        folder_name = f"{payer.name.replace(' ', '_')}_{payer.id}"
+        folder_name = to_latin_folder(f"{payer.name.replace(' ', '_')}_{payer.id}")
     elif entity_type == "land":
         land = await database.fetch_one(LandPlot.select().where(LandPlot.c.id == int(entity_id)))
         if not land:
             await query.message.reply_text("Ділянка не знайдена.")
             return ConversationHandler.END
-        folder_name = land.cadaster.replace(':', '_')
+        folder_name = to_latin_folder(land.cadaster.replace(':', '_'))
     elif entity_type == "contract":
-        folder_name = f"{entity_id}"
+        folder_name = to_latin_folder(f"{entity_id}")
     else:
-        folder_name = f"{entity_type}_{entity_id}"
+        folder_name = to_latin_folder(f"{entity_type}_{entity_id}")
 
     context.user_data["ftp_folder"] = folder_name
 
@@ -98,7 +119,8 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         image_files.append(file_path)
 
     # Створюємо PDF
-    pdf_path = f"temp_docs/{folder_name}_{doc_type}.pdf"
+    pdf_filename = to_latin_filename(f"{folder_name}_{doc_type}")
+    pdf_path = f"temp_docs/{pdf_filename}"
     pdf = FPDF()
     for image in image_files:
         img = Image.open(image)
@@ -113,15 +135,14 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.remove(image)
     pdf.output(pdf_path)
 
-    # === Завантаження на FTP ===
+    # === Завантаження на FTP (шлях лише латиницею!) ===
     remote_dir = f"{entity_type}s/{folder_name}"
-    remote_file = f"{remote_dir}/{doc_type}.pdf".replace(" ", "_")
+    doc_type_file = to_latin_filename(doc_type)
+    remote_file = f"{remote_dir}/{doc_type_file}"
     upload_file_ftp(pdf_path, remote_file)
-
     os.remove(pdf_path)
 
     # Оновлюємо БД
-    import sqlalchemy
     await database.execute(
         UploadedDocs.delete().where(
             (UploadedDocs.c.entity_type == entity_type) &
@@ -144,44 +165,25 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 # ==== ВІДПРАВКА PDF з FTP ====
-import os
-import unicodedata
-
-def slugify(value):
-    value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')
-    value = value.replace(" ", "_")
-    if not value or value.startswith(".pdf") or value == ".pdf":
-        value = "Document.pdf"
-    return value
-
 async def send_pdf(update, context):
     query = update.callback_query
     doc_id = int(query.data.split(":")[1])
-    import sqlalchemy
-    from telegram import InputFile
 
     row = await database.fetch_one(sqlalchemy.select(UploadedDocs).where(UploadedDocs.c.id == doc_id))
     if row:
         remote_path = row['remote_path']
-        filename = os.path.basename(remote_path)
-        filename = slugify(filename)
-        if not filename.lower().endswith('.pdf'):
-            filename += '.pdf'
-        # Дефолтне імʼя, якщо після всього імʼя некоректне
-        if filename == ".pdf" or filename == "_pdf" or len(filename) < 6:
-            filename = "Document.pdf"
+        filename = to_latin_filename(os.path.basename(remote_path))
         tmp_path = f"temp_docs/{filename}"
         try:
             os.makedirs("temp_docs", exist_ok=True)
             download_file_ftp(remote_path, tmp_path)
             print("Send:", tmp_path, filename)
-            await query.message.reply_document(document=InputFile(tmp_path, filename=filename))
+            await query.message.reply_document(document=InputFile(tmp_path), filename=filename)
             os.remove(tmp_path)
         except Exception as e:
             await query.answer(f"Помилка при скачуванні файлу: {e}", show_alert=True)
     else:
         await query.answer("Документ не знайдено!", show_alert=True)
-
 
 # ==== ВИДАЛЕННЯ PDF з FTP ====
 async def delete_pdf(update, context):
