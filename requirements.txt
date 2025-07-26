@@ -44,3 +44,4 @@ databases
 asyncpg
 Pillow
 fpdf
+PyPDF2
