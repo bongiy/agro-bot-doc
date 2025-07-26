@@ -9,10 +9,9 @@ from telegram.ext import (
 from PIL import Image
 from fpdf import FPDF
 from db import database, Payer, LandPlot, UploadedDocs
-from ftp_utils import upload_file_ftp, download_file_ftp, delete_file_ftp
+from ftp_utils import upload_file_ftp, delete_file_ftp, download_file_ftp_to_memory
 import sqlalchemy
 from PyPDF2 import PdfReader, PdfWriter
-
 
 SELECT_DOC_TYPE, COLLECT_PHOTO = range(2)
 
@@ -49,7 +48,7 @@ def to_latin(text, default="file"):
     name = re.sub(r'[^A-Za-z0-9]+', '_', name)
     name = name.strip('_')
     return name or default
-    
+
 def repack_pdf(input_path, output_path):
     reader = PdfReader(input_path)
     writer = PdfWriter()
@@ -116,8 +115,6 @@ async def collect_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_id = photo.file_id
     context.user_data.setdefault("photos", []).append(file_id)
     await update.message.reply_text("Фото отримано. Ще надсилайте або натисніть «Готово».")
-
-import time
 
 async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -206,11 +203,7 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         img.close()
         os.remove(image)
     pdf.output(pdf_path)
-
-    # === Repack через PyPDF2 для Telegram! ===
     repack_pdf(pdf_path, pdf_path)
-
-    # === Завантажуємо на FTP ===
     upload_file_ftp(pdf_path, remote_file)
     os.remove(pdf_path)
 
@@ -236,34 +229,19 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 
-# ==== ВІДПРАВКА PDF з FTP ====
+# ==== ВІДПРАВКА PDF з FTP у RAM ====
 async def send_pdf(update, context):
     query = update.callback_query
     doc_id = int(query.data.split(":")[1])
-
     row = await database.fetch_one(sqlalchemy.select(UploadedDocs).where(UploadedDocs.c.id == doc_id))
     if row:
         remote_path = row['remote_path']
-        filename = to_latin_filename(os.path.basename(remote_path))
-        tmp_path = f"temp_docs/{filename}"
-        try:
-            os.makedirs("temp_docs", exist_ok=True)
-            download_file_ftp(remote_path, tmp_path)
-
-            # print перших байтів для діагностики PDF
-            with open(tmp_path, 'rb') as f:
-                first_bytes = f.read(5)
-                print("First bytes:", first_bytes)
-
-            await query.message.reply_document(document=InputFile(tmp_path), filename=filename)
-            os.remove(tmp_path)
-        except Exception as e:
-            await query.answer(f"Помилка при скачуванні файлу: {e}", show_alert=True)
+        bio, filename = download_file_ftp_to_memory(remote_path)
+        await query.message.reply_document(document=InputFile(bio, filename=filename))
+        await query.answer("Документ відправлено у PDF!", show_alert=False)
     else:
         await query.answer("Документ не знайдено!", show_alert=True)
 
-
-    
 # ==== ВИДАЛЕННЯ PDF з FTP ====
 async def delete_pdf(update, context):
     query = update.callback_query
