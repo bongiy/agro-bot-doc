@@ -176,15 +176,19 @@ async def send_pdf(update, context):
         try:
             os.makedirs("temp_docs", exist_ok=True)
             download_file_ftp(remote_path, tmp_path)
+
+            # print перших байтів для діагностики PDF
             with open(tmp_path, 'rb') as f:
-    first_bytes = f.read(5)
-    print("First bytes:", first_bytes)
+                first_bytes = f.read(5)
+                print("First bytes:", first_bytes)
+
             await query.message.reply_document(document=InputFile(tmp_path), filename=filename)
             os.remove(tmp_path)
         except Exception as e:
             await query.answer(f"Помилка при скачуванні файлу: {e}", show_alert=True)
     else:
         await query.answer("Документ не знайдено!", show_alert=True)
+
 
     
 # ==== ВИДАЛЕННЯ PDF з FTP ====
