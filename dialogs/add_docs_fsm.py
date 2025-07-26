@@ -34,19 +34,25 @@ def to_latin_filename(text, default="document.pdf"):
         name += ".pdf"
     return name
 
-def to_latin_folder(text, default="doc_folder"):
+def to_latin_filename(text, default="document.pdf"):
+    import unicodedata, re
     name = unicodedata.normalize('NFKD', str(text)).encode('ascii', 'ignore').decode('ascii')
-    name = name.replace(" ", "_")
-    name = re.sub(r'[^A-Za-z0-9_.-]', '', name)
+    name = re.sub(r'[^A-Za-z0-9]+', '_', name)  # усе крім латиниці та цифр на _
+    name = name.strip('_')
+    if not name or name.lower() == ".pdf" or name.endswith("_.pdf"):
+        return default
+    if not name.lower().endswith('.pdf'):
+        name += ".pdf"
+    return name
+
+def to_latin_folder(text, default="doc_folder"):
+    import unicodedata, re
+    name = unicodedata.normalize('NFKD', str(text)).encode('ascii', 'ignore').decode('ascii')
+    name = re.sub(r'[^A-Za-z0-9]+', '_', name)
+    name = name.strip('_')
     if not name:
         return default
     return name
-
-async def start_add_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    _, entity_type, entity_id = query.data.split(":")
-    context.user_data["entity_type"] = entity_type
-    context.user_data["entity_id"] = entity_id
 
     # --- "людська" назва для папки/шляху, одразу латиницею ---
     if entity_type.startswith("payer"):
