@@ -147,22 +147,28 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def send_pdf(update, context):
     query = update.callback_query
     doc_id = int(query.data.split(":")[1])
+    import sqlalchemy  # якщо ще не імпортовано у цьому файлі
+    from telegram import InputFile
+
     row = await database.fetch_one(sqlalchemy.select(UploadedDocs).where(UploadedDocs.c.id == doc_id))
     if row:
         remote_path = row['remote_path']
-        filename = remote_path.split('/')[-1]
+        filename = os.path.basename(remote_path)
+        if not filename.lower().endswith('.pdf'):
+            filename += '.pdf'
+        # (Для тесту — залиш тільки латиницю, якщо треба)
+        # filename = filename.encode('ascii', 'ignore').decode('ascii').replace(" ", "_")
         tmp_path = f"temp_docs/{filename}"
         try:
             os.makedirs("temp_docs", exist_ok=True)
             download_file_ftp(remote_path, tmp_path)
-            from telegram import InputFile
+            print("Send:", tmp_path, filename)
             await query.message.reply_document(document=InputFile(tmp_path), filename=filename)
             os.remove(tmp_path)
         except Exception as e:
             await query.answer(f"Помилка при скачуванні файлу: {e}", show_alert=True)
     else:
         await query.answer("Документ не знайдено!", show_alert=True)
-
 # ==== ВИДАЛЕННЯ PDF з FTP ====
 async def delete_pdf(update, context):
     query = update.callback_query
