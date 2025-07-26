@@ -196,20 +196,22 @@ async def land_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     buttons = []
     # --- Додати документи ---
-    buttons.append([InlineKeyboardButton(
-        "📷 Додати документи", callback_data=f"add_docs:land:{land['id']}"
-    )])
+    buttons.append([
+        InlineKeyboardButton(
+            "📷 Додати документи", callback_data=f"add_docs:land:{land['id']}"
+        )
+    ])
     # --- Кнопки перегляду/видалення PDF ---
     docs = await database.fetch_all(
-    sqlalchemy.select(UploadedDocs)
-    .where((UploadedDocs.c.entity_type == "land") & (UploadedDocs.c.entity_id == land_id))
-)
-for doc in docs:
-    doc_type = doc['doc_type']
-    buttons.append([
-        InlineKeyboardButton(f"⬇️ {doc_type}", callback_data=f"send_pdf:{doc['id']}"),
-        InlineKeyboardButton("🗑 Видалити", callback_data=f"delete_pdf_db:{doc['id']}")
-    ])
+        sqlalchemy.select(UploadedDocs)
+        .where((UploadedDocs.c.entity_type == "land") & (UploadedDocs.c.entity_id == land_id))
+    )
+    for doc in docs:
+        doc_type = doc['doc_type']
+        buttons.append([
+            InlineKeyboardButton(f"⬇️ {doc_type}", callback_data=f"send_pdf:{doc['id']}"),
+            InlineKeyboardButton("🗑 Видалити", callback_data=f"delete_pdf_db:{doc['id']}")
+        ])
     # --- Кнопки власника, інші кнопки ---
     if land['payer_id']:
         buttons.append([InlineKeyboardButton("✏️ Змінити власника", callback_data=f"edit_land_owner:{land['id']}")])
@@ -222,6 +224,7 @@ for doc in docs:
     ])
 
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons), parse_mode="HTML")
+
 
 # ==== ВИДАЛЕННЯ ДІЛЯНКИ ====
 async def delete_land(update: Update, context: ContextTypes.DEFAULT_TYPE):
