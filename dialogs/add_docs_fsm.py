@@ -23,16 +23,6 @@ DOC_TYPES = {
     "contract": ["Скан договору", "Витяг про реєстрацію права оренди", "Додаткові угоди", "Заяви та звернення"],
 }
 
-def to_latin_filename(text, default="document.pdf"):
-    # Транслітерація у латиницю, заміна пробілів і видалення небезпечних символів
-    name = unicodedata.normalize('NFKD', str(text)).encode('ascii', 'ignore').decode('ascii')
-    name = name.replace(" ", "_")
-    name = re.sub(r'[^A-Za-z0-9_.-]', '', name)
-    if not name or name.startswith(".pdf") or name.lower() == ".pdf":
-        return default
-    if not name.lower().endswith('.pdf'):
-        name += ".pdf"
-    return name
 
 def to_latin_filename(text, default="document.pdf"):
     import unicodedata, re
