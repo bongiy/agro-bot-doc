@@ -9,9 +9,21 @@ from db import database, Field, UploadedDocs
 import sqlalchemy
 from ftp_utils import download_file_ftp, delete_file_ftp  # <-- додаємо FTP-утиліти
 
+import unicodedata
+import re
 # --- Стани для FSM додавання ---
 ASK_FIELD_NAME, ASK_FIELD_AREA = range(2)
 
+
+def to_latin_filename(text, default="document.pdf"):
+    name = unicodedata.normalize('NFKD', str(text)).encode('ascii', 'ignore').decode('ascii')
+    name = name.replace(" ", "_")
+    name = re.sub(r'[^A-Za-z0-9_.-]', '', name)
+    if not name or name.startswith(".pdf") or name.lower() == ".pdf":
+        return default
+    if not name.lower().endswith('.pdf'):
+        name += ".pdf"
+    return name
 # ==== ДОДАВАННЯ ПОЛЯ ====
 async def add_field_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Введіть назву поля:", reply_markup=ReplyKeyboardRemove())
@@ -141,7 +153,7 @@ async def send_pdf(update, context):
     row = await database.fetch_one(sqlalchemy.select(UploadedDocs).where(UploadedDocs.c.id == doc_id))
     if row:
         remote_path = row['remote_path']
-        filename = remote_path.split('/')[-1]
+        filename = to_latin_filename(remote_path.split('/')[-1])
         tmp_path = f"temp_docs/{filename}"
         try:
             os.makedirs("temp_docs", exist_ok=True)
