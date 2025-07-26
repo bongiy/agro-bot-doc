@@ -82,30 +82,33 @@ async def field_card(update, context):
     if not field:
         await query.answer("Поле не знайдено!")
         return
+
     text = (
         f"<b>Картка поля</b>\n"
         f"ID: {field['id']}\n"
         f"Назва: {field['name']}\n"
         f"Площа фактична: {field['area_actual']:.4f} га"
     )
+
     kb = []
-
     # Додати документи до поля
-    kb.append([InlineKeyboardButton(
-        "📷 Додати документи", callback_data=f"add_docs:field:{field['id']}"
-    )])
-
-# Кнопки перегляду/видалення PDF для поля з назвою типу документа
-    docs = await database.fetch_all(
-    sqlalchemy.select(UploadedDocs)
-    .where((UploadedDocs.c.entity_type == "field") & (UploadedDocs.c.entity_id == field_id))
-)
-for doc in docs:
-    doc_type = doc['doc_type']
     kb.append([
-        InlineKeyboardButton(f"⬇️ {doc_type}", callback_data=f"send_pdf:{doc['id']}"),
-        InlineKeyboardButton(f"🗑 Видалити", callback_data=f"delete_pdf_db:{doc['id']}")
+        InlineKeyboardButton(
+            "📷 Додати документи", callback_data=f"add_docs:field:{field['id']}"
+        )
     ])
+
+    # Кнопки перегляду/видалення PDF для поля з назвою типу документа
+    docs = await database.fetch_all(
+        sqlalchemy.select(UploadedDocs)
+        .where((UploadedDocs.c.entity_type == "field") & (UploadedDocs.c.entity_id == field_id))
+    )
+    for doc in docs:
+        doc_type = doc['doc_type']
+        kb.append([
+            InlineKeyboardButton(f"⬇️ {doc_type}", callback_data=f"send_pdf:{doc['id']}"),
+            InlineKeyboardButton(f"🗑 Видалити", callback_data=f"delete_pdf_db:{doc['id']}")
+        ])
 
     # Інші кнопки
     kb.extend([
