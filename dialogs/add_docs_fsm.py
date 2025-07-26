@@ -175,7 +175,7 @@ async def send_pdf(update, context):
             os.makedirs("temp_docs", exist_ok=True)
             download_file_ftp(remote_path, tmp_path)
             print("Send:", tmp_path, filename)
-            await query.message.reply_document(document=InputFile(tmp_path, filename=filename, mime_type="application/pdf"))
+            await query.message.reply_document(document=InputFile(tmp_path, filename=filename))
             os.remove(tmp_path)
         except Exception as e:
             await query.answer(f"Помилка при скачуванні файлу: {e}", show_alert=True)
