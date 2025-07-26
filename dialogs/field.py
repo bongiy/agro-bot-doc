@@ -100,7 +100,7 @@ async def field_card(update, context):
     sqlalchemy.select(UploadedDocs)
     .where((UploadedDocs.c.entity_type == "field") & (UploadedDocs.c.entity_id == field_id))
 )
-for doc in docs:
+    for doc in docs:
     doc_type = doc['doc_type']
     kb.append([
         InlineKeyboardButton(f"⬇️ {doc_type}", callback_data=f"send_pdf:{doc['id']}"),
