@@ -1,4 +1,6 @@
 import os
+import unicodedata
+import re
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove, InputFile
 )
@@ -12,6 +14,16 @@ from ftp_utils import download_file_ftp, delete_file_ftp
 
 # --- Стани для FSM додавання ділянки ---
 ASK_CADASTER, ASK_AREA, ASK_NGO, ASK_FIELD, ASK_PAYER = range(5)
+
+def to_latin_filename(text, default="document.pdf"):
+    name = unicodedata.normalize('NFKD', str(text)).encode('ascii', 'ignore').decode('ascii')
+    name = name.replace(" ", "_")
+    name = re.sub(r'[^A-Za-z0-9_.-]', '', name)
+    if not name or name.startswith(".pdf") or name.lower() == ".pdf":
+        return default
+    if not name.lower().endswith('.pdf'):
+        name += ".pdf"
+    return name
 
 # ==== ДОДАВАННЯ ДІЛЯНКИ ====
 async def add_land_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -241,7 +253,7 @@ async def send_pdf(update, context):
     row = await database.fetch_one(sqlalchemy.select(UploadedDocs).where(UploadedDocs.c.id == doc_id))
     if row:
         remote_path = row['remote_path']
-        filename = remote_path.split('/')[-1]
+        filename = to_latin_filename(remote_path.split('/')[-1])
         tmp_path = f"temp_docs/{filename}"
         try:
             os.makedirs("temp_docs", exist_ok=True)
