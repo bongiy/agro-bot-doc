@@ -2,14 +2,14 @@ import os
 from ftplib import FTP, error_perm
 
 def get_ftp():
-    """Отримує FTP-з'єднання з даними із змінних оточення."""
+    """Повертає з'єднання з FTP-сервером з ENV."""
     ftp = FTP(os.getenv('FTP_HOST'))
     ftp.login(os.getenv('FTP_USER'), os.getenv('FTP_PASS'))
     return ftp
 
 def ensure_dirs(ftp, remote_dir):
-    """Рекурсивно створює підпапки на FTP, якщо їх ще немає."""
-    if not remote_dir:
+    """Рекурсивно створює вкладені підпапки на FTP, якщо їх ще немає."""
+    if not remote_dir or remote_dir in (".", "/"):
         return
     dirs = remote_dir.strip("/").split("/")
     path = ""
@@ -18,20 +18,19 @@ def ensure_dirs(ftp, remote_dir):
         try:
             ftp.mkd(path)
         except error_perm as e:
-            if not str(e).startswith('550'):  # "Directory already exists" (550)
+            if not str(e).startswith('550'):  # "Directory already exists"
                 raise
     ftp.cwd("/")
 
 def upload_file_ftp(local_file, remote_file):
     """
-    Завантажує файл на FTP-сервер.
+    Завантажує файл на FTP-сервер (створює усі потрібні підпапки).
     local_file — шлях до локального файлу
-    remote_file — шлях на FTP (наприклад, 'payers/Ivan_Ivanov_1/passport.pdf')
+    remote_file — шлях на FTP, наприклад, 'lands/5624683300_01_002_0276/Державний_акт.pdf'
     """
     ftp = get_ftp()
     remote_dir = os.path.dirname(remote_file)
-    ensure_dirs(ftp, remote_dir)
-    # Переходимо у потрібну директорію
+    ensure_dirs(ftp, remote_dir)  # Створити всі вкладені теки
     if remote_dir:
         ftp.cwd(remote_dir)
     with open(local_file, 'rb') as f:
