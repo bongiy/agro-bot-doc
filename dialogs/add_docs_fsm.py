@@ -96,9 +96,10 @@ async def collect_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.setdefault("photos", []).append(file_id)
     await update.message.reply_text("Фото отримано. Ще надсилайте або натисніть «Готово».")
 
+import time
+
 async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    folder_name = context.user_data["ftp_folder"]
     doc_type = context.user_data["current_doc_type"]
     photos = context.user_data.get("photos", [])
     entity_type = context.user_data["entity_type"]
@@ -108,7 +109,42 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("Ви не надіслали жодного фото. Скасовано.")
         return ConversationHandler.END
 
-    # Тимчасово зберігаємо фото
+    # === Формування імені та шляху ===
+    if entity_type.startswith("payer"):
+        payer = await database.fetch_one(Payer.select().where(Payer.c.id == entity_id))
+        ipn = str(payer.ipn) if payer and payer.ipn else str(entity_id)
+        folder_name = to_latin_folder(ipn)
+        doc_type_file = to_latin_filename(f"{ipn}_{doc_type}")
+        remote_dir = f"payer_ids/{folder_name}"
+        remote_file = f"{remote_dir}/{doc_type_file}"
+    elif entity_type == "land":
+        land = await database.fetch_one(LandPlot.select().where(LandPlot.c.id == entity_id))
+        cad = land.cadaster.replace(':', '_') if land else str(entity_id)
+        folder_name = to_latin_folder(cad)
+        doc_type_file = to_latin_filename(f"{cad}_{doc_type}")
+        remote_dir = f"lands/{folder_name}"
+        remote_file = f"{remote_dir}/{doc_type_file}"
+    elif entity_type == "field":
+        field_id = str(entity_id)
+        folder_name = to_latin_folder(f"field_{field_id}")
+        doc_type_file = to_latin_filename(f"field_{field_id}_{doc_type}_{int(time.time())}")
+        remote_dir = f"fields/{folder_name}"
+        remote_file = f"{remote_dir}/{doc_type_file}"
+    elif entity_type == "contract":
+        # Якщо є зв'язок із payer — використай IPN, інакше contract_id
+        # (Можна доробити додатково, якщо треба)
+        folder_name = to_latin_folder(str(entity_id))
+        doc_type_file = to_latin_filename(f"{entity_id}_{doc_type}")
+        remote_dir = f"contracts/{folder_name}"
+        remote_file = f"{remote_dir}/{doc_type_file}"
+    else:
+        # fallback
+        folder_name = to_latin_folder(f"{entity_type}_{entity_id}")
+        doc_type_file = to_latin_filename(f"{entity_type}_{entity_id}_{doc_type}")
+        remote_dir = f"{entity_type}s/{folder_name}"
+        remote_file = f"{remote_dir}/{doc_type_file}"
+
+    # === Зберігаємо фото та формуємо PDF ===
     image_files = []
     os.makedirs("temp_docs", exist_ok=True)
     for i, file_id in enumerate(photos, 1):
@@ -117,9 +153,7 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await photo_file.download_to_drive(file_path)
         image_files.append(file_path)
 
-    # Створюємо PDF
-    pdf_filename = to_latin_filename(f"{folder_name}_{doc_type}")
-    pdf_path = f"temp_docs/{pdf_filename}"
+    pdf_path = f"temp_docs/{doc_type_file}"
     pdf = FPDF()
     for image in image_files:
         img = Image.open(image)
@@ -134,14 +168,11 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.remove(image)
     pdf.output(pdf_path)
 
-    # === Завантаження на FTP (шлях лише латиницею!) ===
-    remote_dir = f"{entity_type}s/{folder_name}"
-    doc_type_file = to_latin_filename(doc_type)
-    remote_file = f"{remote_dir}/{doc_type_file}"
+    # === Завантажуємо на FTP ===
     upload_file_ftp(pdf_path, remote_file)
     os.remove(pdf_path)
 
-    # Оновлюємо БД
+    # === Оновлюємо БД ===
     await database.execute(
         UploadedDocs.delete().where(
             (UploadedDocs.c.entity_type == entity_type) &
@@ -162,6 +193,7 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Документ «{doc_type}» додано та збережено у системі."
     )
     return ConversationHandler.END
+
 
 # ==== ВІДПРАВКА PDF з FTP ====
 async def send_pdf(update, context):
