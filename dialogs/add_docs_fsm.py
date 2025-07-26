@@ -182,7 +182,10 @@ async def send_pdf(update, context):
             await query.answer(f"Помилка при скачуванні файлу: {e}", show_alert=True)
     else:
         await query.answer("Документ не знайдено!", show_alert=True)
-
+with open(tmp_path, 'rb') as f:
+    first_bytes = f.read(5)
+    print("First bytes:", first_bytes)
+    
 # ==== ВИДАЛЕННЯ PDF з FTP ====
 async def delete_pdf(update, context):
     query = update.callback_query
