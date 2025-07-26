@@ -1,5 +1,6 @@
 import os
 from ftplib import FTP, error_perm
+from os import getenv
 
 def get_ftp():
     """Повертає з'єднання з FTP-сервером з ENV."""
@@ -36,18 +37,24 @@ def upload_file_ftp(local_file, remote_file):
 
 
 def download_file_ftp(remote_file, local_file):
-    """
-    Завантажує файл з FTP-сервера у локальний файл.
-    remote_file — шлях на FTP
-    local_file — шлях локального файлу
-    """
-    ftp = get_ftp()
+    from os import getenv
+    from ftplib import FTP, error_perm
+    import os
+
+    ftp = FTP(getenv('FTP_HOST'))
+    ftp.login(getenv('FTP_USER'), getenv('FTP_PASS'))
+
     remote_dir = os.path.dirname(remote_file)
     if remote_dir:
+        print("CWD to:", remote_dir)
         ftp.cwd(remote_dir)
+        print("PWD:", ftp.pwd())
+    print("Trying to download:", os.path.basename(remote_file), "to", local_file)
     with open(local_file, 'wb') as f:
         ftp.retrbinary(f'RETR {os.path.basename(remote_file)}', f.write)
     ftp.quit()
+    print("Download finished, file size:", os.path.getsize(local_file))
+
 
 def delete_file_ftp(remote_file):
     """
