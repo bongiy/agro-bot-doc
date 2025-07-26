@@ -8,34 +8,32 @@ def get_ftp():
     return ftp
 
 def ensure_dirs(ftp, remote_dir):
-    """Рекурсивно створює вкладені підпапки на FTP, якщо їх ще немає."""
+    """Рекурсивно створює вкладені підпапки на FTP, якщо їх ще немає, і входить у них по черзі."""
     if not remote_dir or remote_dir in (".", "/"):
         return
     dirs = remote_dir.strip("/").split("/")
-    path = ""
     for d in dirs:
-        path = f"{path}/{d}" if path else d
         try:
-            ftp.mkd(path)
+            ftp.mkd(d)
         except error_perm as e:
-            if not str(e).startswith('550'):  # "Directory already exists"
+            if not str(e).startswith('550'):
                 raise
-    ftp.cwd("/")
+        ftp.cwd(d)  # обов'язково заходити в кожну папку по черзі!
+    # Після створення і переходу залишаємося у фінальній теці
 
 def upload_file_ftp(local_file, remote_file):
-    """
-    Завантажує файл на FTP-сервер (створює усі потрібні підпапки).
-    local_file — шлях до локального файлу
-    remote_file — шлях на FTP, наприклад, 'lands/5624683300_01_002_0276/Державний_акт.pdf'
-    """
-    ftp = get_ftp()
+    from os import getenv
+    ftp = FTP(getenv('FTP_HOST'))
+    ftp.login(getenv('FTP_USER'), getenv('FTP_PASS'))
     remote_dir = os.path.dirname(remote_file)
-    ensure_dirs(ftp, remote_dir)  # Створити всі вкладені теки
+    current_dir = ftp.pwd()
     if remote_dir:
-        ftp.cwd(remote_dir)
+        ensure_dirs(ftp, remote_dir)
     with open(local_file, 'rb') as f:
-        ftp.storbinary(f'STOR {os.path.basename(remote_file)}', f)
+        ftp.storbinary(f'STOR ' + os.path.basename(remote_file), f)
+    ftp.cwd(current_dir)  # повертаємося назад у корінь
     ftp.quit()
+
 
 def download_file_ftp(remote_file, local_file):
     """
