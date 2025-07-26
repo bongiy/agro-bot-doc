@@ -150,6 +150,8 @@ import unicodedata
 def slugify(value):
     value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')
     value = value.replace(" ", "_")
+    if not value or value.startswith(".pdf") or value == ".pdf":
+        value = "Document.pdf"
     return value
 
 async def send_pdf(update, context):
@@ -165,6 +167,9 @@ async def send_pdf(update, context):
         filename = slugify(filename)
         if not filename.lower().endswith('.pdf'):
             filename += '.pdf'
+        # Дефолтне імʼя, якщо після всього імʼя некоректне
+        if filename == ".pdf" or filename == "_pdf" or len(filename) < 6:
+            filename = "Document.pdf"
         tmp_path = f"temp_docs/{filename}"
         try:
             os.makedirs("temp_docs", exist_ok=True)
@@ -176,6 +181,7 @@ async def send_pdf(update, context):
             await query.answer(f"Помилка при скачуванні файлу: {e}", show_alert=True)
     else:
         await query.answer("Документ не знайдено!", show_alert=True)
+
 
 # ==== ВИДАЛЕННЯ PDF з FTP ====
 async def delete_pdf(update, context):
