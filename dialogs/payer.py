@@ -360,7 +360,7 @@ ID: {payer.id}
     payer_doc_type = "payer_passport" if payer.doc_type == "passport" else "payer_id"
     keyboard.append([InlineKeyboardButton(
         "📷 Додати документи", callback_data=f"add_docs:{payer_doc_type}:{payer.id}"
-    )])
+    ])
 
     # Додаємо кнопки перегляду/видалення PDF по назві документу
     docs = await database.fetch_all(
