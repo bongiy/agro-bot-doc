@@ -332,7 +332,7 @@ async def show_payers(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup([[button]])
         )
 
-async def payer_card(update, context):
+async def payer_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     payer_id = int(query.data.split(":")[1])
     select = Payer.select().where(Payer.c.id == payer_id)
@@ -360,10 +360,10 @@ ID: {payer.id}
     payer_doc_type = "payer_passport" if payer.doc_type == "passport" else "payer_id"
     keyboard.append([InlineKeyboardButton(
         "📷 Додати документи", callback_data=f"add_docs:{payer_doc_type}:{payer.id}"
-    ])
+    )])
 
     # Додаємо кнопки перегляду/видалення PDF по назві документу
-    docs = await database.fetch_all(
+     docs = await database.fetch_all(
         sqlalchemy.select(UploadedDocs)
         .where((UploadedDocs.c.entity_type == payer_doc_type) & (UploadedDocs.c.entity_id == payer.id))
     )
@@ -373,7 +373,7 @@ ID: {payer.id}
         keyboard.append([
             InlineKeyboardButton(f"⬇️ {doc_type}", callback_data=f"send_pdf:{doc['id']}"),
             InlineKeyboardButton("🗑 Видалити", callback_data=f"delete_pdf_db:{doc['id']}")
-
+        ])
     keyboard.extend([
         [InlineKeyboardButton("Редагувати", callback_data=f"edit_payer:{payer.id}")],
         [InlineKeyboardButton("Видалити", callback_data=f"delete_payer:{payer.id}")],
