@@ -116,47 +116,58 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("Ви не надіслали жодного фото. Скасовано.")
         return ConversationHandler.END
 
-    # === Формування ПІБ для папки (КИРИЛИЦЯ), імʼя PDF — латиницею ===
+    # === Формування папки (КИРИЛИЦЯ) та імені файлу (ЛАТИНИЦЯ) ===
     if entity_type.startswith("payer"):
         payer = await database.fetch_one(Payer.select().where(Payer.c.id == entity_id))
-        pib = payer.name if payer else f"payer_{entity_id}"  # кирилиця для папки
+        pib = payer.name if payer else f"payer_{entity_id}"  # кирилиця
         ipn = str(payer.ipn) if payer and payer.ipn else str(entity_id)
-        folder_name = pib  # Папка кирилицею
-        doc_type_file = to_latin(f"{ipn}_{doc_type}.pdf")
+        folder_name = pib
+        doc_type_file = to_latin(f"{ipn}_{doc_type}")
+        if not doc_type_file.lower().endswith('.pdf'):
+            doc_type_file += ".pdf"
         remote_dir = f"payer_ids/{folder_name}"
         remote_file = f"{remote_dir}/{doc_type_file}"
     elif entity_type == "land":
         land = await database.fetch_one(LandPlot.select().where(LandPlot.c.id == entity_id))
         cad = land.cadaster.replace(':', '_') if land else str(entity_id)
-        # Якщо ділянка має власника — ПІБ власника
         if land and getattr(land, "payer_id", None):
             payer = await database.fetch_one(Payer.select().where(Payer.c.id == land.payer_id))
             pib = payer.name if payer else "landowner"
         else:
             pib = "landowner"
-        folder_name = pib  # Папка кирилицею
-        doc_type_file = to_latin(f"{cad}_{doc_type}.pdf")
+        folder_name = pib
+        doc_type_file = to_latin(f"{cad}_{doc_type}")
+        if not doc_type_file.lower().endswith('.pdf'):
+            doc_type_file += ".pdf"
         remote_dir = f"lands/{folder_name}"
         remote_file = f"{remote_dir}/{doc_type_file}"
     elif entity_type == "field":
         field_id = str(entity_id)
+        # Якщо є назва поля — використай, інакше "field_..."
         field = await database.fetch_one(Field.select().where(Field.c.id == entity_id))
         field_name = field.name if field and hasattr(field, "name") and field.name else f"field_{field_id}"
-        folder_name = field_name  # Папка кирилицею (може бути і латиницею, якщо так заведено)
-        doc_type_file = to_latin(f"{field_id}_{doc_type}_{int(time.time())}.pdf")
+        folder_name = field_name  # назва поля кирилицею чи латиницею — як заведено в БД
+        doc_type_file = to_latin(f"{field_id}_{doc_type}_{int(time.time())}")
+        if not doc_type_file.lower().endswith('.pdf'):
+            doc_type_file += ".pdf"
         remote_dir = f"fields/{folder_name}"
         remote_file = f"{remote_dir}/{doc_type_file}"
     elif entity_type == "contract":
+        # Якщо є пайовик — папка по ПІБ, файл по ІПН
         payer = await database.fetch_one(Payer.select().where(Payer.c.id == payer_id))
         pib = payer.name if payer else f"payer_{entity_id}"
         ipn = str(payer.ipn) if payer and payer.ipn else str(entity_id)
         folder_name = pib
-        doc_type_file = to_latin(f"{ipn}_{entity_id}_{doc_type}.pdf")
+        doc_type_file = to_latin(f"{ipn}_{entity_id}_{doc_type}")
+        if not doc_type_file.lower().endswith('.pdf'):
+            doc_type_file += ".pdf"
         remote_dir = f"contracts/{folder_name}"
         remote_file = f"{remote_dir}/{doc_type_file}"
     else:
         folder_name = f"{entity_type}_{entity_id}"
-        doc_type_file = to_latin(f"{entity_type}_{entity_id}_{doc_type}.pdf")
+        doc_type_file = to_latin(f"{entity_type}_{entity_id}_{doc_type}")
+        if not doc_type_file.lower().endswith('.pdf'):
+            doc_type_file += ".pdf"
         remote_dir = f"{entity_type}s/{folder_name}"
         remote_file = f"{remote_dir}/{doc_type_file}"
 
