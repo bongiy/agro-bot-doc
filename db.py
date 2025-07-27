@@ -1,6 +1,7 @@
 import sqlalchemy
 from databases import Database
 import os
+from datetime import datetime
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 database = Database(DATABASE_URL)
@@ -101,4 +102,61 @@ async def update_company(company_id: int, data: dict):
 
 async def delete_company(company_id: int):
     query = Company.delete().where(Company.c.id == company_id)
+    await database.execute(query)
+
+# === Таблиця користувачів ===
+User = sqlalchemy.Table(
+    "user",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("telegram_id", sqlalchemy.BigInteger, unique=True),
+    sqlalchemy.Column("username", sqlalchemy.String(255)),
+    sqlalchemy.Column("role", sqlalchemy.String(10), default="user"),
+    sqlalchemy.Column("is_active", sqlalchemy.Boolean, default=True),
+    sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
+)
+
+# === Таблиця логів адміністрування ===
+AdminAction = sqlalchemy.Table(
+    "admin_action",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("admin_id", sqlalchemy.BigInteger),
+    sqlalchemy.Column("action", sqlalchemy.String(255)),
+    sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
+)
+
+async def add_user(tg_id: int, username: str | None = None, role: str = "user"):
+    query = User.insert().values(
+        telegram_id=tg_id,
+        username=username,
+        role=role,
+        is_active=True,
+        created_at=datetime.utcnow(),
+    )
+    return await database.execute(query)
+
+async def get_user_by_tg_id(tg_id: int):
+    query = User.select().where(User.c.telegram_id == tg_id)
+    return await database.fetch_one(query)
+
+async def get_users(role: str | None = None, is_active: bool | None = None):
+    query = User.select()
+    if role:
+        query = query.where(User.c.role == role)
+    if is_active is not None:
+        query = query.where(User.c.is_active == is_active)
+    query = query.order_by(User.c.id)
+    return await database.fetch_all(query)
+
+async def update_user(tg_id: int, data: dict):
+    query = User.update().where(User.c.telegram_id == tg_id).values(**data)
+    await database.execute(query)
+
+async def log_admin_action(admin_id: int, action: str):
+    query = AdminAction.insert().values(
+        admin_id=admin_id,
+        action=action,
+        created_at=datetime.utcnow(),
+    )
     await database.execute(query)
