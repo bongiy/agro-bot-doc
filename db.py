@@ -55,6 +55,41 @@ LandPlot = sqlalchemy.Table(
     sqlalchemy.Column("payer_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("payer.id"), nullable=True),  # <-- ДОДАЙ ЦЕ!
 )
 
+# === Таблиця власників ділянок ===
+LandPlotOwner = sqlalchemy.Table(
+    "land_plot_owner",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("land_plot_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("land_plot.id")),
+    sqlalchemy.Column("payer_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("payer.id")),
+    sqlalchemy.Column("share", sqlalchemy.Float),
+)
+
+# === Таблиця договорів оренди ===
+Contract = sqlalchemy.Table(
+    "contract",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("company_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("company.id")),
+    sqlalchemy.Column("number", sqlalchemy.String(32)),
+    sqlalchemy.Column("date_signed", sqlalchemy.DateTime),
+    sqlalchemy.Column("date_valid_from", sqlalchemy.DateTime),
+    sqlalchemy.Column("date_valid_to", sqlalchemy.DateTime),
+    sqlalchemy.Column("duration_years", sqlalchemy.Integer),
+    sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
+    sqlalchemy.Column("updated_at", sqlalchemy.DateTime, onupdate=datetime.utcnow),
+    sqlalchemy.UniqueConstraint("company_id", "number", name="uq_contract_number"),
+)
+
+# === Звʼязок контракт-ділянка (M2M) ===
+ContractLandPlot = sqlalchemy.Table(
+    "contract_land_plot",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("contract_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("contract.id")),
+    sqlalchemy.Column("land_plot_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("land_plot.id")),
+)
+
 # === FTP FILES ===
 UploadedDocs = sqlalchemy.Table(
     "uploaded_docs",

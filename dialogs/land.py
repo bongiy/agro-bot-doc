@@ -8,13 +8,13 @@ from telegram.ext import (
     ContextTypes, ConversationHandler, MessageHandler, filters
 )
 from keyboards.menu import lands_menu
-from db import database, LandPlot, Field, Payer, UploadedDocs
+from db import database, LandPlot, Field, Payer, UploadedDocs, LandPlotOwner
 from dialogs.post_creation import prompt_add_docs
 import sqlalchemy
 from ftp_utils import download_file_ftp, delete_file_ftp
 
 # --- Стани для FSM додавання ділянки ---
-ASK_CADASTER, ASK_AREA, ASK_NGO, ASK_FIELD, ASK_PAYER = range(5)
+ASK_CADASTER, ASK_AREA, ASK_NGO, ASK_FIELD, ASK_OWNER_COUNT, ASK_OWNER = range(6)
 
 def to_latin_filename(text, default="document.pdf"):
     name = unicodedata.normalize('NFKD', str(text)).encode('ascii', 'ignore').decode('ascii')
@@ -75,67 +75,61 @@ async def choose_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Оберіть поле зі списку (натисніть кнопку):")
         return ASK_FIELD
 
-    # Далі — запитати, чи додавати власника одразу, чи згодом
-    kb = ReplyKeyboardMarkup(
-        [["🔍 Обрати власника зараз"], ["Пропустити — додати власника пізніше"]],
-        resize_keyboard=True
-    )
     context.user_data["field_id"] = field_id
-    await update.message.reply_text(
-        "Бажаєте одразу обрати власника (пайовика) для ділянки?\n"
-        "Можна додати власника згодом у картці ділянки.",
-        reply_markup=kb
-    )
-    return ASK_PAYER
+    await update.message.reply_text("Скільки власників має ділянка?")
+    return ASK_OWNER_COUNT
 
-async def choose_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-    if text == "Пропустити — додати власника пізніше":
-        query = LandPlot.insert().values(
-            cadaster=context.user_data["cadaster"],
-            area=context.user_data["area"],
-            ngo=context.user_data["ngo"],
-            field_id=context.user_data["field_id"],
-            payer_id=None
-        )
-        land_id = await database.execute(query)
-
-        context.user_data.clear()
-        await prompt_add_docs(
-            update,
-            context,
-            "land",
-            land_id,
-            "Ділянка додана без власника! Власника можна додати в картці ділянки.",
-            lands_menu,
-        )
-        return ConversationHandler.END
+async def set_owner_count(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        count = int(update.message.text)
+        if count <= 0:
+            raise ValueError
+    except ValueError:
+        await update.message.reply_text("Введіть число більше 0:")
+        return ASK_OWNER_COUNT
+    context.user_data["owner_count"] = count
+    context.user_data["owners"] = []
+    context.user_data["owner_index"] = 1
 
     payers = await database.fetch_all(sqlalchemy.select(Payer).limit(20))
     if not payers:
         await update.message.reply_text("Спочатку додайте хоча б одного пайовика!", reply_markup=lands_menu)
         return ConversationHandler.END
     kb = ReplyKeyboardMarkup(
-        [[f"{p['id']}: {p['name']}"] for p in payers],
-        resize_keyboard=True
+        [[f"{p['id']}: {p['name']}"] for p in payers], resize_keyboard=True
     )
     context.user_data["payers"] = {f"{p['id']}: {p['name']}": p["id"] for p in payers}
-    await update.message.reply_text("Оберіть власника (пайовика) для ділянки:", reply_markup=kb)
-    return ASK_PAYER + 1
+    await update.message.reply_text(
+        f"Оберіть власника 1 з {count}:", reply_markup=kb
+    )
+    return ASK_OWNER
 
-async def set_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def select_owner(update: Update, context: ContextTypes.DEFAULT_TYPE):
     payer_id = context.user_data["payers"].get(update.message.text)
     if not payer_id:
         await update.message.reply_text("Оберіть пайовика зі списку (натисніть кнопку):")
-        return ASK_PAYER + 1
+        return ASK_OWNER
+    context.user_data["owners"].append(payer_id)
+    if len(context.user_data["owners"]) < context.user_data["owner_count"]:
+        context.user_data["owner_index"] += 1
+        await update.message.reply_text(
+            f"Оберіть власника {context.user_data['owner_index']} з {context.user_data['owner_count']}:"
+        )
+        return ASK_OWNER
+
     query = LandPlot.insert().values(
         cadaster=context.user_data["cadaster"],
         area=context.user_data["area"],
         ngo=context.user_data["ngo"],
         field_id=context.user_data["field_id"],
-        payer_id=payer_id
+        payer_id=context.user_data["owners"][0]
     )
     land_id = await database.execute(query)
+    share = 1 / context.user_data["owner_count"]
+    for pid in context.user_data["owners"]:
+        await database.execute(
+            LandPlotOwner.insert().values(land_plot_id=land_id, payer_id=pid, share=share)
+        )
 
     context.user_data.clear()
     await prompt_add_docs(
@@ -155,8 +149,8 @@ add_land_conv = ConversationHandler(
         ASK_AREA: [MessageHandler(filters.TEXT & ~filters.COMMAND, land_area)],
         ASK_NGO: [MessageHandler(filters.TEXT & ~filters.COMMAND, land_ngo)],
         ASK_FIELD: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_field)],
-        ASK_PAYER: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_payer)],
-        ASK_PAYER + 1: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_payer)],
+        ASK_OWNER_COUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_owner_count)],
+        ASK_OWNER: [MessageHandler(filters.TEXT & ~filters.COMMAND, select_owner)],
     },
     fallbacks=[]
 )
@@ -188,15 +182,21 @@ async def land_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     land_id = int(query.data.split(":")[1])
     land = await database.fetch_one(sqlalchemy.select(LandPlot).where(LandPlot.c.id == land_id))
     field_name = "—"
-    payer_name = "—"
+    owners_txt = "—"
     if land and land['field_id']:
         field = await database.fetch_one(sqlalchemy.select(Field).where(Field.c.id == land['field_id']))
         if field:
             field_name = field['name']
-    if land and land['payer_id']:
-        payer = await database.fetch_one(sqlalchemy.select(Payer).where(Payer.c.id == land['payer_id']))
-        if payer:
-            payer_name = payer['name']
+    owners = []
+    rows = await database.fetch_all(
+        sqlalchemy.select(LandPlotOwner, Payer.c.name).join(Payer, Payer.c.id == LandPlotOwner.c.payer_id).where(
+            LandPlotOwner.c.land_plot_id == land_id
+        )
+    )
+    for r in rows:
+        owners.append(f"{r['name']} ({r['share']:.2f})")
+    if owners:
+        owners_txt = ", ".join(owners)
     if not land:
         await query.answer("Ділянка не знайдена!")
         return
@@ -208,7 +208,7 @@ async def land_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Площа: {land['area']:.4f} га\n"
         f"НГО: {land['ngo'] if land['ngo'] else '-'}\n"
         f"Поле: {field_name}\n"
-        f"Власник: {payer_name}"
+        f"Власники: {owners_txt}"
     )
 
     buttons = []
@@ -230,7 +230,8 @@ async def land_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("🗑 Видалити", callback_data=f"delete_pdf_db:{doc['id']}")
         ])
     # --- Кнопки власника, інші кнопки ---
-    if land['payer_id']:
+    owners_exist = bool(rows)
+    if owners_exist:
         buttons.append([InlineKeyboardButton("✏️ Змінити власника", callback_data=f"edit_land_owner:{land['id']}")])
     else:
         buttons.append([InlineKeyboardButton("➕ Додати власника", callback_data=f"edit_land_owner:{land['id']}")])
