@@ -75,9 +75,6 @@ async def admin_tov_handler(update, context):
         reply_markup=admin_tov_menu
     )
 
-async def admin_tov_add_handler(update, context):
-    await update.message.reply_text("Додавання нового ТОВ — в розробці.")
-
 async def admin_tov_list_handler(update, context):
     await update.message.reply_text("Список ТОВ — в розробці.")
 
