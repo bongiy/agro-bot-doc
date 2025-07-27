@@ -85,16 +85,16 @@ async def admin_tov_list_handler(update, context):
         [InlineKeyboardButton(
             f"{c['short_name'] or c['full_name']}", callback_data=f"company_card:{c['id']}")]
         for c in companies
-    ] if companies else None
-
+    ] if companies else []
+    inline_kb = InlineKeyboardMarkup(keyboard)
     msg = getattr(update, 'message', None)
     if msg:
         await msg.reply_text(
-            text, reply_markup=InlineKeyboardMarkup(keyboard) if keyboard else None, parse_mode="HTML"
+            text, reply_markup=inline_kb, parse_mode="HTML"
         )
     else:
         await update.callback_query.edit_message_text(
-            text, reply_markup=InlineKeyboardMarkup(keyboard) if keyboard else None, parse_mode="HTML"
+            text, reply_markup=inline_kb, parse_mode="HTML"
         )
 
 # --- Картка ТОВ (CallbackQuery) ---
@@ -133,35 +133,35 @@ async def admin_templates_handler(update, context):
     if msg:
         await msg.reply_text("Менеджмент шаблонів договорів — в розробці.")
     else:
-        await update.callback_query.edit_message_text("Менеджмент шаблонів договорів — в розробці.")
+        await update.callback_query.edit_message_text("Менеджмент шаблонів договорів — в розробці.", reply_markup=InlineKeyboardMarkup([]))
 
 async def admin_users_handler(update, context):
     msg = getattr(update, 'message', None)
     if msg:
         await msg.reply_text("Менеджмент користувачів — в розробці.")
     else:
-        await update.callback_query.edit_message_text("Менеджмент користувачів — в розробці.")
+        await update.callback_query.edit_message_text("Менеджмент користувачів — в розробці.", reply_markup=InlineKeyboardMarkup([]))
 
 async def admin_delete_handler(update, context):
     msg = getattr(update, 'message', None)
     if msg:
         await msg.reply_text("Видалення об’єктів — в розробці.")
     else:
-        await update.callback_query.edit_message_text("Видалення об’єктів — в розробці.")
+        await update.callback_query.edit_message_text("Видалення об’єктів — в розробці.", reply_markup=InlineKeyboardMarkup([]))
 
 async def admin_tov_edit_handler(update, context):
     msg = getattr(update, 'message', None)
     if msg:
         await msg.reply_text("Редагування ТОВ — в розробці.")
     else:
-        await update.callback_query.edit_message_text("Редагування ТОВ — в розробці.")
+        await update.callback_query.edit_message_text("Редагування ТОВ — в розробці.", reply_markup=InlineKeyboardMarkup([]))
 
 async def admin_tov_delete_handler(update, context):
     msg = getattr(update, 'message', None)
     if msg:
         await msg.reply_text("Видалення ТОВ — в розробці.")
     else:
-        await update.callback_query.edit_message_text("Видалення ТОВ — в розробці.")
+        await update.callback_query.edit_message_text("Видалення ТОВ — в розробці.", reply_markup=InlineKeyboardMarkup([]))
 
 async def to_admin_panel(update, context):
     from keyboards.menu import admin_panel_menu
