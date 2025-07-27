@@ -162,5 +162,19 @@ async def log_admin_action(admin_id: int, action: str):
     )
     await database.execute(query)
 
+async def ensure_admin(tg_id: int, username: str | None = None):
+    """Ensure a user exists with admin role and is active."""
+    user = await get_user_by_tg_id(tg_id)
+    if not user:
+        await add_user(tg_id, username=username, role="admin")
+        return
+    update_data = {}
+    if user["role"] != "admin":
+        update_data["role"] = "admin"
+    if not user["is_active"]:
+        update_data["is_active"] = True
+    if update_data:
+        await update_user(tg_id, update_data)
+
 # Create all tables if they do not exist.
 metadata.create_all(engine)
