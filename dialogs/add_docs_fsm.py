@@ -2,7 +2,7 @@ import os
 import re
 import time
 import unicodedata
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile, ReplyKeyboardMarkup
 from telegram.ext import (
     ConversationHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 )
@@ -13,7 +13,7 @@ from ftp_utils import upload_file_ftp, delete_file_ftp, download_file_ftp_to_mem
 import sqlalchemy
 from PyPDF2 import PdfReader, PdfWriter
 
-SELECT_DOC_TYPE, COLLECT_PHOTO = range(2)
+SELECT_DOC_TYPE, COLLECT_PHOTO, ASK_MORE = range(3)
 
 DOC_TYPES = {
     "land": [
@@ -63,8 +63,6 @@ def repack_pdf(input_path, output_path):
 
 async def start_add_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    context.user_data.pop("post_create_msg", None)
-    context.user_data.pop("post_create_markup", None)
     _, entity_type, entity_id = query.data.split(":")
     context.user_data["entity_type"] = entity_type
     context.user_data["entity_id"] = entity_id
@@ -90,6 +88,7 @@ async def start_add_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["ftp_folder"] = folder_name
 
     doc_types = DOC_TYPES.get(entity_type, DOC_TYPES["land"])
+    context.user_data["doc_types"] = doc_types
     keyboard = [[InlineKeyboardButton(dt, callback_data=f"doc_type:{dt}")] for dt in doc_types]
     await query.message.edit_text(
         "Оберіть тип документу для завантаження фото:",
@@ -227,8 +226,41 @@ async def finish_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     await query.message.reply_text(
-        f"Документ «{doc_type}» додано та збережено у системі."
+        f"Документ «{doc_type}» додано та збережено у системі.",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("Додати ще", callback_data="more_docs")],
+            [InlineKeyboardButton("Завершити", callback_data="finish_docs")],
+        ])
     )
+    return ASK_MORE
+
+async def more_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    doc_types = context.user_data.get("doc_types", DOC_TYPES.get(context.user_data.get("entity_type"), DOC_TYPES["land"]))
+    keyboard = [[InlineKeyboardButton(dt, callback_data=f"doc_type:{dt}")] for dt in doc_types]
+    await query.message.edit_text(
+        "Оберіть тип документу для завантаження фото:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return SELECT_DOC_TYPE
+
+async def finish_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    text = context.user_data.pop("post_create_msg", "Документи додано.")
+    markup = context.user_data.pop("post_create_markup", None)
+
+    if isinstance(markup, ReplyKeyboardMarkup):
+        await query.message.delete()
+        await query.message.reply_text(text, reply_markup=markup)
+    elif markup:
+        await query.message.edit_text(text, reply_markup=markup)
+    else:
+        await query.message.edit_text(text)
+
+    context.user_data.clear()
     return ConversationHandler.END
 
 # ==== ВІДПРАВКА PDF з FTP у RAM ====
@@ -266,7 +298,11 @@ add_docs_conv = ConversationHandler(
         SELECT_DOC_TYPE: [CallbackQueryHandler(select_doc_type, pattern=r"^doc_type:.+")],
         COLLECT_PHOTO: [
             MessageHandler(filters.PHOTO, collect_photo),
-            CallbackQueryHandler(finish_photos, pattern="^photos_done$"),
+            CallbackQueryHandler(finish_photos, pattern="^photos_done$")
+        ],
+        ASK_MORE: [
+            CallbackQueryHandler(more_docs, pattern="^more_docs$"),
+            CallbackQueryHandler(finish_docs, pattern="^finish_docs$")
         ],
     },
     fallbacks=[]
