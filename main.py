@@ -34,7 +34,8 @@ from dialogs.admin_tov import admin_tov_add_conv
 from dialogs.edit_company import edit_company_conv
 from dialogs.agreement_template import (
     add_template_conv, replace_template_conv,
-    template_card_cb, template_toggle_cb, template_delete_cb, template_list_cb
+    template_card_cb, template_toggle_cb, template_delete_cb,
+    template_list_cb, show_templates_cb
 )
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
