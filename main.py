@@ -10,7 +10,7 @@ from handlers.menu import (
     contracts_menu_handler, payments_menu_handler, reports_menu_handler, search_menu_handler,
     admin_panel_handler, admin_tov_handler, admin_templates_handler,
     admin_users_handler, admin_delete_handler, admin_tov_list_handler,
-    admin_tov_edit_handler, admin_tov_delete_handler, to_admin_panel
+    admin_tov_edit_handler, admin_tov_delete_handler, to_admin_panel, admin_company_card_callback
 )
 from dialogs.payer import (
     add_payer_conv, show_payers, payer_card, delete_payer,
@@ -112,8 +112,9 @@ application.add_handler(MessageHandler(filters.Regex("^📋 Список ТОВ$
 application.add_handler(MessageHandler(filters.Regex("^✏️ Редагувати ТОВ$"), admin_tov_edit_handler))
 application.add_handler(MessageHandler(filters.Regex("^🗑️ Видалити ТОВ$"), admin_tov_delete_handler))
 application.add_handler(MessageHandler(filters.Regex("^↩️ Адмінпанель$"), to_admin_panel))
-
+application.add_handler(CallbackQueryHandler(admin_company_card_callback, pattern=r"^company_card:\d+$"))
 application.add_handler(admin_tov_add_conv)
+
 
 @app.post(WEBHOOK_PATH)
 async def telegram_webhook(request: Request):
