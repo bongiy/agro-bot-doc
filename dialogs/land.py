@@ -244,12 +244,58 @@ async def land_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ==== ВИДАЛЕННЯ ДІЛЯНКИ ====
+async def delete_land_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    land_id = int(query.data.split(":")[1])
+    from db import get_user_by_tg_id
+    user = await get_user_by_tg_id(update.effective_user.id)
+    if not user or user["role"] != "admin":
+        await query.answer("⛔ У вас немає прав на видалення.", show_alert=True)
+        return
+    land = await database.fetch_one(LandPlot.select().where(LandPlot.c.id == land_id))
+    if not land:
+        await query.answer("Ділянку не знайдено!", show_alert=True)
+        return
+    text = (
+        f"Ви точно хочете видалити ділянку <b>{land.cadaster}</b>?\n"
+        "Цю дію не можна скасувати."
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Так, видалити", callback_data=f"confirm_delete_land:{land_id}")],
+        [InlineKeyboardButton("❌ Скасувати", callback_data=f"land_card:{land_id}")],
+    ])
+    await query.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
 async def delete_land(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     land_id = int(query.data.split(":")[1])
+    from db import UploadedDocs, get_user_by_tg_id, log_delete
+    user = await get_user_by_tg_id(update.effective_user.id)
+    if not user or user["role"] != "admin":
+        await query.answer("⛔ У вас немає прав на видалення.", show_alert=True)
+        return
+    land = await database.fetch_one(LandPlot.select().where(LandPlot.c.id == land_id))
+    if not land:
+        await query.answer("Ділянку не знайдено!", show_alert=True)
+        return
+    docs = await database.fetch_all(
+        sqlalchemy.select(UploadedDocs).where(
+            (UploadedDocs.c.entity_type == "land") & (UploadedDocs.c.entity_id == land_id)
+        )
+    )
+    for d in docs:
+        try:
+            delete_file_ftp(d["remote_path"])
+        except Exception:
+            pass
+    if docs:
+        await database.execute(
+            UploadedDocs.delete().where(UploadedDocs.c.id.in_([d["id"] for d in docs]))
+        )
     await database.execute(LandPlot.delete().where(LandPlot.c.id == land_id))
-    await query.answer("Ділянку видалено!")
-    await query.message.edit_text("Ділянку видалено.")
+    linked = f"docs:{len(docs)}" if docs else ""
+    await log_delete(update.effective_user.id, user["role"], "land", land_id, land.cadaster, linked)
+    await query.message.edit_text("✅ Обʼєкт успішно видалено")
 
 # ==== ВИДАЛЕННЯ PDF через FTP ====
 async def delete_pdf(update, context):

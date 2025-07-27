@@ -427,13 +427,65 @@ async def send_pdf(update, context):
     else:
         await query.answer("Документ не знайдено!", show_alert=True)
 
+async def delete_payer_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    payer_id = int(query.data.split(":")[1])
+    from db import get_user_by_tg_id
+    user = await get_user_by_tg_id(update.effective_user.id)
+    if not user or user["role"] != "admin":
+        await query.answer("⛔ У вас немає прав на видалення.", show_alert=True)
+        return
+    payer = await database.fetch_one(Payer.select().where(Payer.c.id == payer_id))
+    if not payer:
+        await query.answer("Пайовика не знайдено!", show_alert=True)
+        return
+    text = (
+        f"Ви точно хочете видалити <b>{payer.name}</b>?\n"
+        "Цю дію не можна скасувати."
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Так, видалити", callback_data=f"confirm_delete_payer:{payer_id}")],
+        [InlineKeyboardButton("❌ Скасувати", callback_data=f"payer_card:{payer_id}")],
+    ])
+    await query.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
 async def delete_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     payer_id = int(query.data.split(":")[1])
-    del_query = Payer.delete().where(Payer.c.id == payer_id)
-    await database.execute(del_query)
-    await query.answer("Пайовика видалено!")
-    await query.message.edit_text("Пайовика видалено.")
+    from db import LandPlot, UploadedDocs, get_user_by_tg_id, log_delete
+    user = await get_user_by_tg_id(update.effective_user.id)
+    if not user or user["role"] != "admin":
+        await query.answer("⛔ У вас немає прав на видалення.", show_alert=True)
+        return
+    payer = await database.fetch_one(Payer.select().where(Payer.c.id == payer_id))
+    if not payer:
+        await query.answer("Пайовика не знайдено!", show_alert=True)
+        return
+    linked_lands = await database.fetch_all(
+        sqlalchemy.select(LandPlot).where(LandPlot.c.payer_id == payer_id)
+    )
+    if linked_lands:
+        await query.answer("Не можна видалити — до пайовика прив'язані ділянки.", show_alert=True)
+        return
+    docs = await database.fetch_all(
+        sqlalchemy.select(UploadedDocs).where(
+            (UploadedDocs.c.entity_id == payer_id) &
+            (UploadedDocs.c.entity_type.in_(["payer_passport", "payer_id"]))
+        )
+    )
+    for d in docs:
+        try:
+            delete_file_ftp(d["remote_path"])
+        except Exception:
+            pass
+    if docs:
+        await database.execute(
+            UploadedDocs.delete().where(UploadedDocs.c.id.in_([d["id"] for d in docs]))
+        )
+    await database.execute(Payer.delete().where(Payer.c.id == payer_id))
+    linked = f"docs:{len(docs)}" if docs else ""
+    await log_delete(update.effective_user.id, user["role"], "payer", payer_id, payer.name, linked)
+    await query.message.edit_text("✅ Обʼєкт успішно видалено")
     return ConversationHandler.END
 
 async def create_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
