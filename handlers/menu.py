@@ -4,7 +4,7 @@ from keyboards.menu import (
     main_menu, main_menu_admin,
     payers_menu, lands_menu, fields_menu, contracts_menu,
     payments_menu, reports_menu, search_menu, admin_panel_menu, admin_tov_menu
-)
+    )
 from db import get_companies, get_company
 
 # TODO: Замініть цей список на актуальні admin_ids або імпортуйте з config
