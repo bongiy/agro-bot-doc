@@ -1,6 +1,7 @@
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
+from db import get_company
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
+(
 from telegram.ext import ConversationHandler, MessageHandler, filters
-
 (
     OPF_SELECT, BASE_NAME, NAME_CONFIRM, FULL_NAME_MANUAL, SHORT_NAME_MANUAL,
     ADD_EDRPOU, ADD_BANK, ADD_TAX_GROUP, ADD_VAT, ADD_VAT_IPN,
@@ -222,3 +223,34 @@ admin_tov_add_conv = ConversationHandler(
         MessageHandler(filters.Regex(f"^{CANCEL_BTN}$"), admin_tov_add_cancel)
     ]
 )
+async def admin_company_card_callback(update, context):
+    query = update.callback_query
+    company_id = int(query.data.split(":")[1])
+    company = await get_company(company_id)
+    if not company:
+        await query.answer("ТОВ не знайдено!", show_alert=True)
+        return
+
+    text = (
+        f"<b>Картка ТОВ-орендаря</b>\n"
+        f"<b>ОПФ:</b> <code>{company['opf']}</code>\n"
+        f"<b>Повна назва:</b> <code>{company['full_name']}</code>\n"
+        f"<b>Скорочена назва:</b> <code>{company['short_name']}</code>\n"
+        f"<b>ЄДРПОУ:</b> <code>{company['edrpou']}</code>\n"
+        f"<b>IBAN:</b> <code>{company['bank_account']}</code>\n"
+        f"<b>Група оподаткування:</b> <code>{company['tax_group']}</code>\n"
+        f"<b>ПДВ:</b> <code>{'так' if company['is_vat_payer'] else 'ні'}</code>\n"
+        f"<b>ІПН платника ПДВ:</b> <code>{company.get('vat_ipn', '') or '—'}</code>\n"
+        f"<b>Юридична адреса:</b> <code>{company['address_legal']}</code>\n"
+        f"<b>Поштова адреса:</b> <code>{company['address_postal']}</code>\n"
+        f"<b>Директор:</b> <code>{company['director']}</code>\n"
+    )
+
+    keyboard = [
+        [InlineKeyboardButton("✏️ Редагувати", callback_data=f"company_edit:{company_id}")],
+        [InlineKeyboardButton("↩️ До списку ТОВ", callback_data="company_list")],
+        [InlineKeyboardButton("↩️ Адмінпанель", callback_data="admin_panel")]
+    ]
+    await query.edit_message_text(
+        text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML"
+    )
