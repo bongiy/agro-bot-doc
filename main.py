@@ -113,6 +113,7 @@ application.add_handler(MessageHandler(filters.Regex("^👥 Користувач
 application.add_handler(MessageHandler(filters.Regex("^🗑️ Видалення об’єктів$"), admin_delete_handler))
 application.add_handler(MessageHandler(filters.Regex("^↩️ Головне меню$"), to_main_menu))
 # --- АДМІНКА ТОВ ---
+application.add_handler(MessageHandler(filters.Regex("^🏢 ТОВ-орендарі$"), admin_tov_handler))
 application.add_handler(MessageHandler(filters.Regex("^📋 Список ТОВ$"), admin_tov_list_handler))
 application.add_handler(MessageHandler(filters.Regex("^✏️ Редагувати ТОВ$"), admin_tov_edit_handler))
 application.add_handler(MessageHandler(filters.Regex("^🗑️ Видалити ТОВ$"), admin_tov_delete_handler))
