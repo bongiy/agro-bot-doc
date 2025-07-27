@@ -27,7 +27,7 @@ from dialogs.edit_field import edit_field_conv
 from dialogs.edit_land import edit_land_conv
 from dialogs.edit_land_owner import edit_land_owner_conv
 from dialogs.add_docs_fsm import add_docs_conv, send_pdf, delete_pdf  # тільки FTP!
-from db import database
+from db import database, ensure_admin
 
 from dialogs.admin_tov import admin_tov_add_conv
 from dialogs.edit_company import edit_company_conv
@@ -38,12 +38,15 @@ WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 app = FastAPI()
 application = Application.builder().token(TOKEN).build()
+DEFAULT_ADMIN_IDS = [int(i) for i in os.getenv("ADMIN_IDS", "370806943").split(",") if i]
 is_initialized = False
 
 @app.on_event("startup")
 async def on_startup():
     global is_initialized
     await database.connect()
+    for admin_id in DEFAULT_ADMIN_IDS:
+        await ensure_admin(admin_id)
     if not is_initialized:
         await application.initialize()
         await application.bot.set_webhook(WEBHOOK_URL)
