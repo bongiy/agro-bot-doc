@@ -7,7 +7,8 @@ from telegram.ext import ConversationHandler, MessageHandler, filters
     ADD_ADDRESS_LEGAL, ADD_ADDRESS_POSTAL, ADD_DIRECTOR, CONFIRM
 ) = range(14)
 
-# Автоматична генерація назв
+CANCEL_BTN = "❌ Скасувати"
+
 def get_company_names(opf, base):
     opf = opf.upper()
     base = base.strip()
@@ -32,11 +33,6 @@ def get_company_names(opf, base):
             f"ПП «{base}»"
         )
     return (base, base)
-
-# === Кнопка для скасування ===
-CANCEL_BTN = "❌ Скасувати"
-
-# === FSM-кроки ===
 
 async def admin_tov_add_start(update, context):
     kb = ReplyKeyboardMarkup([["ТОВ", "ФГ"], ["ФОП", "ПП"], [CANCEL_BTN]], resize_keyboard=True)
@@ -204,7 +200,6 @@ async def admin_tov_add_cancel(update, context):
     await update.message.reply_text("Додавання скасовано.", reply_markup=admin_tov_menu)
     return ConversationHandler.END
 
-# FSM object
 admin_tov_add_conv = ConversationHandler(
     entry_points=[MessageHandler(filters.Regex("^➕ Додати ТОВ$"), admin_tov_add_start)],
     states={
