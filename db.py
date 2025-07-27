@@ -111,6 +111,7 @@ User = sqlalchemy.Table(
     metadata,
     sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
     sqlalchemy.Column("telegram_id", sqlalchemy.BigInteger, unique=True),
+    sqlalchemy.Column("full_name", sqlalchemy.String(255)),
     sqlalchemy.Column("username", sqlalchemy.String(255)),
     sqlalchemy.Column("role", sqlalchemy.String(10), default="user"),
     sqlalchemy.Column("is_active", sqlalchemy.Boolean, default=True),
@@ -127,10 +128,16 @@ AdminAction = sqlalchemy.Table(
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
 )
 
-async def add_user(tg_id: int, username: str | None = None, role: str = "user"):
+async def add_user(
+    tg_id: int,
+    username: str | None = None,
+    role: str = "user",
+    full_name: str | None = None,
+):
     query = User.insert().values(
         telegram_id=tg_id,
         username=username,
+        full_name=full_name,
         role=role,
         is_active=True,
         created_at=datetime.utcnow(),
@@ -178,3 +185,10 @@ async def ensure_admin(tg_id: int, username: str | None = None):
 
 # Create all tables if they do not exist.
 metadata.create_all(engine)
+
+# Ensure new columns exist for older databases
+with engine.begin() as conn:
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)'
+    ))
+
