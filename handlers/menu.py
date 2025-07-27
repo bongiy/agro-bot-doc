@@ -163,11 +163,134 @@ async def admin_templates_handler(update, context):
 
 @admin_only
 async def admin_users_handler(update, context):
+    keyboard = [
+        [InlineKeyboardButton("\U0001F4C4 Список користувачів", callback_data="user_list")],
+        [InlineKeyboardButton("\u2795 Додати користувача", callback_data="user_add")],
+        [InlineKeyboardButton("\U0001F501 Змінити роль", callback_data="user_role")],
+        [InlineKeyboardButton("\U0001F6AB Блокування", callback_data="user_block")],
+        [InlineKeyboardButton("↩️ Адмінпанель", callback_data="admin_panel")]
+    ]
     msg = getattr(update, 'message', None)
     if msg:
-        await msg.reply_text("Менеджмент користувачів — в розробці.")
+        await msg.reply_text(
+            "Менеджмент користувачів:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
     else:
-        await update.callback_query.edit_message_text("Менеджмент користувачів — в розробці.", reply_markup=InlineKeyboardMarkup([]))
+        await update.callback_query.edit_message_text(
+            "Менеджмент користувачів:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+@admin_only
+async def admin_user_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    users = await get_users()
+    lines = [
+        f"<code>{u['telegram_id']}</code> | {u['role']} | "
+        f"{'активний' if u['is_active'] else 'заблокований'}" for u in users
+    ]
+    text = '<b>Список користувачів</b>:\n' + ("\n".join(lines) if lines else "Користувачів не знайдено.")
+    keyboard = [[InlineKeyboardButton("↩️ Назад", callback_data="admin_users")]]
+    await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+
+@admin_only
+async def add_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.message.edit_text(
+        "Введіть Telegram ID користувача:",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Скасувати", callback_data="admin_users")]])
+    )
+    return ADD_USER_ID
+
+
+@admin_only
+async def add_user_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        tg_id = int(update.message.text.strip())
+    except ValueError:
+        await update.message.reply_text("Введіть числовий ID:")
+        return ADD_USER_ID
+    user = await get_user_by_tg_id(tg_id)
+    if user:
+        await update.message.reply_text("Користувач вже існує.")
+    else:
+        await add_user(tg_id)
+        await log_admin_action(update.effective_user.id, f"add_user {tg_id}")
+        await update.message.reply_text("Користувача додано.")
+    await update.message.reply_text(
+        "Менеджмент користувачів:",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("↩️ Назад", callback_data="admin_users")]])
+    )
+    return ConversationHandler.END
+
+
+@admin_only
+async def change_role_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.message.edit_text(
+        "Введіть Telegram ID користувача:",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Скасувати", callback_data="admin_users")]])
+    )
+    return CHANGE_ROLE_ID
+
+
+@admin_only
+async def change_role_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        tg_id = int(update.message.text.strip())
+    except ValueError:
+        await update.message.reply_text("Введіть числовий ID:")
+        return CHANGE_ROLE_ID
+    user = await get_user_by_tg_id(tg_id)
+    if not user:
+        await update.message.reply_text("Користувача не знайдено.")
+    else:
+        new_role = "user" if user["role"] == "admin" else "admin"
+        await update_user(tg_id, {"role": new_role})
+        await log_admin_action(update.effective_user.id, f"toggle_role {tg_id}")
+        await update.message.reply_text(f"Роль змінено на {new_role}.")
+    await update.message.reply_text(
+        "Менеджмент користувачів:",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("↩️ Назад", callback_data="admin_users")]])
+    )
+    return ConversationHandler.END
+
+
+@admin_only
+async def block_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.message.edit_text(
+        "Введіть Telegram ID користувача:",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Скасувати", callback_data="admin_users")]])
+    )
+    return BLOCK_USER_ID
+
+
+@admin_only
+async def block_user_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        tg_id = int(update.message.text.strip())
+    except ValueError:
+        await update.message.reply_text("Введіть числовий ID:")
+        return BLOCK_USER_ID
+    user = await get_user_by_tg_id(tg_id)
+    if not user:
+        await update.message.reply_text("Користувача не знайдено.")
+    else:
+        new_status = not user["is_active"]
+        await update_user(tg_id, {"is_active": new_status})
+        action = "unblock" if new_status else "block"
+        await log_admin_action(update.effective_user.id, f"{action} {tg_id}")
+        text = "Користувача розблоковано." if new_status else "Користувача заблоковано."
+        await update.message.reply_text(text)
+    await update.message.reply_text(
+        "Менеджмент користувачів:",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("↩️ Назад", callback_data="admin_users")]])
+    )
+    return ConversationHandler.END
+
 
 @admin_only
 async def admin_delete_handler(update, context):
@@ -276,3 +399,29 @@ async def cmd_unblock(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update_user(tg_id, {'is_active': True})
     await log_admin_action(update.effective_user.id, f"unblock {tg_id}")
     await update.message.reply_text('Користувача розблоковано.')
+
+
+# --- Conversation handlers for user management ---
+add_user_conv = ConversationHandler(
+    entry_points=[CallbackQueryHandler(add_user_start, pattern=r"^user_add$")],
+    states={
+        ADD_USER_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_user_finish)],
+    },
+    fallbacks=[CallbackQueryHandler(admin_users_handler, pattern=r"^admin_users$")]
+)
+
+change_role_conv = ConversationHandler(
+    entry_points=[CallbackQueryHandler(change_role_start, pattern=r"^user_role$")],
+    states={
+        CHANGE_ROLE_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, change_role_finish)],
+    },
+    fallbacks=[CallbackQueryHandler(admin_users_handler, pattern=r"^admin_users$")]
+)
+
+block_user_conv = ConversationHandler(
+    entry_points=[CallbackQueryHandler(block_user_start, pattern=r"^user_block$")],
+    states={
+        BLOCK_USER_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, block_user_finish)],
+    },
+    fallbacks=[CallbackQueryHandler(admin_users_handler, pattern=r"^admin_users$")]
+)
