@@ -32,6 +32,10 @@ from db import database, ensure_admin
 
 from dialogs.admin_tov import admin_tov_add_conv
 from dialogs.edit_company import edit_company_conv
+from dialogs.agreement_template import (
+    add_template_conv, replace_template_conv,
+    template_card_cb, template_toggle_cb, template_delete_cb, template_list_cb
+)
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 WEBHOOK_PATH = "/webhook"
@@ -117,7 +121,14 @@ application.add_handler(MessageHandler(filters.COMMAND, to_main_menu))
 
 # --- АДМІНКА ---
 application.add_handler(admin_tov_add_conv)
+application.add_handler(add_template_conv)
+application.add_handler(replace_template_conv)
+application.add_handler(template_card_cb)
+application.add_handler(template_toggle_cb)
+application.add_handler(template_delete_cb)
+application.add_handler(template_list_cb)
 application.add_handler(MessageHandler(filters.Regex("^📄 Шаблони договорів$"), admin_templates_handler))
+application.add_handler(MessageHandler(filters.Regex("^📋 Список шаблонів$"), show_templates_cb))
 application.add_handler(MessageHandler(filters.Regex("^👥 Користувачі$"), admin_users_handler))
 application.add_handler(MessageHandler(filters.Regex("^🗑️ Видалення об’єктів$"), admin_delete_handler))
 application.add_handler(MessageHandler(filters.Regex("^↩️ Головне меню$"), to_main_menu))
