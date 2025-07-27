@@ -9,6 +9,9 @@ FIELDS = [
     ("area", "Площа (га)"),
     ("ngo", "НГО"),
     ("field_id", "Поле (id)"),
+    ("region", "Область"),
+    ("district", "Район"),
+    ("council", "Сільрада"),
 ]
 
 async def edit_land_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
