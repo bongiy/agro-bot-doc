@@ -91,3 +91,21 @@ async def admin_tov_add_confirm(update, context):
     from keyboards.menu import admin_tov_menu
     await update.message.reply_text("🏢 Менеджмент ТОВ-орендарів:", reply_markup=admin_tov_menu)
     return ConversationHandler.END
+
+# === Оголошення FSM ===
+admin_tov_add_conv = ConversationHandler(
+    entry_points=[MessageHandler(filters.Regex("^➕ Додати ТОВ$"), admin_tov_add_start)],
+    states={
+        0: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_name)],
+        1: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_edrpou)],
+        2: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_bank)],
+        3: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_tax_group)],
+        4: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_vat)],
+        5: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_vat_ipn)],
+        6: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_address_legal)],
+        7: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_address_postal)],
+        8: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_director)],
+        9: [MessageHandler(filters.Regex("^(✅ Так|↩️ Адмінпанель)$"), admin_tov_add_confirm)]
+    },
+    fallbacks=[]
+)
