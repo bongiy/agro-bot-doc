@@ -106,7 +106,7 @@ application.add_handler(CallbackQueryHandler(create_contract, pattern=r"^create_
 application.add_handler(MessageHandler(filters.COMMAND, to_main_menu))
 
 # --- АДМІНКА ---
-application.add_handler(MessageHandler(filters.Regex("^🏢 ТОВ-орендарі$"), admin_tov_handler))
+application.add_handler(admin_tov_add_conv)
 application.add_handler(MessageHandler(filters.Regex("^📄 Шаблони договорів$"), admin_templates_handler))
 application.add_handler(MessageHandler(filters.Regex("^👥 Користувачі$"), admin_users_handler))
 application.add_handler(MessageHandler(filters.Regex("^🗑️ Видалення об’єктів$"), admin_delete_handler))
