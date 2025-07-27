@@ -27,6 +27,7 @@ from dialogs.add_docs_fsm import add_docs_conv, send_pdf, delete_pdf  # тіль
 from db import database
 
 from dialogs.admin_tov import admin_tov_add_conv
+from dialogs.edit_company import edit_company_conv
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 WEBHOOK_PATH = "/webhook"
@@ -85,6 +86,7 @@ application.add_handler(CallbackQueryHandler(to_lands_list, pattern=r"^to_lands_
 application.add_handler(edit_field_conv)
 application.add_handler(edit_land_conv)
 application.add_handler(edit_land_owner_conv)
+application.add_handler(edit_company_conv)
 
 # --- PDF через FTP ---
 application.add_handler(add_docs_conv)
@@ -115,7 +117,6 @@ application.add_handler(MessageHandler(filters.Regex("^↩️ Адмінпане
 application.add_handler(CallbackQueryHandler(admin_company_card_callback, pattern=r"^company_card:\d+$"))
 application.add_handler(CallbackQueryHandler(admin_tov_list_handler, pattern=r"^company_list$"))
 application.add_handler(CallbackQueryHandler(admin_panel_handler, pattern=r"^admin_panel$"))
-application.add_handler(CallbackQueryHandler(admin_tov_edit_handler, pattern=r"^company_edit:\d+$"))
 application.add_handler(admin_tov_add_conv)
 
 
