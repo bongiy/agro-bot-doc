@@ -45,7 +45,7 @@ async def search_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text("Меню «Пошук»", reply_markup=search_menu)
 
 async def admin_panel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in admin_ids:
+    if update.effective_user.id not in admin_ids: = [370806943]
         await update.message.reply_text("У вас немає прав для цієї дії.")
         return
     await update.message.reply_text(
@@ -54,15 +54,6 @@ async def admin_panel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         "• Менеджмент шаблонів договорів\n"
         "• Менеджмент користувачів\n"
         "• Видалення пайовиків/полів/ділянок\n"
-        "• Перезавантажити бот\n"
         "• ↩️ Повернутись",
         parse_mode="HTML"
     )
-
-async def restart_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in admin_ids:
-        await update.message.reply_text("У вас немає прав для цієї дії.")
-        return
-    await update.message.reply_text("Бот буде перезавантажено...")
-    import sys, os
-    os.execl(sys.executable, sys.executable, *sys.argv)
