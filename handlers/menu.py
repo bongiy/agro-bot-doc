@@ -55,3 +55,14 @@ async def admin_panel_handler(update, context):
         parse_mode="HTML",
         reply_markup=admin_panel_menu
     )
+async def admin_tov_handler(update, context):
+    await update.message.reply_text("Менеджмент ТОВ-орендарів — в розробці.")
+
+async def admin_templates_handler(update, context):
+    await update.message.reply_text("Менеджмент шаблонів договорів — в розробці.")
+
+async def admin_users_handler(update, context):
+    await update.message.reply_text("Менеджмент користувачів — в розробці.")
+
+async def admin_delete_handler(update, context):
+    await update.message.reply_text("Видалення об’єктів — в розробці.")
