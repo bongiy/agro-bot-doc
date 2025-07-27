@@ -128,6 +128,18 @@ AdminAction = sqlalchemy.Table(
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
 )
 
+# === Шаблони договорів ===
+AgreementTemplate = sqlalchemy.Table(
+    "agreement_template",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("name", sqlalchemy.String(255)),
+    sqlalchemy.Column("type", sqlalchemy.String(32)),
+    sqlalchemy.Column("file_path", sqlalchemy.String(255)),
+    sqlalchemy.Column("is_active", sqlalchemy.Boolean, default=True),
+    sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
+)
+
 async def add_user(
     tg_id: int,
     username: str | None = None,
@@ -167,6 +179,30 @@ async def log_admin_action(admin_id: int, action: str):
         action=action,
         created_at=datetime.utcnow(),
     )
+    await database.execute(query)
+
+# === Agreement Template helpers ===
+async def add_agreement_template(data: dict):
+    query = AgreementTemplate.insert().values(**data)
+    return await database.execute(query)
+
+async def get_agreement_templates(active_only: bool | None = None):
+    query = AgreementTemplate.select()
+    if active_only is not None:
+        query = query.where(AgreementTemplate.c.is_active == active_only)
+    query = query.order_by(AgreementTemplate.c.id)
+    return await database.fetch_all(query)
+
+async def get_agreement_template(template_id: int):
+    query = AgreementTemplate.select().where(AgreementTemplate.c.id == template_id)
+    return await database.fetch_one(query)
+
+async def update_agreement_template(template_id: int, data: dict):
+    query = AgreementTemplate.update().where(AgreementTemplate.c.id == template_id).values(**data)
+    await database.execute(query)
+
+async def delete_agreement_template(template_id: int):
+    query = AgreementTemplate.delete().where(AgreementTemplate.c.id == template_id)
     await database.execute(query)
 
 async def ensure_admin(tg_id: int, username: str | None = None):
