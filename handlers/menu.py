@@ -7,7 +7,7 @@ from keyboards.menu import (
 )  # імпортуємо обидва меню
 
 # TODO: Замініть цей список на актуальні admin_ids або імпортуйте з config
-admin_ids = [123456789]  # <--- Вкажи свій Telegram user_id тут!
+admin_ids = [370806943]  # <--- Вкажи свій Telegram user_id тут!
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_admin = update.effective_user.id in admin_ids
