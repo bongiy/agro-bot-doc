@@ -113,6 +113,9 @@ application.add_handler(MessageHandler(filters.Regex("^✏️ Редагуват
 application.add_handler(MessageHandler(filters.Regex("^🗑️ Видалити ТОВ$"), admin_tov_delete_handler))
 application.add_handler(MessageHandler(filters.Regex("^↩️ Адмінпанель$"), to_admin_panel))
 application.add_handler(CallbackQueryHandler(admin_company_card_callback, pattern=r"^company_card:\d+$"))
+application.add_handler(CallbackQueryHandler(admin_tov_list_handler, pattern=r"^company_list$"))
+application.add_handler(CallbackQueryHandler(admin_panel_handler, pattern=r"^admin_panel$"))
+application.add_handler(CallbackQueryHandler(admin_tov_edit_handler, pattern=r"^company_edit:\d+$"))
 application.add_handler(admin_tov_add_conv)
 
 
