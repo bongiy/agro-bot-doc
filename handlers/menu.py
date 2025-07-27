@@ -10,7 +10,8 @@ from telegram.ext import (
 from keyboards.menu import (
     main_menu, main_menu_admin,
     payers_menu, lands_menu, fields_menu, contracts_menu,
-    payments_menu, reports_menu, search_menu, admin_panel_menu, admin_tov_menu
+    payments_menu, reports_menu, search_menu, admin_panel_menu, admin_tov_menu,
+    admin_templates_menu
 )
 from db import (
     get_companies,
@@ -20,6 +21,10 @@ from db import (
     get_users,
     update_user,
     log_admin_action,
+)
+from dialogs.agreement_template import (
+    show_templates_cb, add_template_conv, replace_template_conv,
+    template_card_cb, template_toggle_cb, template_delete_cb, template_list_cb
 )
 
 (
@@ -179,9 +184,9 @@ async def admin_company_card_callback(update, context):
 async def admin_templates_handler(update, context):
     msg = getattr(update, 'message', None)
     if msg:
-        await msg.reply_text("Менеджмент шаблонів договорів — в розробці.")
+        await msg.reply_text("Менеджмент шаблонів договорів:", reply_markup=admin_templates_menu)
     else:
-        await update.callback_query.edit_message_text("Менеджмент шаблонів договорів — в розробці.", reply_markup=InlineKeyboardMarkup([]))
+        await show_templates_cb(update, context)
 
 @admin_only
 async def admin_users_handler(update, context):

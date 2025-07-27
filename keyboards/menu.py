@@ -113,3 +113,12 @@ admin_tov_menu = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True
 )
+
+# --- Меню шаблонів договорів ---
+admin_templates_menu = ReplyKeyboardMarkup(
+    [
+        ["➕ Додати шаблон", "📋 Список шаблонів"],
+        ["↩️ Адмінпанель"]
+    ],
+    resize_keyboard=True
+)
