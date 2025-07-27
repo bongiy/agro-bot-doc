@@ -38,6 +38,17 @@ CHOOSE_COMPANY, SET_DURATION, SET_VALID_FROM, CHOOSE_PAYER, INPUT_LANDS, SEARCH_
 BACK_BTN = "◀️ Назад"  # ◀️ Назад
 CANCEL_BTN = "❌ Скасувати"  # ❌ Скасувати
 
+# Callback data for navigation buttons
+BACK_CB = "contract_back"
+CANCEL_CB = "contract_cancel"
+
+# Inline keyboards for navigation
+cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton(CANCEL_BTN, callback_data=CANCEL_CB)]])
+back_cancel_kb = InlineKeyboardMarkup([
+    [InlineKeyboardButton(BACK_BTN, callback_data=BACK_CB),
+     InlineKeyboardButton(CANCEL_BTN, callback_data=CANCEL_CB)]
+])
+
 
 def to_latin_filename(text: str, default: str = "document.pdf") -> str:
     name = unicodedata.normalize("NFKD", str(text)).encode("ascii", "ignore").decode("ascii")
@@ -60,7 +71,19 @@ def format_cadaster(text: str) -> str | None:
 
 async def back_or_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE, step_back: int):
     """Handle back/cancel buttons for contract creation."""
+    query = update.callback_query
     text = update.message.text if update.message else None
+    if query:
+        await query.answer()
+        if query.data == CANCEL_CB:
+            await query.message.reply_text(
+                "⚠️ Створення договору скасовано. Дані не збережено.",
+                reply_markup=contracts_menu,
+            )
+            context.user_data.clear()
+            return ConversationHandler.END
+        if query.data == BACK_CB:
+            return step_back
     if text == CANCEL_BTN:
         await update.message.reply_text(
             "⚠️ Створення договору скасовано. Дані не збережено.",
@@ -71,6 +94,100 @@ async def back_or_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE, ste
     if text == BACK_BTN:
         return step_back
     return None
+
+
+async def contract_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Callback handler for inline back button."""
+    query = update.callback_query
+    await query.answer()
+    state = context.user_data.get("current_state")
+    if state == SET_DURATION:
+        # Back to company selection
+        companies = await database.fetch_all(sqlalchemy.select(Company))
+        if not companies:
+            await query.message.reply_text("Спочатку додайте хоча б одне ТОВ!", reply_markup=contracts_menu)
+            context.user_data.clear()
+            return ConversationHandler.END
+        kb = ReplyKeyboardMarkup(
+            [[f"{c['id']}: {c['short_name'] or c['full_name']}"] for c in companies] + [[CANCEL_BTN]],
+            resize_keyboard=True,
+        )
+        context.user_data["companies"] = {f"{c['id']}: {c['short_name'] or c['full_name']}": c["id"] for c in companies}
+        await query.message.reply_text("Оберіть ТОВ-орендаря:", reply_markup=kb)
+        await query.message.reply_text("⬇️ Навігація", reply_markup=cancel_kb)
+        context.user_data["current_state"] = CHOOSE_COMPANY
+        return CHOOSE_COMPANY
+    if state == SET_VALID_FROM:
+        # Re-prompt duration step
+        number = context.user_data.get("contract_number", "")
+        await query.message.reply_text(
+            f"Номер договору: <b>{number}</b>\nВведіть строк дії в роках:",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup([[BACK_BTN, CANCEL_BTN]], resize_keyboard=True),
+        )
+        await query.message.reply_text("⬇️ Навігація", reply_markup=back_cancel_kb)
+        context.user_data["current_state"] = SET_DURATION
+        return SET_DURATION
+    if state == CHOOSE_PAYER:
+        # Back to valid_from
+        kb = ReplyKeyboardMarkup(
+            [["Від сьогодні"], ["З 1 січня наступного року"], [BACK_BTN, CANCEL_BTN]],
+            resize_keyboard=True,
+        )
+        await query.message.reply_text("Дата набрання чинності:", reply_markup=kb)
+        await query.message.reply_text("⬇️ Навігація", reply_markup=back_cancel_kb)
+        context.user_data["current_state"] = SET_VALID_FROM
+        return SET_VALID_FROM
+    if state == INPUT_LANDS:
+        # Back to choose payer
+        payers = await database.fetch_all(
+            sqlalchemy.select(Payer).order_by(Payer.c.id.desc()).limit(3)
+        )
+        kb = ReplyKeyboardMarkup(
+            [[f"{p['id']}: {p['name']}"] for p in payers]
+            + [["🔍 Пошук пайовика"], ["➕ Створити пайовика"], [BACK_BTN, CANCEL_BTN]],
+            resize_keyboard=True,
+        )
+        context.user_data["recent_payers"] = {f"{p['id']}: {p['name']}": p["id"] for p in payers}
+        await query.message.reply_text("Оберіть пайовика:", reply_markup=kb)
+        await query.message.reply_text("⬇️ Навігація", reply_markup=back_cancel_kb)
+        context.user_data["current_state"] = CHOOSE_PAYER
+        return CHOOSE_PAYER
+    if state == SEARCH_LAND:
+        # Back to input lands
+        payer_id = context.user_data.get("payer_id")
+        lands = await database.fetch_all(
+            sqlalchemy.select(LandPlot).where(LandPlot.c.payer_id == payer_id)
+        )
+        if lands:
+            land_list = " ".join(str(l["id"]) for l in lands)
+            msg = (
+                f"Ділянки пайовика: {land_list}\n"
+                "Вкажіть ID ділянок через пробіл або скористайтеся пошуком."
+            )
+        else:
+            msg = "У цього пайовика немає ділянок. Вкажіть ID вручну або скористайтеся пошуком."
+        kb = ReplyKeyboardMarkup(
+            [["🔍 Пошук ділянки", "✅ Завершити"], [BACK_BTN, CANCEL_BTN]],
+            resize_keyboard=True,
+        )
+        await query.message.reply_text(msg, reply_markup=kb)
+        await query.message.reply_text("⬇️ Навігація", reply_markup=back_cancel_kb)
+        context.user_data["current_state"] = INPUT_LANDS
+        return INPUT_LANDS
+    return step_back
+
+
+async def contract_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Cancel contract creation via inline button."""
+    query = update.callback_query
+    await query.answer()
+    await query.message.reply_text(
+        "⚠️ Створення договору скасовано. Дані не збережено.",
+        reply_markup=contracts_menu,
+    )
+    context.user_data.clear()
+    return ConversationHandler.END
 
 
 async def search_land(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -85,12 +202,16 @@ async def search_land(update: Update, context: ContextTypes.DEFAULT_TYPE):
     row = await database.fetch_one(sqlalchemy.select(LandPlot).where(LandPlot.c.cadaster == cad))
     if not row:
         await update.message.reply_text("Ділянку не знайдено.")
+        await update.message.reply_text("⬇️ Навігація", reply_markup=back_cancel_kb)
+        context.user_data["current_state"] = INPUT_LANDS
         return INPUT_LANDS
     btn = InlineKeyboardButton("➕ Додати до договору", callback_data=f"add_land_to_contract:{row['id']}")
     await update.message.reply_text(
         f"ID {row['id']}: {row['cadaster']} — {row['area']:.4f} га",
         reply_markup=InlineKeyboardMarkup([[btn]]),
     )
+    await update.message.reply_text("⬇️ Навігація", reply_markup=back_cancel_kb)
+    context.user_data["current_state"] = INPUT_LANDS
     return INPUT_LANDS
 
 
@@ -105,6 +226,8 @@ async def add_land_from_search(update: Update, context: ContextTypes.DEFAULT_TYP
         f"Ділянка #{land_id} додана. Поточний список: {land_list}",
         reply_markup=ReplyKeyboardMarkup([[BACK_BTN, CANCEL_BTN]], resize_keyboard=True),
     )
+    await query.message.reply_text("⬇️ Навігація", reply_markup=back_cancel_kb)
+    context.user_data["current_state"] = INPUT_LANDS
     return INPUT_LANDS
 
 
@@ -135,6 +258,8 @@ async def add_contract_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
     context.user_data["companies"] = {f"{c['id']}: {c['short_name'] or c['full_name']}": c["id"] for c in companies}
     await update.message.reply_text("Оберіть ТОВ-орендаря:", reply_markup=kb)
+    await update.message.reply_text("⬇️ Навігація", reply_markup=cancel_kb)
+    context.user_data["current_state"] = CHOOSE_COMPANY
     return CHOOSE_COMPANY
 
 
@@ -168,6 +293,8 @@ async def choose_company(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML",
         reply_markup=ReplyKeyboardMarkup([[BACK_BTN, CANCEL_BTN]], resize_keyboard=True),
     )
+    await update.message.reply_text("⬇️ Навігація", reply_markup=back_cancel_kb)
+    context.user_data["current_state"] = SET_DURATION
     return SET_DURATION
 
 
@@ -188,6 +315,8 @@ async def set_duration(update: Update, context: ContextTypes.DEFAULT_TYPE):
         resize_keyboard=True,
     )
     await update.message.reply_text("Дата набрання чинності:", reply_markup=kb)
+    await update.message.reply_text("⬇️ Навігація", reply_markup=back_cancel_kb)
+    context.user_data["current_state"] = SET_VALID_FROM
     return SET_VALID_FROM
 
 
@@ -217,6 +346,8 @@ async def set_valid_from(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"{p['id']}: {p['name']}": p["id"] for p in payers
     }
     await update.message.reply_text("Оберіть пайовика:", reply_markup=kb)
+    await update.message.reply_text("⬇️ Навігація", reply_markup=back_cancel_kb)
+    context.user_data["current_state"] = CHOOSE_PAYER
     return CHOOSE_PAYER
 
 
@@ -253,6 +384,8 @@ async def choose_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         resize_keyboard=True,
     )
     await update.message.reply_text(msg, reply_markup=kb)
+    await update.message.reply_text("⬇️ Навігація", reply_markup=back_cancel_kb)
+    context.user_data["current_state"] = INPUT_LANDS
     return INPUT_LANDS
 
 
@@ -266,6 +399,8 @@ async def save_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Введіть кадастровий номер:",
             reply_markup=ReplyKeyboardMarkup([[BACK_BTN, CANCEL_BTN]], resize_keyboard=True),
         )
+        await update.message.reply_text("⬇️ Навігація", reply_markup=back_cancel_kb)
+        context.user_data["current_state"] = SEARCH_LAND
         return SEARCH_LAND
     if text == "✅ Завершити":
         land_ids = context.user_data.get("land_ids", [])
@@ -287,6 +422,8 @@ async def save_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Додано: {' '.join(map(str, new_ids))}. Поточний список: {land_list}\nНатисніть '✅ Завершити' коли закінчите.",
             reply_markup=ReplyKeyboardMarkup([["🔍 Пошук ділянки", "✅ Завершити"], [BACK_BTN, CANCEL_BTN]], resize_keyboard=True),
         )
+        await update.message.reply_text("⬇️ Навігація", reply_markup=back_cancel_kb)
+        context.user_data["current_state"] = INPUT_LANDS
         return INPUT_LANDS
         
     land_ids = context.user_data.get("land_ids", [])
@@ -335,15 +472,36 @@ async def save_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
 add_contract_conv = ConversationHandler(
     entry_points=[MessageHandler(filters.Regex("^➕ Створити договір$"), add_contract_start)],
     states={
-        CHOOSE_COMPANY: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_company)],
-        SET_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_duration)],
-        SET_VALID_FROM: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_valid_from)],
-        CHOOSE_PAYER: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_payer)],
+        CHOOSE_COMPANY: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, choose_company),
+            CallbackQueryHandler(contract_cancel, pattern=f"^{CANCEL_CB}$"),
+        ],
+        SET_DURATION: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, set_duration),
+            CallbackQueryHandler(contract_back, pattern=f"^{BACK_CB}$"),
+            CallbackQueryHandler(contract_cancel, pattern=f"^{CANCEL_CB}$"),
+        ],
+        SET_VALID_FROM: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, set_valid_from),
+            CallbackQueryHandler(contract_back, pattern=f"^{BACK_CB}$"),
+            CallbackQueryHandler(contract_cancel, pattern=f"^{CANCEL_CB}$"),
+        ],
+        CHOOSE_PAYER: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, choose_payer),
+            CallbackQueryHandler(contract_back, pattern=f"^{BACK_CB}$"),
+            CallbackQueryHandler(contract_cancel, pattern=f"^{CANCEL_CB}$"),
+        ],
         INPUT_LANDS: [
             MessageHandler(filters.TEXT & ~filters.COMMAND, save_contract),
             CallbackQueryHandler(add_land_from_search, pattern=r"^add_land_to_contract:\d+$"),
+            CallbackQueryHandler(contract_back, pattern=f"^{BACK_CB}$"),
+            CallbackQueryHandler(contract_cancel, pattern=f"^{CANCEL_CB}$"),
         ],
-        SEARCH_LAND: [MessageHandler(filters.TEXT & ~filters.COMMAND, search_land)],
+        SEARCH_LAND: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, search_land),
+            CallbackQueryHandler(contract_back, pattern=f"^{BACK_CB}$"),
+            CallbackQueryHandler(contract_cancel, pattern=f"^{CANCEL_CB}$"),
+        ],
     },
     fallbacks=[],
 )
