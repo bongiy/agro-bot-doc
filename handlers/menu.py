@@ -4,11 +4,10 @@ from keyboards.menu import (
     main_menu, main_menu_admin,
     payers_menu, lands_menu, fields_menu, contracts_menu,
     payments_menu, reports_menu, search_menu, admin_panel_menu, admin_tov_menu
-    )
+)
 from db import get_companies, get_company
 
-# TODO: Замініть цей список на актуальні admin_ids або імпортуйте з config
-admin_ids = [370806943]  # <--- Вкажи свій Telegram user_id тут!
+admin_ids = [370806943]  # TODO: Замініть цей список на актуальні admin_ids або імпортуйте з config
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_admin = update.effective_user.id in admin_ids
@@ -50,37 +49,54 @@ async def search_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def admin_panel_handler(update, context):
     admin_ids = [370806943]  # <--- твій tg_id
     if update.effective_user.id not in admin_ids:
-        await update.message.reply_text("У вас немає прав для цієї дії.")
+        msg = getattr(update, 'message', None)
+        if msg:
+            await msg.reply_text("У вас немає прав для цієї дії.")
+        else:
+            await update.callback_query.answer("У вас немає прав для цієї дії.", show_alert=True)
         return
-    await update.message.reply_text(
+    text = (
         "🛡️ <b>Адмінпанель</b>:\n\n"
-        "Оберіть розділ для адміністрування:",
-        parse_mode="HTML",
-        reply_markup=admin_panel_menu
+        "Оберіть розділ для адміністрування:"
     )
+    reply_markup = admin_panel_menu
+    msg = getattr(update, 'message', None)
+    if msg:
+        await msg.reply_text(text, parse_mode="HTML", reply_markup=reply_markup)
+    else:
+        await update.callback_query.edit_message_text(text, parse_mode="HTML", reply_markup=reply_markup)
 
 async def admin_tov_handler(update, context):
-    await update.message.reply_text(
-        "🏢 Менеджмент ТОВ-орендарів:\n\nОберіть дію:",
-        reply_markup=admin_tov_menu
-    )
+    msg = getattr(update, 'message', None)
+    text = "🏢 Менеджмент ТОВ-орендарів:\n\nОберіть дію:"
+    reply_markup = admin_tov_menu
+    if msg:
+        await msg.reply_text(text, reply_markup=reply_markup)
+    else:
+        await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
 
 # --- Список ТОВ (кнопка) ---
 async def admin_tov_list_handler(update, context):
     companies = await get_companies()
+    text = "<b>Список ТОВ-орендарів:</b>\nОберіть компанію для перегляду картки."
     if not companies:
-        await update.message.reply_text("Немає жодного ТОВ-орендаря.")
-        return
+        text = "Немає жодного ТОВ-орендаря."
     keyboard = [
         [InlineKeyboardButton(
             f"{c['short_name'] or c['full_name']}", callback_data=f"company_card:{c['id']}")]
         for c in companies
-    ]
-    await update.message.reply_text(
-        "<b>Список ТОВ-орендарів:</b>\nОберіть компанію для перегляду картки.",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="HTML"
-    )
+    ] if companies else None
+
+    msg = getattr(update, 'message', None)
+    if msg:
+        await msg.reply_text(
+            text, reply_markup=InlineKeyboardMarkup(keyboard) if keyboard else None, parse_mode="HTML"
+        )
+    else:
+        await update.callback_query.edit_message_text(
+            text, reply_markup=InlineKeyboardMarkup(keyboard) if keyboard else None, parse_mode="HTML"
+        )
+
 # --- Картка ТОВ (CallbackQuery) ---
 async def admin_company_card_callback(update, context):
     query = update.callback_query
@@ -113,20 +129,44 @@ async def admin_company_card_callback(update, context):
 # --- Stub-функції для інших розділів адмінки ---
 
 async def admin_templates_handler(update, context):
-    await update.message.reply_text("Менеджмент шаблонів договорів — в розробці.")
+    msg = getattr(update, 'message', None)
+    if msg:
+        await msg.reply_text("Менеджмент шаблонів договорів — в розробці.")
+    else:
+        await update.callback_query.edit_message_text("Менеджмент шаблонів договорів — в розробці.")
 
 async def admin_users_handler(update, context):
-    await update.message.reply_text("Менеджмент користувачів — в розробці.")
+    msg = getattr(update, 'message', None)
+    if msg:
+        await msg.reply_text("Менеджмент користувачів — в розробці.")
+    else:
+        await update.callback_query.edit_message_text("Менеджмент користувачів — в розробці.")
 
 async def admin_delete_handler(update, context):
-    await update.message.reply_text("Видалення об’єктів — в розробці.")
+    msg = getattr(update, 'message', None)
+    if msg:
+        await msg.reply_text("Видалення об’єктів — в розробці.")
+    else:
+        await update.callback_query.edit_message_text("Видалення об’єктів — в розробці.")
 
 async def admin_tov_edit_handler(update, context):
-    await update.message.reply_text("Редагування ТОВ — в розробці.")
+    msg = getattr(update, 'message', None)
+    if msg:
+        await msg.reply_text("Редагування ТОВ — в розробці.")
+    else:
+        await update.callback_query.edit_message_text("Редагування ТОВ — в розробці.")
 
 async def admin_tov_delete_handler(update, context):
-    await update.message.reply_text("Видалення ТОВ — в розробці.")
+    msg = getattr(update, 'message', None)
+    if msg:
+        await msg.reply_text("Видалення ТОВ — в розробці.")
+    else:
+        await update.callback_query.edit_message_text("Видалення ТОВ — в розробці.")
 
 async def to_admin_panel(update, context):
     from keyboards.menu import admin_panel_menu
-    await update.message.reply_text("🛡️ Адмінпанель:", reply_markup=admin_panel_menu)
+    msg = getattr(update, 'message', None)
+    if msg:
+        await msg.reply_text("🛡️ Адмінпанель:", reply_markup=admin_panel_menu)
+    else:
+        await update.callback_query.edit_message_text("🛡️ Адмінпанель:", reply_markup=admin_panel_menu)
