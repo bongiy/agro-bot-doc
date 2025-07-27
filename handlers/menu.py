@@ -81,7 +81,6 @@ async def admin_tov_list_handler(update, context):
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="HTML"
     )
-
 # --- Картка ТОВ (CallbackQuery) ---
 async def admin_company_card_callback(update, context):
     query = update.callback_query
