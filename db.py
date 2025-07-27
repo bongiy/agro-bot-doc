@@ -185,3 +185,10 @@ async def ensure_admin(tg_id: int, username: str | None = None):
 
 # Create all tables if they do not exist.
 metadata.create_all(engine)
+
+# Ensure new columns exist for older databases
+with engine.begin() as conn:
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)'
+    ))
+
