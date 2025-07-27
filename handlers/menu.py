@@ -5,22 +5,46 @@ from keyboards.menu import (
     payers_menu, lands_menu, fields_menu, contracts_menu,
     payments_menu, reports_menu, search_menu, admin_panel_menu, admin_tov_menu
 )
-from db import get_companies, get_company
+from db import (
+    get_companies, get_company,
+    get_user_by_tg_id, add_user, get_users, update_user, log_admin_action
+)
 
-admin_ids = [370806943]  # TODO: Замініть цей список на актуальні admin_ids або імпортуйте з config
+
+def admin_only(handler):
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        user_id = update.effective_user.id
+        user = await get_user_by_tg_id(user_id)
+        if not user or user['role'] != 'admin' or not user['is_active']:
+            msg = getattr(update, 'message', None)
+            if msg:
+                await msg.reply_text('⛔ У вас немає прав для цієї дії.')
+            else:
+                await update.callback_query.answer('⛔ У вас немає прав для цієї дії.', show_alert=True)
+            return
+        return await handler(update, context, *args, **kwargs)
+    return wrapper
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    is_admin = update.effective_user.id in admin_ids
+    tg_id = update.effective_user.id
+    username = update.effective_user.username
+    user = await get_user_by_tg_id(tg_id)
+    if not user:
+        await add_user(tg_id, username=username)
+        user_role = "user"
+    else:
+        user_role = user["role"]
     await update.message.reply_text(
         "Вітаємо! Головне меню:",
-        reply_markup=main_menu_admin if is_admin else main_menu
+        reply_markup=main_menu_admin if user_role == "admin" else main_menu
     )
 
 async def to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    is_admin = update.effective_user.id in admin_ids
+    user = await get_user_by_tg_id(update.effective_user.id)
+    role = user["role"] if user else "user"
     await update.message.reply_text(
         "Головне меню:",
-        reply_markup=main_menu_admin if is_admin else main_menu
+        reply_markup=main_menu_admin if role == "admin" else main_menu
     )
 
 async def payers_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -46,15 +70,8 @@ async def search_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # --- АДМІНПАНЕЛЬ ---
 
+@admin_only
 async def admin_panel_handler(update, context):
-    admin_ids = [370806943]  # <--- твій tg_id
-    if update.effective_user.id not in admin_ids:
-        msg = getattr(update, 'message', None)
-        if msg:
-            await msg.reply_text("У вас немає прав для цієї дії.")
-        else:
-            await update.callback_query.answer("У вас немає прав для цієї дії.", show_alert=True)
-        return
 
     text = (
         "🛡️ <b>Адмінпанель</b>:\n\n"
@@ -71,6 +88,7 @@ async def admin_panel_handler(update, context):
         )
 
 
+@admin_only
 async def admin_tov_handler(update, context):
     msg = getattr(update, 'message', None)
     text = "🏢 Менеджмент ТОВ-орендарів:\n\nОберіть дію:"
@@ -81,6 +99,7 @@ async def admin_tov_handler(update, context):
         await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
 
 # --- Список ТОВ (кнопка) ---
+@admin_only
 async def admin_tov_list_handler(update, context):
     companies = await get_companies()
     text = "<b>Список ТОВ-орендарів:</b>\nОберіть компанію для перегляду картки."
@@ -103,6 +122,7 @@ async def admin_tov_list_handler(update, context):
         )
 
 # --- Картка ТОВ (CallbackQuery) ---
+@admin_only
 async def admin_company_card_callback(update, context):
     query = update.callback_query
     company_id = int(query.data.split(":")[1])
@@ -133,6 +153,7 @@ async def admin_company_card_callback(update, context):
 
 # --- Stub-функції для інших розділів адмінки ---
 
+@admin_only
 async def admin_templates_handler(update, context):
     msg = getattr(update, 'message', None)
     if msg:
@@ -140,6 +161,7 @@ async def admin_templates_handler(update, context):
     else:
         await update.callback_query.edit_message_text("Менеджмент шаблонів договорів — в розробці.", reply_markup=InlineKeyboardMarkup([]))
 
+@admin_only
 async def admin_users_handler(update, context):
     msg = getattr(update, 'message', None)
     if msg:
@@ -147,6 +169,7 @@ async def admin_users_handler(update, context):
     else:
         await update.callback_query.edit_message_text("Менеджмент користувачів — в розробці.", reply_markup=InlineKeyboardMarkup([]))
 
+@admin_only
 async def admin_delete_handler(update, context):
     msg = getattr(update, 'message', None)
     if msg:
@@ -154,6 +177,7 @@ async def admin_delete_handler(update, context):
     else:
         await update.callback_query.edit_message_text("Видалення об’єктів — в розробці.", reply_markup=InlineKeyboardMarkup([]))
 
+@admin_only
 async def admin_tov_edit_handler(update, context):
     companies = await get_companies()
     text = "<b>Оберіть ТОВ для редагування:</b>"
@@ -172,6 +196,7 @@ async def admin_tov_edit_handler(update, context):
     else:
         await update.callback_query.edit_message_text(text, reply_markup=inline_kb, parse_mode="HTML")
 
+@admin_only
 async def admin_tov_delete_handler(update, context):
     msg = getattr(update, 'message', None)
     if msg:
@@ -179,6 +204,7 @@ async def admin_tov_delete_handler(update, context):
     else:
         await update.callback_query.edit_message_text("Видалення ТОВ — в розробці.", reply_markup=InlineKeyboardMarkup([]))
 
+@admin_only
 async def to_admin_panel(update, context):
     from keyboards.menu import admin_panel_menu
     msg = getattr(update, 'message', None)
@@ -186,3 +212,67 @@ async def to_admin_panel(update, context):
         await msg.reply_text("🛡️ Адмінпанель:", reply_markup=admin_panel_menu)
     else:
         await update.callback_query.edit_message_text("🛡️ Адмінпанель:", reply_markup=admin_panel_menu)
+
+
+# --- Команди адміністрування користувачів ---
+
+@admin_only
+async def cmd_list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    users = await get_users()
+    lines = [f"{u['telegram_id']} | {u['role']} | {'активний' if u['is_active'] else 'заблокований'}" for u in users]
+    text = "\n".join(lines) if lines else "Користувачів не знайдено."
+    await update.message.reply_text(text)
+
+@admin_only
+async def cmd_add_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text('Вкажіть Telegram ID користувача.')
+        return
+    tg_id = int(context.args[0])
+    user = await get_user_by_tg_id(tg_id)
+    if user:
+        await update.message.reply_text('Користувач вже існує.')
+        return
+    await add_user(tg_id)
+    await log_admin_action(update.effective_user.id, f"add_user {tg_id}")
+    await update.message.reply_text('Користувача додано.')
+
+@admin_only
+async def cmd_promote(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text('Вкажіть Telegram ID.')
+        return
+    tg_id = int(context.args[0])
+    await update_user(tg_id, {'role': 'admin'})
+    await log_admin_action(update.effective_user.id, f"promote {tg_id}")
+    await update.message.reply_text('Роль змінено на admin.')
+
+@admin_only
+async def cmd_demote(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text('Вкажіть Telegram ID.')
+        return
+    tg_id = int(context.args[0])
+    await update_user(tg_id, {'role': 'user'})
+    await log_admin_action(update.effective_user.id, f"demote {tg_id}")
+    await update.message.reply_text('Роль змінено на user.')
+
+@admin_only
+async def cmd_block(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text('Вкажіть Telegram ID.')
+        return
+    tg_id = int(context.args[0])
+    await update_user(tg_id, {'is_active': False})
+    await log_admin_action(update.effective_user.id, f"block {tg_id}")
+    await update.message.reply_text('Користувача заблоковано.')
+
+@admin_only
+async def cmd_unblock(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text('Вкажіть Telegram ID.')
+        return
+    tg_id = int(context.args[0])
+    await update_user(tg_id, {'is_active': True})
+    await log_admin_action(update.effective_user.id, f"unblock {tg_id}")
+    await update.message.reply_text('Користувача розблоковано.')

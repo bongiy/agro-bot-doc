@@ -12,6 +12,9 @@ from handlers.menu import (
     admin_users_handler, admin_delete_handler, admin_tov_list_handler,
     admin_tov_edit_handler, admin_tov_delete_handler, to_admin_panel, admin_company_card_callback
 )
+from handlers.menu import (
+    cmd_list_users, cmd_add_user, cmd_promote, cmd_demote, cmd_block, cmd_unblock
+)
 from dialogs.payer import (
     add_payer_conv, show_payers, payer_card, delete_payer,
     create_contract, to_menu
@@ -53,6 +56,12 @@ async def on_shutdown():
 # === Основні handlers ===
 
 application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("users", cmd_list_users))
+application.add_handler(CommandHandler("add_user", cmd_add_user))
+application.add_handler(CommandHandler("promote", cmd_promote))
+application.add_handler(CommandHandler("demote", cmd_demote))
+application.add_handler(CommandHandler("block", cmd_block))
+application.add_handler(CommandHandler("unblock", cmd_unblock))
 application.add_handler(MessageHandler(filters.Regex("^◀️ Назад$"), to_main_menu))
 application.add_handler(MessageHandler(filters.Regex("^👤 Пайовики$"), payers_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^🌿 Ділянки$"), lands_menu_handler))
