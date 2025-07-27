@@ -13,11 +13,24 @@ from keyboards.menu import (
     payments_menu, reports_menu, search_menu, admin_panel_menu, admin_tov_menu
 )
 from db import (
-    get_companies, get_company,
-    get_user_by_tg_id, add_user, get_users, update_user, log_admin_action
+    get_companies,
+    get_company,
+    get_user_by_tg_id,
+    add_user,
+    get_users,
+    update_user,
+    log_admin_action,
 )
 
-ADD_USER_START, ADD_USER_ID, ADD_USER_CONFIRM, CHANGE_ROLE_ID, CHANGE_ROLE_CONFIRM, BLOCK_USER_ID = range(6)
+(
+    ADD_USER_ID,
+    ADD_USER_NAME,
+    CHANGE_ROLE_ID,
+    CHANGE_ROLE_ROLE,
+    BLOCK_USER_ID,
+    CHANGE_NAME_ID,
+    CHANGE_NAME_NAME,
+) = range(7)
 
 def admin_only(handler):
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
@@ -38,7 +51,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.effective_user.username
     user = await get_user_by_tg_id(tg_id)
     if not user:
-        await add_user(tg_id, username=username)
+        full_name = update.effective_user.full_name
+        await add_user(tg_id, username=username, full_name=full_name)
         user_role = "user"
     else:
         user_role = user["role"]
@@ -175,6 +189,7 @@ async def admin_users_handler(update, context):
         [InlineKeyboardButton("\U0001F4C4 Список користувачів", callback_data="user_list")],
         [InlineKeyboardButton("\u2795 Додати користувача", callback_data="user_add")],
         [InlineKeyboardButton("\U0001F501 Змінити роль", callback_data="user_role")],
+        [InlineKeyboardButton("✏️ Змінити ПІБ", callback_data="user_fullname")],
         [InlineKeyboardButton("\U0001F6AB Блокування", callback_data="user_block")],
         [InlineKeyboardButton("↩️ Адмінпанель", callback_data="admin_panel")]
     ]
@@ -195,8 +210,8 @@ async def admin_user_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     users = await get_users()
     lines = [
-        f"<code>{u['telegram_id']}</code> | {u['role']} | "
-        f"{'активний' if u['is_active'] else 'заблокований'}" for u in users
+        f"{u['full_name'] or '—'} / <code>{u['telegram_id']}</code> / {u['role']}"
+        for u in users
     ]
     text = '<b>Список користувачів</b>:\n' + ("\n".join(lines) if lines else "Користувачів не знайдено.")
     keyboard = [[InlineKeyboardButton("↩️ Назад", callback_data="admin_users")]]
@@ -214,7 +229,7 @@ async def add_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
-async def add_user_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def add_user_get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         tg_id = int(update.message.text.strip())
     except ValueError:
@@ -223,10 +238,22 @@ async def add_user_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = await get_user_by_tg_id(tg_id)
     if user:
         await update.message.reply_text("Користувач вже існує.")
-    else:
-        await add_user(tg_id)
-        await log_admin_action(update.effective_user.id, f"add_user {tg_id}")
-        await update.message.reply_text("Користувача додано.")
+        return ADD_USER_ID
+    context.user_data['new_user_id'] = tg_id
+    await update.message.reply_text("Введіть ПІБ користувача:")
+    return ADD_USER_NAME
+
+
+@admin_only
+async def add_user_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    tg_id = context.user_data.pop('new_user_id', None)
+    if tg_id is None:
+        await update.message.reply_text("Сталася помилка. Спробуйте ще раз.")
+        return ConversationHandler.END
+    full_name = update.message.text.strip()
+    await add_user(tg_id, full_name=full_name)
+    await log_admin_action(update.effective_user.id, f"add_user {tg_id}")
+    await update.message.reply_text("Користувача додано.")
     await update.message.reply_text(
         "Менеджмент користувачів:",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("↩️ Назад", callback_data="admin_users")]])
@@ -245,7 +272,7 @@ async def change_role_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_only
-async def change_role_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def change_role_get_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         tg_id = int(update.message.text.strip())
     except ValueError:
@@ -254,11 +281,25 @@ async def change_role_finish(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user = await get_user_by_tg_id(tg_id)
     if not user:
         await update.message.reply_text("Користувача не знайдено.")
-    else:
-        new_role = "user" if user["role"] == "admin" else "admin"
-        await update_user(tg_id, {"role": new_role})
-        await log_admin_action(update.effective_user.id, f"toggle_role {tg_id}")
-        await update.message.reply_text(f"Роль змінено на {new_role}.")
+        return CHANGE_ROLE_ID
+    context.user_data['edit_user_id'] = tg_id
+    await update.message.reply_text("Введіть нову роль (user/admin):")
+    return CHANGE_ROLE_ROLE
+
+
+@admin_only
+async def change_role_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    role = update.message.text.strip().lower()
+    if role not in {"user", "admin"}:
+        await update.message.reply_text("Роль повинна бути 'user' або 'admin'.")
+        return CHANGE_ROLE_ROLE
+    tg_id = context.user_data.pop('edit_user_id', None)
+    if tg_id is None:
+        await update.message.reply_text("Сталася помилка. Спробуйте ще раз.")
+        return ConversationHandler.END
+    await update_user(tg_id, {"role": role})
+    await log_admin_action(update.effective_user.id, f"set_role {tg_id} {role}")
+    await update.message.reply_text(f"Роль змінено на {role}.")
     await update.message.reply_text(
         "Менеджмент користувачів:",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("↩️ Назад", callback_data="admin_users")]])
@@ -293,6 +334,49 @@ async def block_user_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await log_admin_action(update.effective_user.id, f"{action} {tg_id}")
         text = "Користувача розблоковано." if new_status else "Користувача заблоковано."
         await update.message.reply_text(text)
+    await update.message.reply_text(
+        "Менеджмент користувачів:",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("↩️ Назад", callback_data="admin_users")]])
+    )
+    return ConversationHandler.END
+
+
+@admin_only
+async def change_name_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.message.edit_text(
+        "Введіть Telegram ID користувача:",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Скасувати", callback_data="admin_users")]])
+    )
+    return CHANGE_NAME_ID
+
+
+@admin_only
+async def change_name_get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        tg_id = int(update.message.text.strip())
+    except ValueError:
+        await update.message.reply_text("Введіть числовий ID:")
+        return CHANGE_NAME_ID
+    user = await get_user_by_tg_id(tg_id)
+    if not user:
+        await update.message.reply_text("Користувача не знайдено.")
+        return CHANGE_NAME_ID
+    context.user_data['change_name_id'] = tg_id
+    await update.message.reply_text("Введіть новий ПІБ:")
+    return CHANGE_NAME_NAME
+
+
+@admin_only
+async def change_name_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    tg_id = context.user_data.pop('change_name_id', None)
+    if tg_id is None:
+        await update.message.reply_text("Сталася помилка. Спробуйте ще раз.")
+        return ConversationHandler.END
+    full_name = update.message.text.strip()
+    await update_user(tg_id, {"full_name": full_name})
+    await log_admin_action(update.effective_user.id, f"change_full_name {tg_id}")
+    await update.message.reply_text("✅ ПІБ оновлено")
     await update.message.reply_text(
         "Менеджмент користувачів:",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("↩️ Назад", callback_data="admin_users")]])
@@ -413,7 +497,8 @@ async def cmd_unblock(update: Update, context: ContextTypes.DEFAULT_TYPE):
 add_user_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(add_user_start, pattern=r"^user_add$")],
     states={
-        ADD_USER_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_user_finish)],
+        ADD_USER_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_user_get_name)],
+        ADD_USER_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_user_finish)],
     },
     fallbacks=[CallbackQueryHandler(admin_users_handler, pattern=r"^admin_users$")]
 )
@@ -421,7 +506,8 @@ add_user_conv = ConversationHandler(
 change_role_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(change_role_start, pattern=r"^user_role$")],
     states={
-        CHANGE_ROLE_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, change_role_finish)],
+        CHANGE_ROLE_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, change_role_get_role)],
+        CHANGE_ROLE_ROLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, change_role_finish)],
     },
     fallbacks=[CallbackQueryHandler(admin_users_handler, pattern=r"^admin_users$")]
 )
@@ -430,6 +516,15 @@ block_user_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(block_user_start, pattern=r"^user_block$")],
     states={
         BLOCK_USER_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, block_user_finish)],
+    },
+    fallbacks=[CallbackQueryHandler(admin_users_handler, pattern=r"^admin_users$")]
+)
+
+change_name_conv = ConversationHandler(
+    entry_points=[CallbackQueryHandler(change_name_start, pattern=r"^user_fullname$")],
+    states={
+        CHANGE_NAME_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, change_name_get_name)],
+        CHANGE_NAME_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, change_name_finish)],
     },
     fallbacks=[CallbackQueryHandler(admin_users_handler, pattern=r"^admin_users$")]
 )
