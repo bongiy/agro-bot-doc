@@ -9,7 +9,8 @@ from handlers.menu import (
     start, to_main_menu, payers_menu_handler, lands_menu_handler, fields_menu_handler,
     contracts_menu_handler, payments_menu_handler, reports_menu_handler, search_menu_handler,
     admin_panel_handler, admin_tov_handler, admin_templates_handler,
-    admin_users_handler, admin_delete_handler
+    admin_users_handler, admin_delete_handler, admin_tov_list_handler,
+    admin_tov_edit_handler, admin_tov_delete_handler, to_admin_panel
 )
 from dialogs.payer import (
     add_payer_conv, show_payers, payer_card, delete_payer,
@@ -103,6 +104,12 @@ application.add_handler(MessageHandler(filters.Regex("^📄 Шаблони до�
 application.add_handler(MessageHandler(filters.Regex("^👥 Користувачі$"), admin_users_handler))
 application.add_handler(MessageHandler(filters.Regex("^🗑️ Видалення об’єктів$"), admin_delete_handler))
 application.add_handler(MessageHandler(filters.Regex("^↩️ Головне меню$"), to_main_menu))
+# --- АДМІНКА ТОВ ---
+application.add_handler(MessageHandler(filters.Regex("^➕ Додати ТОВ$"), admin_tov_add_handler))
+application.add_handler(MessageHandler(filters.Regex("^📋 Список ТОВ$"), admin_tov_list_handler))
+application.add_handler(MessageHandler(filters.Regex("^✏️ Редагувати ТОВ$"), admin_tov_edit_handler))
+application.add_handler(MessageHandler(filters.Regex("^🗑️ Видалити ТОВ$"), admin_tov_delete_handler))
+application.add_handler(MessageHandler(filters.Regex("^↩️ Адмінпанель$"), to_admin_panel))
 
 @app.post(WEBHOOK_PATH)
 async def telegram_webhook(request: Request):
