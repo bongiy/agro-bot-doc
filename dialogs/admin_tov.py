@@ -239,7 +239,7 @@ async def admin_company_card_callback(update, context):
         f"<b>IBAN:</b> <code>{company['bank_account']}</code>\n"
         f"<b>Група оподаткування:</b> <code>{company['tax_group']}</code>\n"
         f"<b>ПДВ:</b> <code>{'так' if company['is_vat_payer'] else 'ні'}</code>\n"
-        f"<b>ІПН платника ПДВ:</b> <code>{company.get('vat_ipn', '') or '—'}</code>\n"
+        f"<b>ІПН платника ПДВ:</b> <code>{company['vat_ipn'] or '—'}</code>\n"
         f"<b>Юридична адреса:</b> <code>{company['address_legal']}</code>\n"
         f"<b>Поштова адреса:</b> <code>{company['address_postal']}</code>\n"
         f"<b>Директор:</b> <code>{company['director']}</code>\n"
