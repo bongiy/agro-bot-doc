@@ -63,6 +63,8 @@ def repack_pdf(input_path, output_path):
 
 async def start_add_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    context.user_data.pop("post_create_msg", None)
+    context.user_data.pop("post_create_markup", None)
     _, entity_type, entity_id = query.data.split(":")
     context.user_data["entity_type"] = entity_type
     context.user_data["entity_id"] = entity_id
