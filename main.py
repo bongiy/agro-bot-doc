@@ -8,7 +8,7 @@ from telegram.ext import (
 from handlers.menu import (
     start, to_main_menu, payers_menu_handler, lands_menu_handler, fields_menu_handler,
     contracts_menu_handler, payments_menu_handler, reports_menu_handler, search_menu_handler,
-    restart_bot, admin_panel_handler
+    admin_panel_handler
 )
 from dialogs.payer import (
     add_payer_conv, show_payers, payer_card, delete_payer,
