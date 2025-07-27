@@ -10,7 +10,7 @@ from handlers.menu import (
     contracts_menu_handler, payments_menu_handler, reports_menu_handler, search_menu_handler,
     admin_panel_handler, admin_tov_handler, admin_templates_handler,
     admin_users_handler, admin_delete_handler, admin_tov_list_handler,
-    admin_tov_edit_handler, admin_tov_delete_handler, admin_tov_add_handler, to_admin_panel
+    admin_tov_edit_handler, admin_tov_delete_handler, to_admin_panel
 )
 from dialogs.payer import (
     add_payer_conv, show_payers, payer_card, delete_payer,
