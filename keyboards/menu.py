@@ -103,3 +103,13 @@ admin_panel_menu = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True
 )
+# ТОВ
+
+admin_tov_menu = ReplyKeyboardMarkup(
+    [
+        ["➕ Додати ТОВ", "📋 Список ТОВ"],
+        ["✏️ Редагувати ТОВ", "🗑️ Видалити ТОВ"],
+        ["↩️ Адмінпанель"]
+    ],
+    resize_keyboard=True
+)
