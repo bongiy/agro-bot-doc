@@ -8,7 +8,8 @@ from telegram.ext import (
 from handlers.menu import (
     start, to_main_menu, payers_menu_handler, lands_menu_handler, fields_menu_handler,
     contracts_menu_handler, payments_menu_handler, reports_menu_handler, search_menu_handler,
-    admin_panel_handler
+    admin_panel_handler, admin_tov_handler, admin_templates_handler,
+    admin_users_handler, admin_delete_handler
 )
 from dialogs.payer import (
     add_payer_conv, show_payers, payer_card, delete_payer,
@@ -95,6 +96,13 @@ application.add_handler(CallbackQueryHandler(create_contract, pattern=r"^create_
 
 # fallback: обробляємо всі невідомі команди поверненням у головне меню
 application.add_handler(MessageHandler(filters.COMMAND, to_main_menu))
+
+# --- АДМІНКА ---
+application.add_handler(MessageHandler(filters.Regex("^🏢 ТОВ-орендарі$"), admin_tov_handler))
+application.add_handler(MessageHandler(filters.Regex("^📄 Шаблони договорів$"), admin_templates_handler))
+application.add_handler(MessageHandler(filters.Regex("^👥 Користувачі$"), admin_users_handler))
+application.add_handler(MessageHandler(filters.Regex("^🗑️ Видалення об’єктів$"), admin_delete_handler))
+application.add_handler(MessageHandler(filters.Regex("^↩️ Головне меню$"), to_main_menu))
 
 @app.post(WEBHOOK_PATH)
 async def telegram_webhook(request: Request):
