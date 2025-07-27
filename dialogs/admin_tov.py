@@ -2,16 +2,87 @@ from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ConversationHandler, MessageHandler, filters
 
 (
-    ADD_NAME, ADD_EDRPOU, ADD_BANK, ADD_TAX_GROUP, ADD_VAT, ADD_VAT_IPN,
+    OPF_SELECT, BASE_NAME, NAME_CONFIRM, FULL_NAME_MANUAL, SHORT_NAME_MANUAL,
+    ADD_EDRPOU, ADD_BANK, ADD_TAX_GROUP, ADD_VAT, ADD_VAT_IPN,
     ADD_ADDRESS_LEGAL, ADD_ADDRESS_POSTAL, ADD_DIRECTOR, CONFIRM
-) = range(10)
+) = range(14)
+
+# Автоматична генерація назв
+def get_company_names(opf, base):
+    opf = opf.upper()
+    base = base.strip()
+    if opf == "ТОВ":
+        return (
+            f"ТОВАРИСТВО З ОБМЕЖЕНОЮ ВІДПОВІДАЛЬНІСТЮ «{base.upper()}»",
+            f"ТОВ «{base}»"
+        )
+    elif opf == "ФГ":
+        return (
+            f"ФЕРМЕРСЬКЕ ГОСПОДАРСТВО «{base.upper()}»",
+            f"ФГ «{base}»"
+        )
+    elif opf == "ФОП":
+        return (
+            f"ФІЗИЧНА ОСОБА-ПІДПРИЄМЕЦЬ {base.upper()}",
+            f"ФОП {base}"
+        )
+    elif opf == "ПП":
+        return (
+            f"ПРИВАТНЕ ПІДПРИЄМСТВО «{base.upper()}»",
+            f"ПП «{base}»"
+        )
+    return (base, base)
+
+# === FSM-кроки ===
 
 async def admin_tov_add_start(update, context):
-    await update.message.reply_text("Введіть <b>назву ТОВ</b>:", parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
-    return ADD_NAME
+    kb = ReplyKeyboardMarkup([["ТОВ", "ФГ"], ["ФОП", "ПП"]], resize_keyboard=True)
+    await update.message.reply_text(
+        "Оберіть <b>організаційно-правову форму (ОПФ)</b> компанії:",
+        parse_mode="HTML",
+        reply_markup=kb
+    )
+    return OPF_SELECT
 
-async def admin_tov_add_name(update, context):
-    context.user_data['new_tov'] = {'name': update.message.text.strip()}
+async def admin_tov_add_opf(update, context):
+    context.user_data['new_tov'] = {'opf': update.message.text.strip().upper()}
+    await update.message.reply_text(
+        "Введіть базову назву компанії (наприклад, «Зоря», або ПІБ для ФОП):",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return BASE_NAME
+
+async def admin_tov_add_base_name(update, context):
+    opf = context.user_data['new_tov']['opf']
+    base = update.message.text.strip()
+    full_name, short_name = get_company_names(opf, base)
+    context.user_data['new_tov']['name'] = base
+    context.user_data['new_tov']['full_name'] = full_name
+    context.user_data['new_tov']['short_name'] = short_name
+    await update.message.reply_text(
+        f"<b>Повна назва:</b> <code>{full_name}</code>\n"
+        f"<b>Скорочена назва:</b> <code>{short_name}</code>\n\n"
+        f"Бажаєте залишити як є чи ввести вручну?",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup([["✅ Залишити", "✏️ Змінити"]], resize_keyboard=True)
+    )
+    return NAME_CONFIRM
+
+async def admin_tov_add_name_confirm(update, context):
+    if update.message.text == "✏️ Змінити":
+        await update.message.reply_text("Введіть <b>повну назву компанії</b>:", parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
+        return FULL_NAME_MANUAL
+    else:
+        await update.message.reply_text("Введіть <b>ЄДРПОУ</b>:", parse_mode="HTML")
+        return ADD_EDRPOU
+
+async def admin_tov_add_full_name_manual(update, context):
+    context.user_data['new_tov']['full_name'] = update.message.text.strip()
+    await update.message.reply_text("Введіть <b>скорочену назву компанії</b>:", parse_mode="HTML")
+    return SHORT_NAME_MANUAL
+
+async def admin_tov_add_short_name_manual(update, context):
+    context.user_data['new_tov']['short_name'] = update.message.text.strip()
     await update.message.reply_text("Введіть <b>ЄДРПОУ</b>:", parse_mode="HTML")
     return ADD_EDRPOU
 
@@ -64,7 +135,10 @@ async def admin_tov_add_director(update, context):
     vat_payer = "Так" if tov['is_vat_payer'] else "Ні"
     text = (
         f"<b>Перевірте дані:</b>\n"
-        f"Назва: <code>{tov['name']}</code>\n"
+        f"ОПФ: <code>{tov['opf']}</code>\n"
+        f"Повна назва: <code>{tov['full_name']}</code>\n"
+        f"Скорочена назва: <code>{tov['short_name']}</code>\n"
+        f"Базова назва: <code>{tov['name']}</code>\n"
         f"ЄДРПОУ: <code>{tov['edrpou']}</code>\n"
         f"р/р: <code>{tov['bank_account']}</code>\n"
         f"Група оподаткування: <code>{tov['tax_group']}</code>\n"
@@ -92,20 +166,24 @@ async def admin_tov_add_confirm(update, context):
     await update.message.reply_text("🏢 Менеджмент ТОВ-орендарів:", reply_markup=admin_tov_menu)
     return ConversationHandler.END
 
-# === Оголошення FSM ===
+# FSM object
 admin_tov_add_conv = ConversationHandler(
     entry_points=[MessageHandler(filters.Regex("^➕ Додати ТОВ$"), admin_tov_add_start)],
     states={
-        0: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_name)],
-        1: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_edrpou)],
-        2: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_bank)],
-        3: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_tax_group)],
-        4: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_vat)],
-        5: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_vat_ipn)],
-        6: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_address_legal)],
-        7: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_address_postal)],
-        8: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_director)],
-        9: [MessageHandler(filters.Regex("^(✅ Так|↩️ Адмінпанель)$"), admin_tov_add_confirm)]
+        OPF_SELECT: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_opf)],
+        BASE_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_base_name)],
+        NAME_CONFIRM: [MessageHandler(filters.Regex("^(✅ Залишити|✏️ Змінити)$"), admin_tov_add_name_confirm)],
+        FULL_NAME_MANUAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_full_name_manual)],
+        SHORT_NAME_MANUAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_short_name_manual)],
+        ADD_EDRPOU: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_edrpou)],
+        ADD_BANK: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_bank)],
+        ADD_TAX_GROUP: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_tax_group)],
+        ADD_VAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_vat)],
+        ADD_VAT_IPN: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_vat_ipn)],
+        ADD_ADDRESS_LEGAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_address_legal)],
+        ADD_ADDRESS_POSTAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_address_postal)],
+        ADD_DIRECTOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_director)],
+        CONFIRM: [MessageHandler(filters.Regex("^(✅ Так|↩️ Адмінпанель)$"), admin_tov_add_confirm)]
     },
     fallbacks=[]
 )
