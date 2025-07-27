@@ -16,11 +16,13 @@ from keyboards.menu import (
 from db import (
     get_companies,
     get_company,
+    delete_company,
     get_user_by_tg_id,
     add_user,
     get_users,
     update_user,
     log_admin_action,
+    log_delete,
 )
 from dialogs.agreement_template import (
     show_templates_cb, add_template_conv, replace_template_conv,
@@ -175,10 +177,43 @@ async def admin_company_card_callback(update, context):
     )
     keyboard = [
         [InlineKeyboardButton("✏️ Редагувати", callback_data=f"company_edit:{company_id}")],
+        [InlineKeyboardButton("🗑 Видалити", callback_data=f"company_delete:{company_id}")],
         [InlineKeyboardButton("↩️ До списку ТОВ", callback_data="company_list")],
         [InlineKeyboardButton("↩️ Адмінпанель", callback_data="admin_panel")]
     ]
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+@admin_only
+async def company_delete_prompt(update, context):
+    query = update.callback_query
+    company_id = int(query.data.split(":")[1])
+    company = await get_company(company_id)
+    if not company:
+        await query.answer("ТОВ не знайдено!", show_alert=True)
+        return
+    text = (
+        f"Ви точно хочете видалити <b>{company['short_name'] or company['full_name']}</b>?\n"
+        "Цю дію не можна скасувати."
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Так, видалити", callback_data=f"company_delete_confirm:{company_id}")],
+        [InlineKeyboardButton("❌ Скасувати", callback_data=f"company_card:{company_id}")],
+    ])
+    await query.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
+@admin_only
+async def company_delete_confirm(update, context):
+    query = update.callback_query
+    company_id = int(query.data.split(":")[1])
+    company = await get_company(company_id)
+    if not company:
+        await query.answer("ТОВ не знайдено!", show_alert=True)
+        return
+    await delete_company(company_id)
+    from db import log_delete, get_user_by_tg_id
+    user = await get_user_by_tg_id(update.effective_user.id)
+    await log_delete(update.effective_user.id, user["role"], "company", company_id, company["short_name"] or company["full_name"], "")
+    await query.message.edit_text("✅ Обʼєкт успішно видалено")
 
 # --- Stub-функції для інших розділів адмінки ---
 
@@ -421,11 +456,22 @@ async def admin_tov_edit_handler(update, context):
 
 @admin_only
 async def admin_tov_delete_handler(update, context):
+    companies = await get_companies()
+    text = "<b>Оберіть ТОВ для видалення:</b>"
+    if not companies:
+        text = "Немає жодного ТОВ-орендаря."
+    keyboard = [
+        [InlineKeyboardButton(
+            f"{c['short_name'] or c['full_name']}", callback_data=f"company_delete:{c['id']}"
+        )]
+        for c in companies
+    ] if companies else []
+    keyboard.append([InlineKeyboardButton("↩️ Адмінпанель", callback_data="admin_panel")])
     msg = getattr(update, 'message', None)
     if msg:
-        await msg.reply_text("Видалення ТОВ — в розробці.")
+        await msg.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
     else:
-        await update.callback_query.edit_message_text("Видалення ТОВ — в розробці.", reply_markup=InlineKeyboardMarkup([]))
+        await update.callback_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
 @admin_only
 async def to_admin_panel(update, context):

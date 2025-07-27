@@ -9,25 +9,26 @@ from handlers.menu import (
     start, to_main_menu, payers_menu_handler, lands_menu_handler, fields_menu_handler,
     contracts_menu_handler, payments_menu_handler, reports_menu_handler, search_menu_handler,
     admin_panel_handler, admin_tov_handler, admin_templates_handler,
-    admin_users_handler, admin_delete_handler, admin_tov_list_handler,
+    admin_users_handler, admin_tov_list_handler,
     admin_tov_edit_handler, admin_tov_delete_handler, to_admin_panel, admin_company_card_callback,
-    admin_user_list, add_user_conv, change_role_conv, block_user_conv, change_name_conv
+    admin_user_list, add_user_conv, change_role_conv, block_user_conv, change_name_conv,
+    company_delete_prompt, company_delete_confirm
 )
 from handlers.menu import (
     cmd_list_users, cmd_add_user, cmd_promote, cmd_demote, cmd_block, cmd_unblock
 )
 from dialogs.payer import (
-    add_payer_conv, show_payers, payer_card, delete_payer,
+    add_payer_conv, show_payers, payer_card, delete_payer, delete_payer_prompt,
     create_contract, to_menu
 )
 from dialogs.edit_payer import edit_payer_conv
 from dialogs.search import search_payer_conv
-from dialogs.field import add_field_conv, show_fields, delete_field, to_fields_list, field_card, edit_field
-from dialogs.land import add_land_conv, show_lands, land_card, delete_land, to_lands_list
+from dialogs.field import add_field_conv, show_fields, delete_field, delete_field_prompt, to_fields_list, field_card, edit_field
+from dialogs.land import add_land_conv, show_lands, land_card, delete_land, delete_land_prompt, to_lands_list
 from dialogs.edit_field import edit_field_conv
 from dialogs.edit_land import edit_land_conv
 from dialogs.edit_land_owner import edit_land_owner_conv
-from dialogs.add_docs_fsm import add_docs_conv, send_pdf, delete_pdf  # тільки FTP!
+from dialogs.add_docs_fsm import add_docs_conv, send_pdf, delete_pdf, confirm_delete_doc, cancel_delete_doc  # тільки FTP!
 from dialogs.post_creation import skip_add_docs
 from db import database, ensure_admin
 
@@ -97,11 +98,13 @@ application.add_handler(add_land_conv)
 application.add_handler(MessageHandler(filters.Regex("^📋 Список ділянок$"), show_lands))
 
 application.add_handler(CallbackQueryHandler(field_card, pattern=r"^field_card:"))
-application.add_handler(CallbackQueryHandler(delete_field, pattern=r"^delete_field:"))
+application.add_handler(CallbackQueryHandler(delete_field_prompt, pattern=r"^delete_field:\d+$"))
+application.add_handler(CallbackQueryHandler(delete_field, pattern=r"^confirm_delete_field:\d+$"))
 application.add_handler(CallbackQueryHandler(to_fields_list, pattern=r"^to_fields_list$"))
 
 application.add_handler(CallbackQueryHandler(land_card, pattern=r"^land_card:"))
-application.add_handler(CallbackQueryHandler(delete_land, pattern=r"^delete_land:"))
+application.add_handler(CallbackQueryHandler(delete_land_prompt, pattern=r"^delete_land:\d+$"))
+application.add_handler(CallbackQueryHandler(delete_land, pattern=r"^confirm_delete_land:\d+$"))
 application.add_handler(CallbackQueryHandler(to_lands_list, pattern=r"^to_lands_list$"))
 
 application.add_handler(edit_field_conv)
@@ -113,11 +116,14 @@ application.add_handler(edit_company_conv)
 application.add_handler(add_docs_conv)
 application.add_handler(CallbackQueryHandler(send_pdf, pattern=r"^send_pdf:\d+$"))
 application.add_handler(CallbackQueryHandler(delete_pdf, pattern=r"^delete_pdf_db:\d+$"))
+application.add_handler(CallbackQueryHandler(confirm_delete_doc, pattern=r"^confirm_delete_doc:\d+$"))
+application.add_handler(CallbackQueryHandler(cancel_delete_doc, pattern=r"^cancel_delete_doc:\d+$"))
 application.add_handler(CallbackQueryHandler(skip_add_docs, pattern=r"^skip_docs:\w+:\d+$"))
 
 # CallbackQueryHandler-и — як є, доки не переведені на нову систему:
 application.add_handler(CallbackQueryHandler(payer_card, pattern=r"^payer_card:"))
-application.add_handler(CallbackQueryHandler(delete_payer, pattern=r"^delete_payer:"))
+application.add_handler(CallbackQueryHandler(delete_payer_prompt, pattern=r"^delete_payer:\d+$"))
+application.add_handler(CallbackQueryHandler(delete_payer, pattern=r"^confirm_delete_payer:\d+$"))
 application.add_handler(CallbackQueryHandler(to_menu, pattern=r"^to_menu$"))
 application.add_handler(CallbackQueryHandler(create_contract, pattern=r"^create_contract:"))
 
@@ -139,7 +145,6 @@ application.add_handler(copy_var_cb)
 application.add_handler(MessageHandler(filters.Regex("^📄 Шаблони договорів$"), admin_templates_handler))
 application.add_handler(MessageHandler(filters.Regex("^📋 Список шаблонів$"), show_templates_cb))
 application.add_handler(MessageHandler(filters.Regex("^👥 Користувачі$"), admin_users_handler))
-application.add_handler(MessageHandler(filters.Regex("^🗑️ Видалення об’єктів$"), admin_delete_handler))
 application.add_handler(MessageHandler(filters.Regex("^↩️ Головне меню$"), to_main_menu))
 application.add_handler(CallbackQueryHandler(admin_user_list, pattern=r"^user_list$"))
 application.add_handler(add_user_conv)
@@ -154,6 +159,8 @@ application.add_handler(MessageHandler(filters.Regex("^✏️ Редагуват
 application.add_handler(MessageHandler(filters.Regex("^🗑️ Видалити ТОВ$"), admin_tov_delete_handler))
 application.add_handler(MessageHandler(filters.Regex("^↩️ Адмінпанель$"), to_admin_panel))
 application.add_handler(CallbackQueryHandler(admin_company_card_callback, pattern=r"^company_card:\d+$"))
+application.add_handler(CallbackQueryHandler(company_delete_prompt, pattern=r"^company_delete:\d+$"))
+application.add_handler(CallbackQueryHandler(company_delete_confirm, pattern=r"^company_delete_confirm:\d+$"))
 application.add_handler(CallbackQueryHandler(admin_tov_list_handler, pattern=r"^company_list$"))
 application.add_handler(CallbackQueryHandler(admin_panel_handler, pattern=r"^admin_panel$"))
 

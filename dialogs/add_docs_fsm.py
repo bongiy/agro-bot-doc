@@ -280,17 +280,48 @@ async def send_pdf(update, context):
 async def delete_pdf(update, context):
     query = update.callback_query
     doc_id = int(query.data.split(":")[1])
+    from db import get_user_by_tg_id, log_delete
+    user = await get_user_by_tg_id(update.effective_user.id)
+    if not user or user["role"] != "admin":
+        await query.answer("⛔ У вас немає прав на видалення.", show_alert=True)
+        return
     row = await database.fetch_one(sqlalchemy.select(UploadedDocs).where(UploadedDocs.c.id == doc_id))
-    if row:
-        try:
-            delete_file_ftp(row['remote_path'])
-        except Exception:
-            pass
-        await database.execute(UploadedDocs.delete().where(UploadedDocs.c.id == doc_id))
-        await query.answer("Документ видалено!")
-        await query.message.edit_text("Документ видалено. Оновіть картку для перегляду змін.")
-    else:
+    if not row:
         await query.answer("Документ не знайдено!", show_alert=True)
+        return
+    text = (
+        f"Ви точно хочете видалити документ «{row['doc_type']}»?\n"
+        "Цю дію не можна скасувати."
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Так, видалити", callback_data=f"confirm_delete_doc:{doc_id}")],
+        [InlineKeyboardButton("❌ Скасувати", callback_data=f"cancel_delete_doc:{doc_id}")],
+    ])
+    await query.message.edit_text(text, reply_markup=keyboard)
+
+async def confirm_delete_doc(update, context):
+    query = update.callback_query
+    doc_id = int(query.data.split(":")[1])
+    from db import get_user_by_tg_id, log_delete
+    user = await get_user_by_tg_id(update.effective_user.id)
+    if not user or user["role"] != "admin":
+        await query.answer("⛔ У вас немає прав на видалення.", show_alert=True)
+        return
+    row = await database.fetch_one(sqlalchemy.select(UploadedDocs).where(UploadedDocs.c.id == doc_id))
+    if not row:
+        await query.answer("Документ не знайдено!", show_alert=True)
+        return
+    try:
+        delete_file_ftp(row["remote_path"])
+    except Exception:
+        pass
+    await database.execute(UploadedDocs.delete().where(UploadedDocs.c.id == doc_id))
+    await log_delete(update.effective_user.id, user["role"], f"doc_{row['entity_type']}", doc_id, row['doc_type'])
+    await query.message.edit_text("✅ Обʼєкт успішно видалено")
+
+async def cancel_delete_doc(update, context):
+    query = update.callback_query
+    await query.message.edit_text("Скасовано.")
 
 add_docs_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(start_add_docs, pattern=r"^add_docs:\w+:\d+$")],

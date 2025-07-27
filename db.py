@@ -128,6 +128,20 @@ AdminAction = sqlalchemy.Table(
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
 )
 
+# === Таблиця логів видалення ===
+DeleteLog = sqlalchemy.Table(
+    "delete_log",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("admin_id", sqlalchemy.BigInteger),
+    sqlalchemy.Column("role", sqlalchemy.String(10)),
+    sqlalchemy.Column("entity_type", sqlalchemy.String(64)),
+    sqlalchemy.Column("entity_id", sqlalchemy.Integer),
+    sqlalchemy.Column("name", sqlalchemy.String(255)),
+    sqlalchemy.Column("linked_info", sqlalchemy.String(255)),
+    sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
+)
+
 # === Шаблони договорів ===
 AgreementTemplate = sqlalchemy.Table(
     "agreement_template",
@@ -177,6 +191,18 @@ async def log_admin_action(admin_id: int, action: str):
     query = AdminAction.insert().values(
         admin_id=admin_id,
         action=action,
+        created_at=datetime.utcnow(),
+    )
+    await database.execute(query)
+
+async def log_delete(admin_id: int, role: str, entity_type: str, entity_id: int | None, name: str, linked_info: str = ""):
+    query = DeleteLog.insert().values(
+        admin_id=admin_id,
+        role=role,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        name=name,
+        linked_info=linked_info,
         created_at=datetime.utcnow(),
     )
     await database.execute(query)

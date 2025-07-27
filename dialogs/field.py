@@ -126,19 +126,64 @@ async def field_card(update, context):
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
 
 # ==== ВИДАЛЕННЯ ПОЛЯ ====
+async def delete_field_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    field_id = int(query.data.split(":")[1])
+    from db import get_user_by_tg_id
+    user = await get_user_by_tg_id(update.effective_user.id)
+    if not user or user["role"] != "admin":
+        await query.answer("⛔ У вас немає прав на видалення.", show_alert=True)
+        return
+    field = await database.fetch_one(Field.select().where(Field.c.id == field_id))
+    if not field:
+        await query.answer("Поле не знайдено!", show_alert=True)
+        return
+    text = (
+        f"Ви точно хочете видалити поле <b>{field.name}</b>?\n"
+        "Цю дію не можна скасувати."
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Так, видалити", callback_data=f"confirm_delete_field:{field_id}")],
+        [InlineKeyboardButton("❌ Скасувати", callback_data=f"field_card:{field_id}")],
+    ])
+    await query.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
 async def delete_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     field_id = int(query.data.split(":")[1])
-    from db import LandPlot
+    from db import LandPlot, UploadedDocs, get_user_by_tg_id, log_delete
+    user = await get_user_by_tg_id(update.effective_user.id)
+    if not user or user["role"] != "admin":
+        await query.answer("⛔ У вас немає прав на видалення.", show_alert=True)
+        return
+    field = await database.fetch_one(Field.select().where(Field.c.id == field_id))
+    if not field:
+        await query.answer("Поле не знайдено!", show_alert=True)
+        return
     linked = await database.fetch_one(
         sqlalchemy.select(LandPlot).where(LandPlot.c.field_id == field_id)
     )
     if linked:
         await query.answer("Не можна видалити поле — до нього прив'язані ділянки.", show_alert=True)
         return
+    docs = await database.fetch_all(
+        sqlalchemy.select(UploadedDocs).where(
+            (UploadedDocs.c.entity_type == "field") & (UploadedDocs.c.entity_id == field_id)
+        )
+    )
+    for d in docs:
+        try:
+            delete_file_ftp(d["remote_path"])
+        except Exception:
+            pass
+    if docs:
+        await database.execute(
+            UploadedDocs.delete().where(UploadedDocs.c.id.in_([d["id"] for d in docs]))
+        )
     await database.execute(Field.delete().where(Field.c.id == field_id))
-    await query.answer("Поле видалено!")
-    await query.message.edit_text("Поле видалено.")
+    linked_info = f"docs:{len(docs)}" if docs else ""
+    await log_delete(update.effective_user.id, user["role"], "field", field_id, field.name, linked_info)
+    await query.message.edit_text("✅ Обʼєкт успішно видалено")
 
 # ==== ВИДАЛЕННЯ PDF (через FTP) ====
 async def delete_pdf(update, context):
