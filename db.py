@@ -63,3 +63,39 @@ UploadedDocs = sqlalchemy.Table(
     sqlalchemy.Column("doc_type", sqlalchemy.String(64)),
     sqlalchemy.Column("remote_path", sqlalchemy.String(255)),
 )
+
+# === Таблиця ТОВ ===
+Company = sqlalchemy.Table(
+    "company", metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("name", sqlalchemy.String(255), nullable=False),
+    sqlalchemy.Column("edrpou", sqlalchemy.String(10), nullable=False, unique=True),
+    sqlalchemy.Column("bank_account", sqlalchemy.String(34)),
+    sqlalchemy.Column("tax_group", sqlalchemy.String(32)),
+    sqlalchemy.Column("is_vat_payer", sqlalchemy.Boolean, default=False),
+    sqlalchemy.Column("vat_ipn", sqlalchemy.String(12)),
+    sqlalchemy.Column("address_legal", sqlalchemy.String(255)),
+    sqlalchemy.Column("address_postal", sqlalchemy.String(255)),
+    sqlalchemy.Column("director", sqlalchemy.String(128)),
+    sqlalchemy.Column("created_at", sqlalchemy.DateTime),
+)
+
+async def add_company(data: dict):
+    query = Company.insert().values(**data)
+    return await database.execute(query)
+
+async def get_companies():
+    query = Company.select().order_by(Company.c.name)
+    return await database.fetch_all(query)
+
+async def get_company(company_id: int):
+    query = Company.select().where(Company.c.id == company_id)
+    return await database.fetch_one(query)
+
+async def update_company(company_id: int, data: dict):
+    query = Company.update().where(Company.c.id == company_id).values(**data)
+    await database.execute(query)
+
+async def delete_company(company_id: int):
+    query = Company.delete().where(Company.c.id == company_id)
+    await database.execute(query)
