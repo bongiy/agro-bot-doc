@@ -7,9 +7,9 @@ from telegram.ext import (
 )
 from handlers.menu import (
     start, to_main_menu, payers_menu_handler, lands_menu_handler, fields_menu_handler,
-    contracts_menu_handler, payments_menu_handler, reports_menu_handler, search_menu_handler, restart_bot
+    contracts_menu_handler, payments_menu_handler, reports_menu_handler, search_menu_handler,
+    restart_bot, admin_panel_handler
 )
-
 from dialogs.payer import (
     add_payer_conv, show_payers, payer_card, delete_payer,
     create_contract, to_menu
@@ -21,9 +21,7 @@ from dialogs.land import add_land_conv, show_lands, land_card, delete_land, to_l
 from dialogs.edit_field import edit_field_conv
 from dialogs.edit_land import edit_land_conv
 from dialogs.edit_land_owner import edit_land_owner_conv
-
 from dialogs.add_docs_fsm import add_docs_conv, send_pdf, delete_pdf  # тільки FTP!
-
 from db import database
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -51,14 +49,15 @@ async def on_shutdown():
 
 application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler(filters.Regex("^◀️ Назад$"), to_main_menu))
-application.add_handler(MessageHandler(filters.Regex("^🔹 Пайовики$"), payers_menu_handler))
-application.add_handler(MessageHandler(filters.Regex("^🔹 Ділянки$"), lands_menu_handler))
-application.add_handler(MessageHandler(filters.Regex("^🔹 Поля$"), fields_menu_handler))
-application.add_handler(MessageHandler(filters.Regex("^🔹 Договори$"), contracts_menu_handler))
-application.add_handler(MessageHandler(filters.Regex("^🔹 Виплати$"), payments_menu_handler))
-application.add_handler(MessageHandler(filters.Regex("^🔹 Звіти$"), reports_menu_handler))
-application.add_handler(MessageHandler(filters.Regex("^🔹 Пошук$"), search_menu_handler))
-application.add_handler(MessageHandler(filters.Regex("^🔄 Перезавантажити$"), restart_bot))
+application.add_handler(MessageHandler(filters.Regex("^👤 Пайовики$"), payers_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^🌿 Ділянки$"), lands_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^🌾 Поля$"), fields_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^📄 Договори$"), contracts_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^💳 Виплати$"), payments_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^📊 Звіти$"), reports_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^🔎 Пошук$"), search_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^🔄 Перезапустити$"), restart_bot))
+application.add_handler(MessageHandler(filters.Regex("^🛡️ Адмінпанель$"), admin_panel_handler))
 
 # --- ПАЙОВИКИ: Підключаємо діалоги до підменю пайовиків
 application.add_handler(add_payer_conv)
