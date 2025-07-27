@@ -6,6 +6,7 @@ from datetime import datetime
 DATABASE_URL = os.getenv("DATABASE_URL")
 database = Database(DATABASE_URL)
 metadata = sqlalchemy.MetaData()
+engine = sqlalchemy.create_engine(DATABASE_URL)
 
 # === Таблиця пайовика ===
 Payer = sqlalchemy.Table(
@@ -160,3 +161,6 @@ async def log_admin_action(admin_id: int, action: str):
         created_at=datetime.utcnow(),
     )
     await database.execute(query)
+
+# Create all tables if they do not exist.
+metadata.create_all(engine)
