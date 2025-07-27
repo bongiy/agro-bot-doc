@@ -10,6 +10,7 @@ from db import (
     add_agreement_template, get_agreement_templates, get_agreement_template,
     update_agreement_template, delete_agreement_template
 )
+from template_vars import TEMPLATE_VARIABLES
 from ftp_utils import upload_file_ftp, delete_file_ftp
 
 TEMPLATE_TYPES = {
@@ -19,17 +20,9 @@ TEMPLATE_TYPES = {
 }
 
 ALLOWED_VARS = [
-    "{{payer_full_name}} — ПІБ пайовика",
-    "{{payer_passport}} — паспортні дані",
-    "{{payer_address}} — адреса проживання",
-    "{{agreement_number}} — номер договору",
-    "{{agreement_date}} — дата підписання",
-    "{{agreement_start}} — дата початку дії",
-    "{{agreement_end}} — дата завершення дії",
-    "{{land_list}} — список ділянок (рядком)",
-    "{{total_area}} — сумарна площа, га",
-    "{{company_name}} — назва ТОВ",
-    "{{company_director}} — директор ТОВ",
+    f"{var} — {desc}"
+    for cat in TEMPLATE_VARIABLES.values()
+    for var, desc in cat["items"]
 ]
 
 ADD_TYPE, ADD_NAME, ADD_FILE, REPLACE_FILE = range(4)
@@ -51,6 +44,7 @@ async def show_templates(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         ])
     keyboard.append([InlineKeyboardButton("➕ Додати шаблон", callback_data="template_add")])
+    keyboard.append([InlineKeyboardButton("📘 Список змінних", callback_data="template_vars")])
     keyboard.append([InlineKeyboardButton("↩️ Адмінпанель", callback_data="admin_panel")])
     if update.callback_query:
         await update.callback_query.edit_message_text(
@@ -61,6 +55,50 @@ async def show_templates(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def show_templates_cb(update, context):
     await show_templates(update, context)
+
+
+async def template_vars_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show list of template variable categories."""
+    text = "<b>Список змінних</b>\nОберіть категорію:"
+    keyboard = [
+        [InlineKeyboardButton(cat["title"], callback_data=f"varcat:{key}")]
+        for key, cat in TEMPLATE_VARIABLES.items()
+    ]
+    keyboard.append([InlineKeyboardButton("↩️ Назад", callback_data="template_list")])
+    msg = update.callback_query if update.callback_query else update.message
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML"
+        )
+    else:
+        await update.message.reply_text(
+            text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML"
+        )
+
+
+def _build_vars_text(cat_key: str) -> str:
+    cat = TEMPLATE_VARIABLES[cat_key]
+    lines = [f"<code>{v}</code> — {d}" for v, d in cat["items"]]
+    return f"<b>{cat['title']}</b>\n" + "\n".join(lines)
+
+
+async def template_vars_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    cat_key = query.data.split(":")[1]
+    text = _build_vars_text(cat_key)
+    keyboard = [
+        [InlineKeyboardButton("📋 Копіювати", callback_data=f"copyvar:{v}")]
+        for v, _ in TEMPLATE_VARIABLES[cat_key]["items"]
+    ]
+    keyboard.append([InlineKeyboardButton("↩️ Категорії", callback_data="template_vars")])
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+
+async def copy_variable(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    var = query.data.split(":", 1)[1]
+    await query.answer()
+    await query.message.reply_text(f"<code>{var}</code>", parse_mode="HTML")
 
 async def template_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -225,3 +263,7 @@ template_card_cb = CallbackQueryHandler(template_card, pattern=r"^template_card:
 template_toggle_cb = CallbackQueryHandler(template_toggle, pattern=r"^template_toggle:\d+$")
 template_delete_cb = CallbackQueryHandler(template_delete, pattern=r"^template_delete:\d+$")
 template_list_cb = CallbackQueryHandler(show_templates_cb, pattern=r"^template_list$")
+template_vars_cb = MessageHandler(filters.Regex("^📘 Переглянути список змінних$"), template_vars_categories)
+template_vars_categories_cb = CallbackQueryHandler(template_vars_categories, pattern=r"^template_vars$")
+template_var_list_cb = CallbackQueryHandler(template_vars_list, pattern=r"^varcat:\w+$")
+copy_var_cb = CallbackQueryHandler(copy_variable, pattern=r"^copyvar:.+")

@@ -24,7 +24,9 @@ from db import (
 )
 from dialogs.agreement_template import (
     show_templates_cb, add_template_conv, replace_template_conv,
-    template_card_cb, template_toggle_cb, template_delete_cb, template_list_cb
+    template_card_cb, template_toggle_cb, template_delete_cb, template_list_cb,
+    template_vars_cb, template_vars_categories_cb, template_var_list_cb,
+    copy_var_cb
 )
 
 (
@@ -187,6 +189,7 @@ async def admin_templates_handler(update, context):
         await msg.reply_text("Менеджмент шаблонів договорів:", reply_markup=admin_templates_menu)
     else:
         await show_templates_cb(update, context)
+
 
 @admin_only
 async def admin_users_handler(update, context):

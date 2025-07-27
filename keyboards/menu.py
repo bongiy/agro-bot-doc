@@ -118,6 +118,7 @@ admin_tov_menu = ReplyKeyboardMarkup(
 admin_templates_menu = ReplyKeyboardMarkup(
     [
         ["➕ Додати шаблон", "📋 Список шаблонів"],
+        ["📘 Переглянути список змінних"],
         ["↩️ Адмінпанель"]
     ],
     resize_keyboard=True
