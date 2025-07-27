@@ -26,12 +26,6 @@ from dialogs.edit_land_owner import edit_land_owner_conv
 from dialogs.add_docs_fsm import add_docs_conv, send_pdf, delete_pdf  # тільки FTP!
 from db import database
 
-from dialogs.admin_tov import (
-    admin_tov_add_start, admin_tov_add_edrpou,
-    admin_tov_add_bank, admin_tov_add_tax_group, admin_tov_add_vat,
-    admin_tov_add_vat_ipn, admin_tov_add_address_legal, admin_tov_add_address_postal,
-    admin_tov_add_director, admin_tov_add_confirm
-)
 from dialogs.admin_tov import admin_tov_add_conv
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
