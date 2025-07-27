@@ -55,16 +55,21 @@ async def admin_panel_handler(update, context):
         else:
             await update.callback_query.answer("У вас немає прав для цієї дії.", show_alert=True)
         return
+
     text = (
         "🛡️ <b>Адмінпанель</b>:\n\n"
         "Оберіть розділ для адміністрування:"
     )
-    reply_markup = admin_panel_menu
+
     msg = getattr(update, 'message', None)
     if msg:
-        await msg.reply_text(text, parse_mode="HTML", reply_markup=reply_markup)
+        await msg.reply_text(text, parse_mode="HTML", reply_markup=admin_panel_menu)  # тут може бути ReplyKeyboardMarkup
     else:
-        await update.callback_query.edit_message_text(text, parse_mode="HTML", reply_markup=reply_markup)
+        # ТУТ обовʼязково має бути InlineKeyboardMarkup!
+        await update.callback_query.edit_message_text(
+            text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup([])
+        )
+
 
 async def admin_tov_handler(update, context):
     msg = getattr(update, 'message', None)
