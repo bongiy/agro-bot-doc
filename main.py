@@ -10,7 +10,8 @@ from handlers.menu import (
     contracts_menu_handler, payments_menu_handler, reports_menu_handler, search_menu_handler,
     admin_panel_handler, admin_tov_handler, admin_templates_handler,
     admin_users_handler, admin_delete_handler, admin_tov_list_handler,
-    admin_tov_edit_handler, admin_tov_delete_handler, to_admin_panel, admin_company_card_callback
+    admin_tov_edit_handler, admin_tov_delete_handler, to_admin_panel, admin_company_card_callback,
+    admin_user_list, add_user_conv, change_role_conv, block_user_conv, change_name_conv
 )
 from handlers.menu import (
     cmd_list_users, cmd_add_user, cmd_promote, cmd_demote, cmd_block, cmd_unblock
@@ -120,6 +121,12 @@ application.add_handler(MessageHandler(filters.Regex("^📄 Шаблони до�
 application.add_handler(MessageHandler(filters.Regex("^👥 Користувачі$"), admin_users_handler))
 application.add_handler(MessageHandler(filters.Regex("^🗑️ Видалення об’єктів$"), admin_delete_handler))
 application.add_handler(MessageHandler(filters.Regex("^↩️ Головне меню$"), to_main_menu))
+application.add_handler(CallbackQueryHandler(admin_user_list, pattern=r"^user_list$"))
+application.add_handler(add_user_conv)
+application.add_handler(change_role_conv)
+application.add_handler(block_user_conv)
+application.add_handler(change_name_conv)
+application.add_handler(CallbackQueryHandler(admin_users_handler, pattern=r"^admin_users$"))
 # --- АДМІНКА ТОВ ---
 application.add_handler(MessageHandler(filters.Regex("^🏢 ТОВ-орендарі$"), admin_tov_handler))
 application.add_handler(MessageHandler(filters.Regex("^📋 Список ТОВ$"), admin_tov_list_handler))

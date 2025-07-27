@@ -112,6 +112,7 @@ User = sqlalchemy.Table(
     sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
     sqlalchemy.Column("telegram_id", sqlalchemy.BigInteger, unique=True),
     sqlalchemy.Column("username", sqlalchemy.String(255)),
+    sqlalchemy.Column("full_name", sqlalchemy.String(255), nullable=True),
     sqlalchemy.Column("role", sqlalchemy.String(10), default="user"),
     sqlalchemy.Column("is_active", sqlalchemy.Boolean, default=True),
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
@@ -127,10 +128,16 @@ AdminAction = sqlalchemy.Table(
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
 )
 
-async def add_user(tg_id: int, username: str | None = None, role: str = "user"):
+async def add_user(
+    tg_id: int,
+    username: str | None = None,
+    role: str = "user",
+    full_name: str | None = None,
+):
     query = User.insert().values(
         telegram_id=tg_id,
         username=username,
+        full_name=full_name,
         role=role,
         is_active=True,
         created_at=datetime.utcnow(),
