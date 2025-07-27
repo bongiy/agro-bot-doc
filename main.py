@@ -32,6 +32,7 @@ from dialogs.admin_tov import (
     admin_tov_add_vat_ipn, admin_tov_add_address_legal, admin_tov_add_address_postal,
     admin_tov_add_director, admin_tov_add_confirm
 )
+from dialogs.admin_tov import admin_tov_add_conv
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 WEBHOOK_PATH = "/webhook"
