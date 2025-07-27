@@ -53,6 +53,9 @@ LandPlot = sqlalchemy.Table(
     sqlalchemy.Column("ngo", sqlalchemy.Float),  # можна null
     sqlalchemy.Column("field_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("field.id")),  # зв'язок з полем
     sqlalchemy.Column("payer_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("payer.id"), nullable=True),  # <-- ДОДАЙ ЦЕ!
+    sqlalchemy.Column("region", sqlalchemy.String),
+    sqlalchemy.Column("district", sqlalchemy.String),
+    sqlalchemy.Column("council", sqlalchemy.String),
 )
 
 # === Таблиця власників ділянок ===
@@ -287,5 +290,14 @@ metadata.create_all(engine)
 with engine.begin() as conn:
     conn.execute(sqlalchemy.text(
         'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)'
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "land_plot" ADD COLUMN IF NOT EXISTS region VARCHAR'
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "land_plot" ADD COLUMN IF NOT EXISTS district VARCHAR'
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "land_plot" ADD COLUMN IF NOT EXISTS council VARCHAR'
     ))
 

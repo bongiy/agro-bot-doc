@@ -5,7 +5,7 @@ from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove, InputFile
 )
 from telegram.ext import (
-    ContextTypes, ConversationHandler, MessageHandler, filters
+    ContextTypes, ConversationHandler, MessageHandler, CallbackQueryHandler, filters
 )
 from keyboards.menu import lands_menu
 from db import database, LandPlot, Field, Payer, UploadedDocs, LandPlotOwner
@@ -14,7 +14,26 @@ import sqlalchemy
 from ftp_utils import download_file_ftp, delete_file_ftp
 
 # --- Стани для FSM додавання ділянки ---
-ASK_CADASTER, ASK_AREA, ASK_NGO, ASK_FIELD, ASK_OWNER_COUNT, ASK_OWNER = range(6)
+(
+    ASK_CADASTER,
+    ASK_AREA,
+    ASK_NGO,
+    ASK_FIELD,
+    CHOOSE_COUNCIL,
+    INPUT_REGION,
+    INPUT_DISTRICT,
+    INPUT_COUNCIL,
+    ASK_OWNER_COUNT,
+    ASK_OWNER,
+) = range(10)
+
+COUNCIL_OPTIONS = [
+    "Городоцька сільська рада",
+    "Шпанівська сільська рада",
+    "Дядьковецька сільська рада",
+    "Сатиївська сільська рада",
+    "Великоомелянська сільська рада",
+]
 
 def to_latin_filename(text, default="document.pdf"):
     name = unicodedata.normalize('NFKD', str(text)).encode('ascii', 'ignore').decode('ascii')
@@ -76,6 +95,45 @@ async def choose_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ASK_FIELD
 
     context.user_data["field_id"] = field_id
+    keyboard = [[InlineKeyboardButton(c, callback_data=f"csel:{i}")] for i, c in enumerate(COUNCIL_OPTIONS)]
+    keyboard.append([InlineKeyboardButton("🔤 Ввести вручну", callback_data="cmanual")])
+    await update.message.reply_text(
+        "🗺 Оберіть сільську раду:", reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return CHOOSE_COUNCIL
+
+async def council_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    idx = int(query.data.split(":")[1])
+    council = COUNCIL_OPTIONS[idx]
+    context.user_data["region"] = "Рівненська область"
+    context.user_data["district"] = "Рівненський район"
+    context.user_data["council"] = council
+    await query.answer()
+    await query.message.edit_text(f"Обрано: {council}")
+    await query.message.reply_text("Скільки власників має ділянка?")
+    return ASK_OWNER_COUNT
+
+async def council_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    kb = ReplyKeyboardMarkup([["Рівненська область"]], resize_keyboard=True)
+    await query.message.edit_text("Введіть область:", reply_markup=kb)
+    return INPUT_REGION
+
+async def set_region(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["region"] = update.message.text.strip()
+    kb = ReplyKeyboardMarkup([["Рівненський район"]], resize_keyboard=True)
+    await update.message.reply_text("Введіть район:", reply_markup=kb)
+    return INPUT_DISTRICT
+
+async def set_district(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["district"] = update.message.text.strip()
+    await update.message.reply_text("Введіть назву сільради (без скорочень):")
+    return INPUT_COUNCIL
+
+async def set_council(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["council"] = update.message.text.strip()
     await update.message.reply_text("Скільки власників має ділянка?")
     return ASK_OWNER_COUNT
 
@@ -122,7 +180,10 @@ async def select_owner(update: Update, context: ContextTypes.DEFAULT_TYPE):
         area=context.user_data["area"],
         ngo=context.user_data["ngo"],
         field_id=context.user_data["field_id"],
-        payer_id=context.user_data["owners"][0]
+        payer_id=context.user_data["owners"][0],
+        region=context.user_data.get("region"),
+        district=context.user_data.get("district"),
+        council=context.user_data.get("council"),
     )
     land_id = await database.execute(query)
     share = 1 / context.user_data["owner_count"]
@@ -149,6 +210,13 @@ add_land_conv = ConversationHandler(
         ASK_AREA: [MessageHandler(filters.TEXT & ~filters.COMMAND, land_area)],
         ASK_NGO: [MessageHandler(filters.TEXT & ~filters.COMMAND, land_ngo)],
         ASK_FIELD: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_field)],
+        CHOOSE_COUNCIL: [
+            CallbackQueryHandler(council_chosen, pattern=r"^csel:\d+$"),
+            CallbackQueryHandler(council_manual, pattern=r"^cmanual$")
+        ],
+        INPUT_REGION: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_region)],
+        INPUT_DISTRICT: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_district)],
+        INPUT_COUNCIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_council)],
         ASK_OWNER_COUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_owner_count)],
         ASK_OWNER: [MessageHandler(filters.TEXT & ~filters.COMMAND, select_owner)],
     },
@@ -208,6 +276,8 @@ async def land_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Площа: {land['area']:.4f} га\n"
         f"НГО: {land['ngo'] if land['ngo'] else '-'}\n"
         f"Поле: {field_name}\n"
+        f"📍 Місце розташування:\n"
+        f"{land['council'] or 'не вказано'}, {land['district'] or 'не вказано'}, {land['region'] or 'не вказано'}\n"
         f"Власники: {owners_txt}"
     )
 
