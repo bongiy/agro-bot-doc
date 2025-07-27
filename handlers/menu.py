@@ -1,10 +1,11 @@
-from telegram import Update
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from keyboards.menu import (
     main_menu, main_menu_admin,
     payers_menu, lands_menu, fields_menu, contracts_menu,
     payments_menu, reports_menu, search_menu, admin_panel_menu, admin_tov_menu
-)  # імпортуємо обидва меню
+)
+from db import get_companies, get_company
 
 # TODO: Замініть цей список на актуальні admin_ids або імпортуйте з config
 admin_ids = [370806943]  # <--- Вкажи свій Telegram user_id тут!
@@ -44,7 +45,8 @@ async def reports_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 async def search_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Меню «Пошук»", reply_markup=search_menu)
 
-# АДМІНКА 
+# --- АДМІНПАНЕЛЬ ---
+
 async def admin_panel_handler(update, context):
     admin_ids = [370806943]  # <--- твій tg_id
     if update.effective_user.id not in admin_ids:
@@ -56,8 +58,60 @@ async def admin_panel_handler(update, context):
         parse_mode="HTML",
         reply_markup=admin_panel_menu
     )
+
 async def admin_tov_handler(update, context):
-    await update.message.reply_text("Менеджмент ТОВ-орендарів — в розробці.")
+    await update.message.reply_text(
+        "🏢 Менеджмент ТОВ-орендарів:\n\nОберіть дію:",
+        reply_markup=admin_tov_menu
+    )
+
+# --- Список ТОВ (кнопка) ---
+async def admin_tov_list_handler(update, context):
+    companies = await get_companies()
+    if not companies:
+        await update.message.reply_text("Немає жодного ТОВ-орендаря.")
+        return
+    keyboard = [
+        [InlineKeyboardButton(
+            f"{c['short_name'] or c['full_name']}", callback_data=f"company_card:{c['id']}")]
+        for c in companies
+    ]
+    await update.message.reply_text(
+        "<b>Список ТОВ-орендарів:</b>\nОберіть компанію для перегляду картки.",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="HTML"
+    )
+
+# --- Картка ТОВ (CallbackQuery) ---
+async def admin_company_card_callback(update, context):
+    query = update.callback_query
+    company_id = int(query.data.split(":")[1])
+    company = await get_company(company_id)
+    if not company:
+        await query.answer("ТОВ не знайдено!", show_alert=True)
+        return
+    text = (
+        f"<b>Картка ТОВ-орендаря</b>\n"
+        f"<b>ОПФ:</b> <code>{company['opf']}</code>\n"
+        f"<b>Повна назва:</b> <code>{company['full_name']}</code>\n"
+        f"<b>Скорочена назва:</b> <code>{company['short_name']}</code>\n"
+        f"<b>ЄДРПОУ:</b> <code>{company['edrpou']}</code>\n"
+        f"<b>IBAN:</b> <code>{company['bank_account']}</code>\n"
+        f"<b>Група оподаткування:</b> <code>{company['tax_group']}</code>\n"
+        f"<b>ПДВ:</b> <code>{'так' if company['is_vat_payer'] else 'ні'}</code>\n"
+        f"<b>ІПН платника ПДВ:</b> <code>{company.get('vat_ipn', '') or '—'}</code>\n"
+        f"<b>Юридична адреса:</b> <code>{company['address_legal']}</code>\n"
+        f"<b>Поштова адреса:</b> <code>{company['address_postal']}</code>\n"
+        f"<b>Директор:</b> <code>{company['director']}</code>\n"
+    )
+    keyboard = [
+        [InlineKeyboardButton("✏️ Редагувати", callback_data=f"company_edit:{company_id}")],
+        [InlineKeyboardButton("↩️ До списку ТОВ", callback_data="company_list")],
+        [InlineKeyboardButton("↩️ Адмінпанель", callback_data="admin_panel")]
+    ]
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+# --- Stub-функції для інших розділів адмінки ---
 
 async def admin_templates_handler(update, context):
     await update.message.reply_text("Менеджмент шаблонів договорів — в розробці.")
@@ -67,16 +121,6 @@ async def admin_users_handler(update, context):
 
 async def admin_delete_handler(update, context):
     await update.message.reply_text("Видалення об’єктів — в розробці.")
-
-# АДМІНКА ТОВ
-async def admin_tov_handler(update, context):
-    await update.message.reply_text(
-        "🏢 Менеджмент ТОВ-орендарів:\n\nОберіть дію:",
-        reply_markup=admin_tov_menu
-    )
-
-async def admin_tov_list_handler(update, context):
-    await update.message.reply_text("Список ТОВ — в розробці.")
 
 async def admin_tov_edit_handler(update, context):
     await update.message.reply_text("Редагування ТОВ — в розробці.")
