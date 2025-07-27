@@ -59,7 +59,11 @@ async def show_templates_cb(update, context):
 
 async def template_vars_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show list of template variable categories."""
-    text = "<b>Список змінних</b>\nОберіть категорію:"
+    text = (
+        "<b>Список змінних</b>\n"
+        "Оберіть категорію. Якщо значення порожнє, у документі буде "
+        "\"<code>______________________</code>\" для ручного заповнення:"
+    )
     keyboard = [
         [InlineKeyboardButton(cat["title"], callback_data=f"varcat:{key}")]
         for key, cat in TEMPLATE_VARIABLES.items()
@@ -86,19 +90,8 @@ async def template_vars_list(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     cat_key = query.data.split(":")[1]
     text = _build_vars_text(cat_key)
-    keyboard = [
-        [InlineKeyboardButton("📋 Копіювати", callback_data=f"copyvar:{v}")]
-        for v, _ in TEMPLATE_VARIABLES[cat_key]["items"]
-    ]
-    keyboard.append([InlineKeyboardButton("↩️ Категорії", callback_data="template_vars")])
+    keyboard = [[InlineKeyboardButton("↩️ Категорії", callback_data="template_vars")]]
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-
-
-async def copy_variable(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    var = query.data.split(":", 1)[1]
-    await query.answer()
-    await query.message.reply_text(f"<code>{var}</code>", parse_mode="HTML")
 
 async def template_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -266,4 +259,3 @@ template_list_cb = CallbackQueryHandler(show_templates_cb, pattern=r"^template_l
 template_vars_cb = MessageHandler(filters.Regex("^📘 Переглянути список змінних$"), template_vars_categories)
 template_vars_categories_cb = CallbackQueryHandler(template_vars_categories, pattern=r"^template_vars$")
 template_var_list_cb = CallbackQueryHandler(template_vars_list, pattern=r"^varcat:\w+$")
-copy_var_cb = CallbackQueryHandler(copy_variable, pattern=r"^copyvar:.+")

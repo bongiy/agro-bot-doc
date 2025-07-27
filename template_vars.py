@@ -1,3 +1,8 @@
+"""Variables for contract templates and placeholder for empty fields."""
+
+# Default placeholder to use when a value is missing
+EMPTY_VALUE = "______________________"
+
 TEMPLATE_VARIABLES = {
     "company": {
         "title": "ТОВ",
@@ -49,3 +54,11 @@ TEMPLATE_VARIABLES = {
         ],
     },
 }
+
+
+def with_default(value: str | None) -> str:
+    """Return placeholder if value is empty."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return EMPTY_VALUE
+    return value
+
