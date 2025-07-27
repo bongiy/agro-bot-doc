@@ -17,6 +17,7 @@ from db import (
     get_user_by_tg_id, add_user, get_users, update_user, log_admin_action
 )
 
+ADD_USER_START, ADD_USER_ID, ADD_USER_CONFIRM = range(3)
 
 def admin_only(handler):
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
