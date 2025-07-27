@@ -155,11 +155,22 @@ async def admin_delete_handler(update, context):
         await update.callback_query.edit_message_text("Видалення об’єктів — в розробці.", reply_markup=InlineKeyboardMarkup([]))
 
 async def admin_tov_edit_handler(update, context):
+    companies = await get_companies()
+    text = "<b>Оберіть ТОВ для редагування:</b>"
+    if not companies:
+        text = "Немає жодного ТОВ-орендаря."
+    keyboard = [
+        [InlineKeyboardButton(
+            f"{c['short_name'] or c['full_name']}", callback_data=f"company_edit:{c['id']}"
+        )]
+        for c in companies
+    ] if companies else []
+    inline_kb = InlineKeyboardMarkup(keyboard)
     msg = getattr(update, 'message', None)
     if msg:
-        await msg.reply_text("Редагування ТОВ — в розробці.")
+        await msg.reply_text(text, reply_markup=inline_kb, parse_mode="HTML")
     else:
-        await update.callback_query.edit_message_text("Редагування ТОВ — в розробці.", reply_markup=InlineKeyboardMarkup([]))
+        await update.callback_query.edit_message_text(text, reply_markup=inline_kb, parse_mode="HTML")
 
 async def admin_tov_delete_handler(update, context):
     msg = getattr(update, 'message', None)
