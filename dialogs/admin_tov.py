@@ -1,6 +1,5 @@
 from db import get_company
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
-(
 from telegram.ext import ConversationHandler, MessageHandler, filters
 (
     OPF_SELECT, BASE_NAME, NAME_CONFIRM, FULL_NAME_MANUAL, SHORT_NAME_MANUAL,
