@@ -19,12 +19,13 @@ from handlers.menu import (
 )
 from dialogs.payer import (
     add_payer_conv, show_payers, payer_card, delete_payer, delete_payer_prompt,
-    create_contract, to_menu
+    to_menu
 )
 from dialogs.edit_payer import edit_payer_conv
 from dialogs.search import search_payer_conv
 from dialogs.field import add_field_conv, show_fields, delete_field, delete_field_prompt, to_fields_list, field_card, edit_field
 from dialogs.land import add_land_conv, show_lands, land_card, delete_land, delete_land_prompt, to_lands_list
+from dialogs.contract import add_contract_conv, show_contracts, contract_card, to_contracts, send_contract_pdf
 from dialogs.edit_field import edit_field_conv
 from dialogs.edit_land import edit_land_conv
 from dialogs.edit_land_owner import edit_land_owner_conv
@@ -96,6 +97,8 @@ application.add_handler(add_field_conv)
 application.add_handler(MessageHandler(filters.Regex("^📋 Список полів$"), show_fields))
 application.add_handler(add_land_conv)
 application.add_handler(MessageHandler(filters.Regex("^📋 Список ділянок$"), show_lands))
+application.add_handler(add_contract_conv)
+application.add_handler(MessageHandler(filters.Regex("^📋 Список договорів$"), show_contracts))
 
 application.add_handler(CallbackQueryHandler(field_card, pattern=r"^field_card:"))
 application.add_handler(CallbackQueryHandler(delete_field_prompt, pattern=r"^delete_field:\d+$"))
@@ -125,7 +128,9 @@ application.add_handler(CallbackQueryHandler(payer_card, pattern=r"^payer_card:"
 application.add_handler(CallbackQueryHandler(delete_payer_prompt, pattern=r"^delete_payer:\d+$"))
 application.add_handler(CallbackQueryHandler(delete_payer, pattern=r"^confirm_delete_payer:\d+$"))
 application.add_handler(CallbackQueryHandler(to_menu, pattern=r"^to_menu$"))
-application.add_handler(CallbackQueryHandler(create_contract, pattern=r"^create_contract:"))
+application.add_handler(CallbackQueryHandler(contract_card, pattern=r"^contract_card:\d+$"))
+application.add_handler(CallbackQueryHandler(to_contracts, pattern=r"^to_contracts$"))
+application.add_handler(CallbackQueryHandler(send_contract_pdf, pattern=r"^view_pdf:contract:\d+:.+"))
 
 # fallback: обробляємо всі невідомі команди поверненням у головне меню
 application.add_handler(MessageHandler(filters.COMMAND, to_main_menu))

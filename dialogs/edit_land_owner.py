@@ -1,6 +1,6 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ConversationHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
-from db import database, LandPlot, Payer
+from db import database, LandPlot, Payer, LandPlotOwner
 import sqlalchemy
 
 ASK_OWNER_SEARCH, ASK_OWNER_SELECT = range(2)
@@ -54,6 +54,12 @@ async def select_owner(update: Update, context: ContextTypes.DEFAULT_TYPE):
     land_id = context.user_data.get("edit_land_id")
     await database.execute(
         LandPlot.update().where(LandPlot.c.id == land_id).values(payer_id=payer_id)
+    )
+    await database.execute(
+        LandPlotOwner.delete().where(LandPlotOwner.c.land_plot_id == land_id)
+    )
+    await database.execute(
+        LandPlotOwner.insert().values(land_plot_id=land_id, payer_id=payer_id, share=1.0)
     )
     await query.answer("Власника оновлено!")
     await query.message.edit_text("Власника ділянки оновлено.")
