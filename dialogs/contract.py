@@ -33,7 +33,10 @@ from dialogs.post_creation import prompt_add_docs
 from ftp_utils import download_file_ftp
 import sqlalchemy
 
-CHOOSE_COMPANY, SET_DURATION, SET_VALID_FROM, INPUT_LANDS = range(4)
+CHOOSE_COMPANY, SET_DURATION, SET_VALID_FROM, CHOOSE_PAYER, INPUT_LANDS = range(5)
+
+BACK_BTN = "◀️ Назад"  # ◀️ Назад
+CANCEL_BTN = "❌ Скасувати"  # ❌ Скасувати
 
 
 def to_latin_filename(text: str, default: str = "document.pdf") -> str:
@@ -45,6 +48,21 @@ def to_latin_filename(text: str, default: str = "document.pdf") -> str:
     if not name.lower().endswith(".pdf"):
         name += ".pdf"
     return name
+
+
+async def back_or_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE, step_back: int):
+    """Handle back/cancel buttons for contract creation."""
+    text = update.message.text if update.message else None
+    if text == CANCEL_BTN:
+        await update.message.reply_text(
+            "⚠️ Створення договору скасовано. Дані не збережено.",
+            reply_markup=contracts_menu,
+        )
+        context.user_data.clear()
+        return ConversationHandler.END
+    if text == BACK_BTN:
+        return step_back
+    return None
 
 
 async def send_contract_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -69,7 +87,7 @@ async def add_contract_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("Спочатку додайте хоча б одне ТОВ!", reply_markup=contracts_menu)
         return ConversationHandler.END
     kb = ReplyKeyboardMarkup(
-        [[f"{c['id']}: {c['short_name'] or c['full_name']}"] for c in companies],
+        [[f"{c['id']}: {c['short_name'] or c['full_name']}"] for c in companies] + [[CANCEL_BTN]],
         resize_keyboard=True,
     )
     context.user_data["companies"] = {f"{c['id']}: {c['short_name'] or c['full_name']}": c["id"] for c in companies}
@@ -78,6 +96,9 @@ async def add_contract_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def choose_company(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    result = await back_or_cancel(update, context, CHOOSE_COMPANY)
+    if result is not None:
+        return result
     company_id = context.user_data["companies"].get(update.message.text)
     if not company_id:
         await update.message.reply_text("Оберіть компанію зі списку:")
@@ -102,12 +123,15 @@ async def choose_company(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"Номер договору: <b>{number}</b>\nВведіть строк дії в роках:",
         parse_mode="HTML",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=ReplyKeyboardMarkup([[BACK_BTN, CANCEL_BTN]], resize_keyboard=True),
     )
     return SET_DURATION
 
 
 async def set_duration(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    result = await back_or_cancel(update, context, CHOOSE_COMPANY)
+    if result is not None:
+        return result
     try:
         years = int(update.message.text)
         if years <= 0:
@@ -117,13 +141,17 @@ async def set_duration(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return SET_DURATION
     context.user_data["duration"] = years
     kb = ReplyKeyboardMarkup(
-        [["Від сьогодні"], ["З 1 січня наступного року"]], resize_keyboard=True
+        [["Від сьогодні"], ["З 1 січня наступного року"], [BACK_BTN, CANCEL_BTN]],
+        resize_keyboard=True,
     )
     await update.message.reply_text("Дата набрання чинності:", reply_markup=kb)
     return SET_VALID_FROM
 
 
 async def set_valid_from(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    result = await back_or_cancel(update, context, SET_DURATION)
+    if result is not None:
+        return result
     text = update.message.text
     today = datetime.utcnow().date()
     if text == "Від сьогодні":
@@ -134,14 +162,59 @@ async def set_valid_from(update: Update, context: ContextTypes.DEFAULT_TYPE):
     valid_to = valid_from + timedelta(days=365 * duration)
     context.user_data["valid_from"] = datetime.combine(valid_from, datetime.min.time())
     context.user_data["valid_to"] = datetime.combine(valid_to, datetime.min.time())
+    payers = await database.fetch_all(
+        sqlalchemy.select(Payer).order_by(Payer.c.id.desc()).limit(3)
+    )
+    kb = ReplyKeyboardMarkup(
+        [[f"{p['id']}: {p['name']}"] for p in payers]
+        + [["🔍 Пошук пайовика"], ["➕ Створити пайовика"], [BACK_BTN, CANCEL_BTN]],
+        resize_keyboard=True,
+    )
+    context.user_data["recent_payers"] = {
+        f"{p['id']}: {p['name']}": p["id"] for p in payers
+    }
+    await update.message.reply_text("Оберіть пайовика:", reply_markup=kb)
+    return CHOOSE_PAYER
+
+
+async def choose_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    result = await back_or_cancel(update, context, SET_VALID_FROM)
+    if result is not None:
+        return result
+
+    text = update.message.text
+    payer_id = context.user_data.get("recent_payers", {}).get(text)
+    if payer_id:
+        context.user_data["payer_id"] = payer_id
+    elif text in ("🔍 Пошук пайовика", "➕ Створити пайовика"):
+        await update.message.reply_text("🔜 Функція в розробці")
+        return CHOOSE_PAYER
+    else:
+        await update.message.reply_text("Оберіть варіант зі списку")
+        return CHOOSE_PAYER
+
+    lands = await database.fetch_all(
+        sqlalchemy.select(LandPlot).where(LandPlot.c.payer_id == payer_id)
+    )
+    if lands:
+        land_list = " ".join(str(l["id"]) for l in lands)
+        msg = (
+            f"Ділянки пайовика: {land_list}\n"
+            "Вкажіть ID ділянок через пробіл:"
+        )
+    else:
+        msg = "У цього пайовика немає ділянок. Вкажіть ID вручну:"
     await update.message.reply_text(
-        "Вкажіть ID ділянок (через пробіл), які входять до договору:",
-        reply_markup=ReplyKeyboardRemove(),
+        msg,
+        reply_markup=ReplyKeyboardMarkup([[BACK_BTN, CANCEL_BTN]], resize_keyboard=True),
     )
     return INPUT_LANDS
 
 
 async def save_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    result = await back_or_cancel(update, context, CHOOSE_PAYER)
+    if result is not None:
+        return result
     try:
         land_ids = [int(i) for i in update.message.text.replace(",", " ").split() if i]
     except ValueError:
@@ -198,6 +271,7 @@ add_contract_conv = ConversationHandler(
         CHOOSE_COMPANY: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_company)],
         SET_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_duration)],
         SET_VALID_FROM: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_valid_from)],
+        CHOOSE_PAYER: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_payer)],
         INPUT_LANDS: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_contract)],
     },
     fallbacks=[],
