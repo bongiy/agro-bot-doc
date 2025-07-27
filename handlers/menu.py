@@ -1,6 +1,8 @@
 from telegram import Update
 from telegram.ext import ContextTypes
-from keyboards.menu import main_menu, main_menu_admin  # імпортуємо обидва меню
+from keyboards.menu import main_menu, main_menu_admin,
+    payers_menu, lands_menu, fields_menu, contracts_menu,
+    payments_menu, reports_menu, search_menu  # імпортуємо обидва меню
 
 # TODO: Замініть цей список на актуальні admin_ids або імпортуйте з config
 admin_ids = [123456789]  # <--- Вкажи свій Telegram user_id тут!
