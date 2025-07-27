@@ -33,7 +33,7 @@ from dialogs.post_creation import prompt_add_docs
 from ftp_utils import download_file_ftp
 import sqlalchemy
 
-CHOOSE_COMPANY, SET_DURATION, SET_VALID_FROM, CHOOSE_PAYER, INPUT_LANDS = range(5)
+CHOOSE_COMPANY, SET_DURATION, SET_VALID_FROM, CHOOSE_PAYER, INPUT_LANDS, SEARCH_LAND = range(6)
 
 BACK_BTN = "◀️ Назад"  # ◀️ Назад
 CANCEL_BTN = "❌ Скасувати"  # ❌ Скасувати
@@ -50,6 +50,14 @@ def to_latin_filename(text: str, default: str = "document.pdf") -> str:
     return name
 
 
+def format_cadaster(text: str) -> str | None:
+    """Normalize cadastral number to XXXXXX:XX:XXX:XXXX format."""
+    digits = re.sub(r"\D", "", text)
+    if len(digits) != 19:
+        return None
+    return f"{digits[:10]}:{digits[10:12]}:{digits[12:15]}:{digits[15:]}"
+
+
 async def back_or_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE, step_back: int):
     """Handle back/cancel buttons for contract creation."""
     text = update.message.text if update.message else None
@@ -63,6 +71,41 @@ async def back_or_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE, ste
     if text == BACK_BTN:
         return step_back
     return None
+
+
+async def search_land(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle cadastral search within contract FSM."""
+    result = await back_or_cancel(update, context, INPUT_LANDS)
+    if result is not None:
+        return result
+    cad = format_cadaster(update.message.text)
+    if not cad:
+        await update.message.reply_text("Некоректний кадастровий номер. Спробуйте ще:")
+        return SEARCH_LAND
+    row = await database.fetch_one(sqlalchemy.select(LandPlot).where(LandPlot.c.cadaster == cad))
+    if not row:
+        await update.message.reply_text("Ділянку не знайдено.")
+        return INPUT_LANDS
+    btn = InlineKeyboardButton("➕ Додати до договору", callback_data=f"add_land_to_contract:{row['id']}")
+    await update.message.reply_text(
+        f"ID {row['id']}: {row['cadaster']} — {row['area']:.4f} га",
+        reply_markup=InlineKeyboardMarkup([[btn]]),
+    )
+    return INPUT_LANDS
+
+
+async def add_land_from_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Callback when user adds land from search results."""
+    query = update.callback_query
+    land_id = int(query.data.split(":")[1])
+    context.user_data.setdefault("land_ids", []).append(land_id)
+    await query.answer("Додано до договору")
+    land_list = " ".join(map(str, context.user_data["land_ids"]))
+    await query.message.reply_text(
+        f"Ділянка #{land_id} додана. Поточний список: {land_list}",
+        reply_markup=ReplyKeyboardMarkup([[BACK_BTN, CANCEL_BTN]], resize_keyboard=True),
+    )
+    return INPUT_LANDS
 
 
 async def send_contract_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -196,18 +239,20 @@ async def choose_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lands = await database.fetch_all(
         sqlalchemy.select(LandPlot).where(LandPlot.c.payer_id == payer_id)
     )
+    context.user_data["land_ids"] = []
     if lands:
         land_list = " ".join(str(l["id"]) for l in lands)
         msg = (
             f"Ділянки пайовика: {land_list}\n"
-            "Вкажіть ID ділянок через пробіл:"
+            "Вкажіть ID ділянок через пробіл або скористайтеся пошуком."
         )
     else:
-        msg = "У цього пайовика немає ділянок. Вкажіть ID вручну:"
-    await update.message.reply_text(
-        msg,
-        reply_markup=ReplyKeyboardMarkup([[BACK_BTN, CANCEL_BTN]], resize_keyboard=True),
+        msg = "У цього пайовика немає ділянок. Вкажіть ID вручну або скористайтеся пошуком."
+    kb = ReplyKeyboardMarkup(
+        [["🔍 Пошук ділянки", "✅ Завершити"], [BACK_BTN, CANCEL_BTN]],
+        resize_keyboard=True,
     )
+    await update.message.reply_text(msg, reply_markup=kb)
     return INPUT_LANDS
 
 
@@ -215,14 +260,36 @@ async def save_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = await back_or_cancel(update, context, CHOOSE_PAYER)
     if result is not None:
         return result
-    try:
-        land_ids = [int(i) for i in update.message.text.replace(",", " ").split() if i]
-    except ValueError:
-        await update.message.reply_text("Невірний формат. Введіть ID через пробіл:")
+    text = update.message.text
+    if text == "🔍 Пошук ділянки":
+        await update.message.reply_text(
+            "Введіть кадастровий номер:",
+            reply_markup=ReplyKeyboardMarkup([[BACK_BTN, CANCEL_BTN]], resize_keyboard=True),
+        )
+        return SEARCH_LAND
+    if text == "✅ Завершити":
+        land_ids = context.user_data.get("land_ids", [])
+        if not land_ids:
+            await update.message.reply_text("Не додано жодної ділянки.")
+            return INPUT_LANDS
+    else:
+        try:
+            new_ids = [int(i) for i in text.replace(",", " ").split() if i]
+        except ValueError:
+            await update.message.reply_text("Невірний формат. Введіть ID через пробіл:")
+            return INPUT_LANDS
+        if not new_ids:
+            await update.message.reply_text("Не вказано жодної ділянки. Спробуйте ще раз:")
+            return INPUT_LANDS
+        context.user_data.setdefault("land_ids", []).extend(new_ids)
+        land_list = " ".join(map(str, context.user_data["land_ids"]))
+        await update.message.reply_text(
+            f"Додано: {' '.join(map(str, new_ids))}. Поточний список: {land_list}\nНатисніть '✅ Завершити' коли закінчите.",
+            reply_markup=ReplyKeyboardMarkup([["🔍 Пошук ділянки", "✅ Завершити"], [BACK_BTN, CANCEL_BTN]], resize_keyboard=True),
+        )
         return INPUT_LANDS
-    if not land_ids:
-        await update.message.reply_text("Не вказано жодної ділянки. Спробуйте ще раз:")
-        return INPUT_LANDS
+        
+    land_ids = context.user_data.get("land_ids", [])
     invalid = []
     for lid in land_ids:
         total = await database.fetch_val(
@@ -272,7 +339,11 @@ add_contract_conv = ConversationHandler(
         SET_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_duration)],
         SET_VALID_FROM: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_valid_from)],
         CHOOSE_PAYER: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_payer)],
-        INPUT_LANDS: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_contract)],
+        INPUT_LANDS: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, save_contract),
+            CallbackQueryHandler(add_land_from_search, pattern=r"^add_land_to_contract:\d+$"),
+        ],
+        SEARCH_LAND: [MessageHandler(filters.TEXT & ~filters.COMMAND, search_land)],
     },
     fallbacks=[],
 )
