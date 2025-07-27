@@ -45,7 +45,7 @@ async def search_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text("Меню «Пошук»", reply_markup=search_menu)
 
 async def admin_panel_handler(update, context):
-    admin_ids = [123456789]  # <--- твій tg_id
+    admin_ids = [370806943]  # <--- твій tg_id
     if update.effective_user.id not in admin_ids:
         await update.message.reply_text("У вас немає прав для цієї дії.")
         return
