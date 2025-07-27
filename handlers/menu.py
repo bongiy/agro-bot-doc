@@ -38,7 +38,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.effective_user.username
     user = await get_user_by_tg_id(tg_id)
     if not user:
-        await add_user(tg_id, username=username)
+        await add_user(
+            tg_id,
+            username=username,
+            full_name=update.effective_user.full_name,
+        )
         user_role = "user"
     else:
         user_role = user["role"]
