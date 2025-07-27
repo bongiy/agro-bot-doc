@@ -6,6 +6,7 @@ from telegram.ext import (
 )
 from keyboards.menu import fields_menu
 from db import database, Field, UploadedDocs
+from dialogs.post_creation import prompt_add_docs
 import sqlalchemy
 from ftp_utils import download_file_ftp, delete_file_ftp  # <-- додаємо FTP-утиліти
 
@@ -42,12 +43,17 @@ async def add_field_area(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ASK_FIELD_AREA
     name = context.user_data["field_name"]
     query = Field.insert().values(name=name, area_actual=area)
-    await database.execute(query)
-    await update.message.reply_text(
-        f"Поле '{name}' ({area:.4f} га) додано.",
-        reply_markup=fields_menu
-    )
+    field_id = await database.execute(query)
+
     context.user_data.clear()
+    await prompt_add_docs(
+        update,
+        context,
+        "field",
+        field_id,
+        f"Поле '{name}' ({area:.4f} га) додано.",
+        fields_menu,
+    )
     return ConversationHandler.END
 
 add_field_conv = ConversationHandler(

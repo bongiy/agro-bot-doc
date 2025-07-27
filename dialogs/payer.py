@@ -10,6 +10,7 @@ from telegram.ext import (
 )
 from telegram.constants import ParseMode
 from db import database, Payer, UploadedDocs
+from dialogs.post_creation import prompt_add_docs
 from keyboards.menu import payers_menu, main_menu
 from ftp_utils import download_file_ftp, delete_file_ftp
 
@@ -308,14 +309,22 @@ async def add_payer_birth_date(update: Update, context: ContextTypes.DEFAULT_TYP
         birth_date=d.get("birth_date"),
     )
     payer_id = await database.execute(query)
-    keyboard = [
+
+    keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("Створити договір оренди", callback_data=f"create_contract:{payer_id}")],
-        [InlineKeyboardButton("До меню", callback_data="to_menu")]
-    ]
-    await update.message.reply_text(
-        f"✅ Пайовика додано!", reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+        [InlineKeyboardButton("До меню", callback_data="to_menu")],
+    ])
+    final_text = "✅ Пайовика додано!"
+
     context.user_data.clear()
+    await prompt_add_docs(
+        update,
+        context,
+        "payer_passport" if d.get("doc_type") == "passport" else "payer_id",
+        payer_id,
+        final_text,
+        keyboard,
+    )
     return ConversationHandler.END
 
 # ==== СПИСОК, КАРТКА, РЕДАГУВАННЯ, ВИДАЛЕННЯ ====

@@ -28,6 +28,7 @@ from dialogs.edit_field import edit_field_conv
 from dialogs.edit_land import edit_land_conv
 from dialogs.edit_land_owner import edit_land_owner_conv
 from dialogs.add_docs_fsm import add_docs_conv, send_pdf, delete_pdf  # тільки FTP!
+from dialogs.post_creation import skip_add_docs
 from db import database, ensure_admin
 
 from dialogs.admin_tov import admin_tov_add_conv
@@ -112,6 +113,7 @@ application.add_handler(edit_company_conv)
 application.add_handler(add_docs_conv)
 application.add_handler(CallbackQueryHandler(send_pdf, pattern=r"^send_pdf:\d+$"))
 application.add_handler(CallbackQueryHandler(delete_pdf, pattern=r"^delete_pdf_db:\d+$"))
+application.add_handler(CallbackQueryHandler(skip_add_docs, pattern=r"^skip_docs:\w+:\d+$"))
 
 # CallbackQueryHandler-и — як є, доки не переведені на нову систему:
 application.add_handler(CallbackQueryHandler(payer_card, pattern=r"^payer_card:"))

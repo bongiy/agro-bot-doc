@@ -9,6 +9,7 @@ from telegram.ext import (
 )
 from keyboards.menu import lands_menu
 from db import database, LandPlot, Field, Payer, UploadedDocs
+from dialogs.post_creation import prompt_add_docs
 import sqlalchemy
 from ftp_utils import download_file_ftp, delete_file_ftp
 
@@ -97,9 +98,17 @@ async def choose_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
             field_id=context.user_data["field_id"],
             payer_id=None
         )
-        await database.execute(query)
-        await update.message.reply_text("Ділянка додана без власника! Власника можна додати в картці ділянки.", reply_markup=lands_menu)
+        land_id = await database.execute(query)
+
         context.user_data.clear()
+        await prompt_add_docs(
+            update,
+            context,
+            "land",
+            land_id,
+            "Ділянка додана без власника! Власника можна додати в картці ділянки.",
+            lands_menu,
+        )
         return ConversationHandler.END
 
     payers = await database.fetch_all(sqlalchemy.select(Payer).limit(20))
@@ -126,9 +135,17 @@ async def set_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         field_id=context.user_data["field_id"],
         payer_id=payer_id
     )
-    await database.execute(query)
-    await update.message.reply_text("Ділянка додана!", reply_markup=lands_menu)
+    land_id = await database.execute(query)
+
     context.user_data.clear()
+    await prompt_add_docs(
+        update,
+        context,
+        "land",
+        land_id,
+        "Ділянка додана!",
+        lands_menu,
+    )
     return ConversationHandler.END
 
 add_land_conv = ConversationHandler(
