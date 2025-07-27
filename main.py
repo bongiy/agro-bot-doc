@@ -56,7 +56,6 @@ application.add_handler(MessageHandler(filters.Regex("^📄 Договори$"),
 application.add_handler(MessageHandler(filters.Regex("^💳 Виплати$"), payments_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^📊 Звіти$"), reports_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^🔎 Пошук$"), search_menu_handler))
-application.add_handler(MessageHandler(filters.Regex("^🔄 Перезапустити$"), restart_bot))
 application.add_handler(MessageHandler(filters.Regex("^🛡️ Адмінпанель$"), admin_panel_handler))
 
 # --- ПАЙОВИКИ: Підключаємо діалоги до підменю пайовиків
