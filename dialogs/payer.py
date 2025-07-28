@@ -21,8 +21,8 @@ import sqlalchemy
     PHONE, DOC_TYPE,
     PASS_SERIES, PASS_NUMBER, PASS_ISSUER, PASS_DATE,
     IDCARD_NUMBER, IDCARD_UNZR, IDCARD_ISSUER, IDCARD_DATE,
-    BIRTH_DATE
-) = range(19)
+    BIRTH_DATE, BANK_CARD
+) = range(20)
 
 # Клавіатури для кроків діалогу:
 doc_type_keyboard = ReplyKeyboardMarkup(
@@ -56,6 +56,15 @@ def normalize_phone(text):
     if re.fullmatch(r"\+380\d{9}", text):
         return text
     return None
+
+def normalize_bank_card(text):
+    digits = re.sub(r"\D", "", text or "")
+    if not digits:
+        return None
+    if len(digits) not in (16, 19):
+        return None
+    groups = [digits[i:i+4] for i in range(0, len(digits), 4)]
+    return " ".join(groups)
 def to_latin_filename(text, default="document.pdf"):
     name = unicodedata.normalize('NFKD', str(text)).encode('ascii', 'ignore').decode('ascii')
     name = name.replace(" ", "_")
@@ -286,6 +295,23 @@ async def add_payer_birth_date(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("❗️ Формат дати: дд.мм.рррр")
         return BIRTH_DATE
     context.user_data["birth_date"] = update.message.text
+    await update.message.reply_text(
+        "Введіть номер банківської картки (або '-' якщо немає):",
+        reply_markup=back_cancel_keyboard
+    )
+    return BANK_CARD
+
+async def add_payer_bank_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    result = await back_or_cancel(update, context, BIRTH_DATE)
+    if result is not None:
+        return result
+    text = update.message.text.strip()
+    if text != "-":
+        card = normalize_bank_card(text)
+        if not card:
+            await update.message.reply_text("❗️ Введіть 16 або 19 цифр картки")
+            return BANK_CARD
+        context.user_data["bank_card"] = card
     d = context.user_data
     query = Payer.insert().values(
         name=d.get("name"),
@@ -297,6 +323,7 @@ async def add_payer_birth_date(update: Update, context: ContextTypes.DEFAULT_TYP
         bud=d.get("bud"),
         kv=d.get("kv"),
         phone=d.get("phone"),
+        bank_card=d.get("bank_card"),
         doc_type=d.get("doc_type"),
         passport_series=d.get("passport_series"),
         passport_number=d.get("passport_number"),
@@ -367,6 +394,7 @@ async def payer_card(update, context):
         f"Ким виданий: {payer.passport_issuer or payer.idcard_issuer or ''}\n"
         f"Коли виданий: {payer.passport_date or payer.idcard_date or ''}\n"
         f"УНЗР: {payer.unzr or '-'}\n"
+        f"🏦 Картка для виплат:\n{payer.bank_card or '-'}\n"
         f"🏠 Адреса: {payer.oblast} обл., {payer.rayon} р-н, с. {payer.selo}, вул. {payer.vul}, буд. {payer.bud}, кв. {payer.kv}"
     )
 
@@ -521,6 +549,7 @@ add_payer_conv = ConversationHandler(
         IDCARD_ISSUER: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_payer_idcard_issuer)],
         IDCARD_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_payer_idcard_date)],
         BIRTH_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_payer_birth_date)],
+        BANK_CARD: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_payer_bank_card)],
     },
     fallbacks=[CommandHandler("start", to_menu)],
 )
