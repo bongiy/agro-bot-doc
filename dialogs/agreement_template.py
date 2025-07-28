@@ -11,7 +11,11 @@ from db import (
     update_agreement_template, delete_agreement_template
 )
 from template_vars import TEMPLATE_VARIABLES
-from template_utils import find_unsupported_vars, build_unresolved_message
+from template_utils import (
+    extract_variables,
+    find_unsupported_vars,
+    build_unresolved_message,
+)
 
 
 def _build_all_vars_text() -> str:
@@ -22,7 +26,6 @@ def _build_all_vars_text() -> str:
         sections.append(f"<b>{cat['title']}</b>:\n" + "\n".join(lines))
     return "\n\n".join(sections)
 import re
-import zipfile
 import unicodedata
 from ftp_utils import upload_file_ftp, delete_file_ftp
 
@@ -48,34 +51,6 @@ def to_latin_filename(text: str, default: str = "template.docx") -> str:
         name += '.docx'
     return name
 
-def extract_variables(path: str) -> set[str]:
-    """Extract all ``{{variable}}`` placeholders from a docx file.
-
-    This function walks through all XML parts of the document (including
-    headers, footers and text boxes) and correctly joins text runs that may
-    split a variable name. Spaces and other non word characters inside the
-    braces are ignored. Returned variables are unique and sorted.
-    """
-
-    text_parts: list[str] = []
-    with zipfile.ZipFile(path) as z:
-        for name in z.namelist():
-            if name.startswith("word/") and name.endswith(".xml"):
-                xml = z.read(name).decode("utf-8", errors="ignore")
-                # Drop all XML tags so neighbouring text joins together
-                cleaned = re.sub(r"<[^>]+>", "", xml)
-                text_parts.append(cleaned)
-
-    full_text = "".join(text_parts)
-    raw_vars = re.findall(r"\{\{.*?\}\}", full_text)
-
-    variables: set[str] = set()
-    for var in raw_vars:
-        inner = re.sub(r"[^\w]", "", var[2:-2])
-        if inner:
-            variables.add(f"{{{{{inner}}}}}")
-
-    return set(sorted(variables))
 
 ADD_TYPE, ADD_NAME, ADD_FILE, REPLACE_FILE = range(4)
 
@@ -216,7 +191,8 @@ async def add_template_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     local_path = os.path.join(tmp_dir, remote_name)
     tg_file = await doc.get_file()
     await tg_file.download_to_drive(local_path)
-    vars_found = extract_variables(local_path)
+    var_counts = extract_variables(local_path)
+    vars_found = {f"{{{{{v}}}}}" for v in var_counts}
     unsupported = find_unsupported_vars(local_path)
     upload_file_ftp(local_path, remote_path)
     os.remove(local_path)
@@ -260,7 +236,8 @@ async def replace_template_file(update: Update, context: ContextTypes.DEFAULT_TY
     local_path = os.path.join(tmp_dir, remote_name)
     tg_file = await doc.get_file()
     await tg_file.download_to_drive(local_path)
-    vars_found = extract_variables(local_path)
+    var_counts = extract_variables(local_path)
+    vars_found = {f"{{{{{v}}}}}" for v in var_counts}
     unsupported = find_unsupported_vars(local_path)
     upload_file_ftp(local_path, remote_path)
     os.remove(local_path)
