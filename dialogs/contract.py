@@ -103,7 +103,7 @@ async def build_land_keyboard(context: ContextTypes.DEFAULT_TYPE) -> InlineKeybo
 
 async def show_land_options(msg_obj: Any, context: ContextTypes.DEFAULT_TYPE) -> int:
     markup = await build_land_keyboard(context)
-    text = "\ud83d\udcdd Оберіть ділянки для договору:"
+    text = "\ud83d\📍Оберіть ділянки для договору:"
     if hasattr(msg_obj, "edit_text"):
         await msg_obj.edit_text(text, reply_markup=markup)
     else:
