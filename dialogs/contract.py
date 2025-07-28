@@ -3,6 +3,7 @@ import unicodedata
 import re
 from datetime import datetime, timedelta
 from typing import Any
+import logging
 
 from telegram import (
     Update,
@@ -42,6 +43,8 @@ from contract_generation_v2 import (
 )
 from template_utils import analyze_template, build_unresolved_message
 import sqlalchemy
+
+logger = logging.getLogger(__name__)
 
 CHOOSE_COMPANY, SET_DURATION, SET_VALID_FROM, CHOOSE_PAYER, INPUT_LANDS, SET_RENT, SEARCH_LAND = range(7)
 
@@ -738,6 +741,7 @@ async def generate_contract_pdf_cb(update: Update, context: ContextTypes.DEFAULT
     try:
         remote_path, gen_log = await generate_contract_v2(contract_id)
     except Exception:
+        logger.exception("Failed to generate contract PDF")
         await query.message.edit_text(
             "⚠️ Неможливо згенерувати PDF. Перевірте шаблон або дані договору.",
             reply_markup=InlineKeyboardMarkup(
