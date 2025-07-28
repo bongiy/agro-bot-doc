@@ -87,3 +87,7 @@ FTP server.
 The call returns `(remote_path, log)` where `remote_path` is the FTP path of the
 uploaded PDF and `log` describes which template placeholders were filled or left
 empty.
+
+LibreOffice (``soffice``) must be installed on the system for DOCX→PDF
+conversion. The `docx2pdf` library will automatically attempt to use
+LibreOffice if it is available.
