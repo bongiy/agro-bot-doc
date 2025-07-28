@@ -6,7 +6,7 @@ from typing import Any, Mapping, Iterable
 
 from docxtpl import DocxTemplate
 
-from template_vars import TEMPLATE_VARIABLES, EMPTY_VALUE
+from template_vars import TEMPLATE_VARIABLES, EMPTY_VALUE, SUPPORTED_VARS
 
 
 # Mapping from variable placeholder to description
@@ -23,7 +23,9 @@ def find_unsupported_vars(template_path: str) -> list[str]:
     return sorted(found - ALLOWED_VARS)
 
 
-def analyze_template(template_path: str, context: Mapping[str, Any]) -> tuple[list[str], list[str]]:
+def analyze_template(
+    template_path: str, context: Mapping[str, Any]
+) -> tuple[list[str], list[str], int]:
     """Return missing and unsupported placeholders for a template.
 
     Parameters
@@ -35,12 +37,14 @@ def analyze_template(template_path: str, context: Mapping[str, Any]) -> tuple[li
 
     Returns
     -------
-    tuple[list[str], list[str]]
+    tuple[list[str], list[str], int]
         First item is a list of supported placeholders with empty values,
         second item is a list of unsupported placeholders.
+        Third item is the total number of placeholders found in the template.
     """
     doc = DocxTemplate(template_path)
-    all_vars = {f"{{{{{v}}}}}" for v in doc.get_undeclared_template_variables()}
+    vars_found = list(doc.get_undeclared_template_variables())
+    all_vars = {f"{{{{{v}}}}}" for v in vars_found}
     missing_in_ctx = {
         f"{{{{{v}}}}}" for v in doc.get_undeclared_template_variables(context=context)
     }
@@ -52,23 +56,29 @@ def analyze_template(template_path: str, context: Mapping[str, Any]) -> tuple[li
     }
     unsupported = sorted(all_vars - ALLOWED_VARS)
     supported_missing = sorted((missing_in_ctx | missing_values) & ALLOWED_VARS)
-    return supported_missing, unsupported
+    total = len(all_vars)
+    return supported_missing, unsupported, total
 
 
-def build_unresolved_message(missing: Iterable[str], unsupported: Iterable[str]) -> str | None:
+def build_unresolved_message(
+    missing: Iterable[str], unsupported: Iterable[str], total: int
+) -> str:
     """Format message listing unresolved placeholders."""
     missing = list(missing)
     unsupported = list(unsupported)
-    count = len(missing) + len(unsupported)
-    if count == 0:
-        return None
-    lines = [f"⚠️ Не вдалося заповнити {count} змінних:", ""]
+    if not missing and not unsupported:
+        return f"✅ Усі {total} змінних знайдено та заповнено"
+
+    lines = ["⚠️ У шаблоні знайдено незаповнені змінні:", ""]
     for var in sorted(missing + unsupported):
         if var in unsupported:
-            lines.append(f"{var} — така змінна не підтримується")
+            lines.append(f"{var} — змінна не підтримується")
         else:
             desc = VAR_DESCRIPTIONS.get(var, "")
-            lines.append(f"{var} — {desc} не заповнено")
-    lines.append(f"Буде підставлено: {EMPTY_VALUE} у шаблон")
+            if desc:
+                lines.append(f"{var} — значення відсутнє ({desc} не вказано)")
+            else:
+                lines.append(f"{var} — значення відсутнє")
+    lines.append(f"📎 У шаблон буде підставлено: {EMPTY_VALUE}")
     return "\n".join(lines)
 

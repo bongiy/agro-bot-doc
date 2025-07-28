@@ -66,6 +66,13 @@ TEMPLATE_VARIABLES = {
     },
 }
 
+# Flat mapping of variable name to description for quick lookup
+SUPPORTED_VARS = {
+    var.strip("{}"): desc
+    for cat in TEMPLATE_VARIABLES.values()
+    for var, desc in cat["items"]
+}
+
 
 def with_default(value: str | None) -> str:
     """Return placeholder if value is empty."""
