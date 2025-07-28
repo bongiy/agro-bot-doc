@@ -32,6 +32,7 @@ from db import (
     LandPlotOwner,
     Payer,
     UploadedDocs,
+    Payment,
 )
 from keyboards.menu import contracts_menu
 from dialogs.post_creation import prompt_add_docs
@@ -52,6 +53,12 @@ status_values = {
     "sent_for_registration": "🟠 Відправлено на реєстрацію",
     "returned_for_correction": "🔴 Повернуто з реєстрації на доопрацювання",
     "registered": "🟢 Зареєстровано в ДРРП",
+}
+
+payment_type_short = {
+    "cash": "💸",
+    "card": "💳",
+    "bank": "🏦",
 }
 
 CHOOSE_COMPANY, SET_DURATION, SET_VALID_FROM, CHOOSE_PAYER, INPUT_LANDS, SET_RENT, SEARCH_LAND = range(7)
@@ -667,7 +674,52 @@ async def agreement_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📎 Шаблон: {template_name}\n\n"
         f"📥 Завантажені документи: {docs_count} файла(ів)"
     )
+
+    # === Платежі ===
+    payments = await database.fetch_all(
+        sqlalchemy.select(Payment).where(Payment.c.agreement_id == contract_id).order_by(Payment.c.payment_date)
+    )
+    payments_by_year: dict[int, list] = {}
+    for p in payments:
+        payments_by_year.setdefault(p["payment_date"].year, []).append(p)
+    totals = {y: sum(float(r["amount"]) for r in rows) for y, rows in payments_by_year.items()}
+    current_year = datetime.utcnow().year
+    curr_total = totals.get(current_year, 0)
+    rent = float(contract["rent_amount"] or 0)
+    debt = max(0, rent - curr_total)
+    paid_full = curr_total >= rent
+    history_lines = []
+    for p in payments_by_year.get(current_year, []):
+        typ = payment_type_short.get(p["payment_type"], "")
+        history_lines.append(f"— {p['payment_date'].strftime('%d.%m.%Y')} — {typ} {format_money(p['amount'])}")
+    prev_years = ""
+    for y in sorted(totals):
+        if y == current_year:
+            continue
+        total = totals[y]
+        if total >= rent:
+            status = "✅ Виплачено повністю"
+        else:
+            status = f"❌ Не виплачено (борг: {format_money(rent - total)})"
+        prev_years += f"{y} — {status}\n"
+
+    text += (
+        f"\n\n📆 <b>Орендна плата</b>: {format_money(rent)}/рік\n\n"
+        f"🗓 Поточний рік: {current_year}\n"
+        f"✅ Виплачено: {format_money(curr_total)}\n"
+        f"🔴 Борг: {format_money(debt)}\n"
+        f"📌 Виплачено повністю: {'✅ Так' if paid_full else '❌ Ні'}"
+    )
+    if history_lines:
+        text += "\n\n📅 Історія {year}:\n".format(year=current_year)
+        text += "\n".join(history_lines)
+    if prev_years:
+        text += "\n\n📂 Попередні роки:\n" + prev_years.strip()
+
     buttons = [
+        [InlineKeyboardButton("➕ Додати виплату", callback_data=f"add_payment:{contract_id}")],
+        [InlineKeyboardButton("📊 Зведення по роках", callback_data=f"payment_summary:{contract_id}")],
+        [InlineKeyboardButton("🗂 Історія виплат за рік", callback_data=f"payment_history:{contract_id}")],
         [InlineKeyboardButton("📄 Згенерувати договір (docx/pdf)", callback_data=f"generate_contract_pdf:{contract_id}")],
         [InlineKeyboardButton("📝 Редагувати", callback_data=f"edit_contract:{contract_id}")],
         [InlineKeyboardButton("📌 Змінити статус", callback_data=f"change_status:{contract_id}")],
@@ -1057,3 +1109,48 @@ change_status_conv = ConversationHandler(
     },
     fallbacks=[],
 )
+
+
+async def payment_summary_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    contract_id = int(query.data.split(":")[1])
+    contract = await database.fetch_one(sqlalchemy.select(Contract).where(Contract.c.id == contract_id))
+    payments = await database.fetch_all(sqlalchemy.select(Payment).where(Payment.c.agreement_id == contract_id))
+    by_year: dict[int, float] = {}
+    for p in payments:
+        y = p["payment_date"].year
+        by_year[y] = by_year.get(y, 0) + float(p["amount"])
+    rent = float(contract["rent_amount"] or 0)
+    lines = []
+    for y in sorted(by_year):
+        total = by_year[y]
+        if total >= rent:
+            status = "✅ Виплачено повністю"
+        else:
+            status = f"❌ Борг: {format_money(rent - total)}"
+        lines.append(f"{y}: {format_money(total)} — {status}")
+    if not lines:
+        lines.append("Немає даних.")
+    lines.append("\n⬅️ Назад")
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=f"agreement_card:{contract_id}")]])
+    await query.message.edit_text("\n".join(lines), reply_markup=kb)
+
+
+async def payment_history_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    contract_id = int(query.data.split(":")[1])
+    year = datetime.utcnow().year
+    payments = await database.fetch_all(
+        sqlalchemy.select(Payment).where(
+            (Payment.c.agreement_id == contract_id)
+            & (sqlalchemy.extract("year", Payment.c.payment_date) == year)
+        ).order_by(Payment.c.payment_date)
+    )
+    lines = [f"Виплати {year}:"]
+    for p in payments:
+        typ = payment_type_short.get(p["payment_type"], "")
+        lines.append(f"— {p['payment_date'].strftime('%d.%m.%Y')} — {typ} {format_money(p['amount'])}")
+    if len(lines) == 1:
+        lines.append("Немає виплат")
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=f"agreement_card:{contract_id}")]])
+    await query.message.edit_text("\n".join(lines), reply_markup=kb)
