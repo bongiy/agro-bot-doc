@@ -34,24 +34,37 @@ def docx_to_pdf(docx_path: str, pdf_path: str) -> None:
 
     try:
         convert(docx_path, pdf_path)
-    except Exception:
+        return
+    except Exception as exc:
         libreoffice = shutil.which("libreoffice") or shutil.which("soffice")
-        if not libreoffice:
-            raise
-        subprocess.run([
-            libreoffice,
-            "--headless",
-            "--convert-to",
-            "pdf",
-            "--outdir",
-            os.path.dirname(pdf_path),
-            docx_path,
-        ], check=True)
-        generated = os.path.join(
-            os.path.dirname(pdf_path),
-            os.path.splitext(os.path.basename(docx_path))[0] + ".pdf",
-        )
-        os.replace(generated, pdf_path)
+        if libreoffice:
+            subprocess.run([
+                libreoffice,
+                "--headless",
+                "--convert-to",
+                "pdf",
+                "--outdir",
+                os.path.dirname(pdf_path),
+                docx_path,
+            ], check=True)
+            generated = os.path.join(
+                os.path.dirname(pdf_path),
+                os.path.splitext(os.path.basename(docx_path))[0] + ".pdf",
+            )
+            os.replace(generated, pdf_path)
+            return
+        unoconv = shutil.which("unoconv")
+        if unoconv:
+            subprocess.run([
+                unoconv,
+                "-f",
+                "pdf",
+                "-o",
+                pdf_path,
+                docx_path,
+            ], check=True)
+            return
+        raise exc
 
 
 def format_area(area: float | int | str | None) -> str:

@@ -88,8 +88,8 @@ The call returns `(remote_path, log)` where `remote_path` is the FTP path of the
 uploaded PDF and `log` describes which template placeholders were filled or left
 empty.
 
-LibreOffice (``soffice``) must be installed on the system for DOCX→PDF
-conversion. The `docx2pdf` library will automatically attempt to use
-LibreOffice if it is available. Install ``docx2pdf`` via ``pip install docx2pdf``.
-If LibreOffice is not installed or you prefer another tool, any CLI converter
-such as ``unoconv`` can be used as an alternative.
+LibreOffice (``soffice``) should be installed on the system for DOCX→PDF
+conversion. The helper function first tries :func:`docx2pdf.convert`; if that
+fails it falls back to ``libreoffice`` or, if unavailable, ``unoconv``. Install
+``docx2pdf`` via ``pip install docx2pdf`` and ensure either LibreOffice or
+``unoconv`` is present on the system.
