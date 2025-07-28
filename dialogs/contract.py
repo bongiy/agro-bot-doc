@@ -35,7 +35,7 @@ from keyboards.menu import contracts_menu
 from dialogs.post_creation import prompt_add_docs
 from ftp_utils import download_file_ftp, delete_file_ftp
 from contract_generation_v2 import (
-    generate_contract,
+    generate_contract_v2,
     format_area,
     format_money,
     format_share,
@@ -728,155 +728,53 @@ async def delete_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==== ГЕНЕРАЦІЯ PDF ДОГОВОРУ ====
 async def generate_contract_pdf_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+
     contract_id = int(query.data.split(":")[1])
     contract = await database.fetch_one(sqlalchemy.select(Contract).where(Contract.c.id == contract_id))
     if not contract:
         await query.answer("Договір не знайдено!", show_alert=True)
         return
-    if not contract["company_id"]:
-        await query.answer("⚠️ У договорі не вказано ТОВ. Неможливо підставити дані.", show_alert=True)
+
+    try:
+        remote_path, gen_log = await generate_contract_v2(contract_id)
+    except Exception:
+        await query.message.edit_text(
+            "⚠️ Неможливо згенерувати PDF. Перевірте шаблон або дані договору.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("⬅️ Назад", callback_data=f"contract_card:{contract_id}")]]
+            ),
+        )
         return
-    company = await database.fetch_one(sqlalchemy.select(Company).where(Company.c.id == contract["company_id"]))
-    if not company:
-        await query.answer("⚠️ У договорі не вказано ТОВ. Неможливо підставити дані.", show_alert=True)
-        return
-    if not contract["payer_id"]:
-        await query.answer("⚠️ У договорі не вказано пайовика. Неможливо підставити дані.", show_alert=True)
-        return
-    payer = await database.fetch_one(sqlalchemy.select(Payer).where(Payer.c.id == contract["payer_id"]))
-    if not payer:
-        await query.answer("⚠️ У договорі не вказано пайовика. Неможливо підставити дані.", show_alert=True)
-        return
-    lands = await database.fetch_all(
-        sqlalchemy.select(LandPlot)
-        .join(ContractLandPlot, LandPlot.c.id == ContractLandPlot.c.land_plot_id)
-        .where(ContractLandPlot.c.contract_id == contract_id)
+
+    row = await database.fetch_one(
+        sqlalchemy.select(UploadedDocs.c.id)
+        .where(
+            (UploadedDocs.c.entity_type == "contract")
+            & (UploadedDocs.c.entity_id == contract_id)
+            & (UploadedDocs.c.doc_type == "generated")
+        )
+        .order_by(UploadedDocs.c.id.desc())
     )
-    if not lands:
-        await query.answer("⚠️ У договорі не вказано ділянки. Неможливо підставити дані.", show_alert=True)
-        return
-    land_ids = [l["id"] for l in lands]
-    owners_rows = await database.fetch_all(
-        sqlalchemy.select(LandPlotOwner.c.land_plot_id, LandPlotOwner.c.payer_id, LandPlotOwner.c.share, Payer.c.name)
-        .join(Payer, Payer.c.id == LandPlotOwner.c.payer_id)
-        .where(LandPlotOwner.c.land_plot_id.in_(land_ids))
-    )
-    land_owner_map: dict[int, dict[int, float]] = {}
-    payer_shares: dict[int, dict[str, Any]] = {}
-    for r in owners_rows:
-        land_owner_map.setdefault(r["land_plot_id"], {})[r["payer_id"]] = r["share"]
-        info = payer_shares.setdefault(r["payer_id"], {"name": r["name"], "share": 0.0})
-        info["share"] += float(r["share"])
-    payer_share_value = payer_shares.get(contract["payer_id"], {}).get("share")
-    payers_list = "\n".join(
-        f"{info['name']} — {format_share(info['share'])}" for info in payer_shares.values()
-    )
-    plots_table = "\n".join(
-        f"{l['cadaster']} — {format_area(l['area'])}" for l in lands
-    )
-    first_land = lands[0]
-    first_land_share = land_owner_map.get(first_land["id"], {}).get(contract["payer_id"])
+    doc_id = row["id"] if row else None
+
     from db import get_agreement_templates
     templates = await get_agreement_templates(True)
-    if not templates:
-        await query.message.edit_text(
-            "⚠️ Неможливо згенерувати PDF. Перевірте шаблон або дані договору.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=f"contract_card:{contract_id}")]])
-        )
-        return
-    template = templates[0]
-    tmp_doc = f"temp_docs/template_{contract_id}.docx"
-    try:
-        download_file_ftp(template["file_path"], tmp_doc)
-    except Exception:
-        await query.message.edit_text(
-            "⚠️ Неможливо згенерувати PDF. Перевірте шаблон або дані договору.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=f"contract_card:{contract_id}")]])
-        )
-        return
-    variables = {
-        "contract_number": contract["number"],
-        "contract_date_signed": contract["date_signed"].strftime("%d.%m.%Y"),
-        "contract_date_from": contract["date_valid_from"].strftime("%d.%m.%Y"),
-        "contract_date_to": contract["date_valid_to"].strftime("%d.%m.%Y"),
-        "contract_term": contract["duration_years"],
-        "contract_rent": float(contract["rent_amount"]),
-        "company_name": company["full_name"],
-        "company_code": company["edrpou"],
-        "company_address": company["address_legal"],
-        "company_director": company["director"],
-        "payer_name": payer["name"],
-        "payer_tax_id": payer["ipn"],
-        "payer_birthdate": payer["birth_date"],
-        "payer_passport": f"{(payer['passport_series'] or payer['id_number'] or '')} {payer['passport_number'] or ''} {payer['passport_issuer'] or payer['idcard_issuer'] or ''} {payer['passport_date'] or payer['idcard_date'] or ''}".strip(),
-        "payer_address": f"{payer['oblast']} обл., {payer['rayon']} р-н, с. {payer['selo']}, вул. {payer['vul']}, буд. {payer['bud']}{(', кв. ' + payer['kv']) if payer['kv'] else ''}",
-        "payer_share": format_share(payer_share_value),
-        "payer_phone": payer["phone"],
-        "payer_bank_card": payer["bank_card"],
-        "payers_list": payers_list,
-        "plot_cadastre": first_land["cadaster"],
-        "plot_area": format_area(first_land["area"]),
-        "plot_share": format_share(first_land_share),
-        "plot_ngo": format_money(first_land["ngo"]),
-        "plot_location": ", ".join(filter(None, [first_land["council"], first_land["district"], first_land["region"]])),
-        "plots_table": plots_table,
-        "today": datetime.utcnow().strftime("%d.%m.%Y"),
-        "year": datetime.utcnow().year,
-    }
-    missing, unsupported, total, filled, _ = analyze_template(tmp_doc, variables)
-    msg = build_unresolved_message(
-        missing,
-        unsupported,
-        total,
-        filled=filled,
-        template_name=os.path.basename(template["file_path"]),
-    )
-    if msg:
-        await query.message.reply_text(msg)
-    try:
-        remote_path, gen_log = generate_contract(
-            tmp_doc,
-            variables,
-            payer_name=payer["name"],
-            contract_number=contract["number"],
-            year=datetime.utcnow().year,
-        )
-        os.remove(tmp_doc)
-    except Exception:
-        if os.path.exists(tmp_doc):
-            os.remove(tmp_doc)
-        await query.message.edit_text(
-            "⚠️ Неможливо згенерувати PDF. Перевірте шаблон або дані договору.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=f"contract_card:{contract_id}")]])
-        )
-        return
-    await database.execute(
-        UploadedDocs.delete().where(
-            (UploadedDocs.c.entity_type == "contract") &
-            (UploadedDocs.c.entity_id == contract_id) &
-            (UploadedDocs.c.doc_type == "generated")
-        )
-    )
-    doc_id = await database.execute(
-        UploadedDocs.insert().values(
-            entity_type="contract",
-            entity_id=contract_id,
-            doc_type="generated",
-            remote_path=remote_path,
-        )
-    )
+    template_name = os.path.basename(templates[0]["file_path"]) if templates else ""
+
     if gen_log:
         await query.message.reply_text(gen_log)
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📎 Завантажити PDF", callback_data=f"send_pdf:{doc_id}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data=f"contract_card:{contract_id}")],
-    ])
+
+    keyboard = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("📎 Завантажити PDF", callback_data=f"send_pdf:{doc_id}")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data=f"contract_card:{contract_id}")],
+        ]
+    )
     await query.message.edit_text(
-        f"✅ Договір згенеровано\n📐 Шаблон: {os.path.basename(template['file_path'])}\n"
+        f"✅ Договір згенеровано\n📐 Шаблон: {os.path.basename(template_name)}\n"
         f"📆 Діє з {contract['date_valid_from'].date()} по {contract['date_valid_to'].date()}",
         reply_markup=keyboard,
     )
-
 
 # ==== РЕДАГУВАННЯ ДОГОВОРУ (спрощене) ====
 EDIT_SIGNED, EDIT_DURATION, EDIT_START, EDIT_RENT, EDIT_LANDS = range(5)
