@@ -39,7 +39,7 @@ from dialogs.agreement_template import (
     add_template_conv, replace_template_conv,
     template_card_cb, template_toggle_cb, template_delete_cb,
     template_list_cb, show_templates_cb,
-    template_vars_cb, template_vars_categories_cb, template_var_list_cb
+    template_vars_cb, template_vars_categories_cb
 )
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -145,7 +145,6 @@ application.add_handler(template_delete_cb)
 application.add_handler(template_list_cb)
 application.add_handler(template_vars_cb)
 application.add_handler(template_vars_categories_cb)
-application.add_handler(template_var_list_cb)
 application.add_handler(MessageHandler(filters.Regex("^📄 Шаблони договорів$"), admin_templates_handler))
 application.add_handler(MessageHandler(filters.Regex("^📋 Список шаблонів$"), show_templates_cb))
 application.add_handler(MessageHandler(filters.Regex("^👥 Користувачі$"), admin_users_handler))

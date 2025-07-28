@@ -356,19 +356,19 @@ async def payer_card(update, context):
         await query.answer("Пайовик не знайдений!")
         return ConversationHandler.END
 
-    text = f"""<b>Картка пайовика</b>
-ID: {payer.id}
-ПІБ: {payer.name}
-ІПН: {payer.ipn}
-Адреса: {payer.oblast} обл., {payer.rayon} р-н, с. {payer.selo}, вул. {payer.vul}, буд. {payer.bud}, кв. {payer.kv}
-Телефон: {payer.phone}
-Тип документа: {payer.doc_type}
-Паспорт/ID: {payer.passport_series or ''} {payer.passport_number or ''} {payer.id_number or ''}
-Ким виданий: {payer.passport_issuer or payer.idcard_issuer or ''}
-Коли виданий: {payer.passport_date or payer.idcard_date or ''}
-УНЗР: {payer.unzr or '-'}
-Дата народження: {payer.birth_date}
-"""
+    text = (
+        f"<b>{payer.name}</b>\n"
+        f"🆔 ID: {payer.id}\n"
+        f"📇 ІПН: {payer.ipn}\n"
+        f"🎂 Дата народження: {payer.birth_date}\n"
+        f"📞 Телефон: {payer.phone}\n"
+        f"📑 Тип документа: {payer.doc_type}\n"
+        f"🛂 Паспорт/ID: {payer.passport_series or ''} {payer.passport_number or ''} {payer.id_number or ''}\n"
+        f"Ким виданий: {payer.passport_issuer or payer.idcard_issuer or ''}\n"
+        f"Коли виданий: {payer.passport_date or payer.idcard_date or ''}\n"
+        f"УНЗР: {payer.unzr or '-'}\n"
+        f"🏠 Адреса: {payer.oblast} обл., {payer.rayon} р-н, с. {payer.selo}, вул. {payer.vul}, буд. {payer.bud}, кв. {payer.kv}"
+    )
 
     keyboard = []
 

@@ -3,6 +3,12 @@
 # Default placeholder to use when a value is missing
 EMPTY_VALUE = "______________________"
 
+MONTHS_UA = [
+    "січня", "лютого", "березня", "квітня",
+    "травня", "червня", "липня", "серпня",
+    "вересня", "жовтня", "листопада", "грудня",
+]
+
 TEMPLATE_VARIABLES = {
     "company": {
         "title": "ТОВ",
@@ -30,6 +36,8 @@ TEMPLATE_VARIABLES = {
         "title": "Пайовики",
         "items": [
             ("{{payer_name}}", "ПІБ пайовика"),
+            ("{{payer_tax_id}}", "ІПН"),
+            ("{{payer_birthdate}}", "Дата народження"),
             ("{{payer_passport}}", "Паспортні дані"),
             ("{{payer_address}}", "Адреса"),
             ("{{payer_share}}", "Частка"),
@@ -62,4 +70,18 @@ def with_default(value: str | None) -> str:
     if value is None or (isinstance(value, str) and not value.strip()):
         return EMPTY_VALUE
     return value
+
+
+def date_to_words(date_str: str | None) -> str:
+    """Convert DD.MM.YYYY to 'DD <month> YYYY' in Ukrainian."""
+    if not date_str:
+        return EMPTY_VALUE
+    try:
+        from datetime import datetime
+
+        dt = datetime.strptime(date_str, "%d.%m.%Y")
+    except Exception:
+        return date_str
+    month_name = MONTHS_UA[dt.month - 1]
+    return f"{dt.day} {month_name} {dt.year}"
 

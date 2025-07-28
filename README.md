@@ -51,6 +51,8 @@ manually.
 
 ### Payer
 - `{{payer_name}}` — ПІБ пайовика
+- `{{payer_tax_id}}` — ІПН пайовика
+- `{{payer_birthdate}}` — Дата народження пайовика
 - `{{payer_passport}}` — Паспортні дані пайовика
 - `{{payer_address}}` — Адреса проживання пайовика
 - `{{payer_share}}` — Частка власності пайовика
