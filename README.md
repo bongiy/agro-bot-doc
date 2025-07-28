@@ -90,4 +90,5 @@ empty.
 
 LibreOffice (``soffice``) should be installed on the system for DOCX→PDF
 conversion. The helper runs ``libreoffice`` in headless mode and falls back to
-``unoconv`` if LibreOffice is unavailable.
+``unoconv`` if LibreOffice is unavailable. On Windows or macOS, the optional
+``docx2pdf`` package can be used if Microsoft Word is installed.
