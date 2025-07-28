@@ -211,7 +211,8 @@ async def add_template_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tmp_dir = "temp_docs"
     os.makedirs(tmp_dir, exist_ok=True)
     local_path = os.path.join(tmp_dir, remote_name)
-    await doc.get_file().download_to_drive(local_path)
+    tg_file = await doc.get_file()
+    await tg_file.download_to_drive(local_path)
     vars_found = extract_variables(local_path)
     upload_file_ftp(local_path, remote_path)
     os.remove(local_path)
@@ -250,7 +251,8 @@ async def replace_template_file(update: Update, context: ContextTypes.DEFAULT_TY
     tmp_dir = "temp_docs"
     os.makedirs(tmp_dir, exist_ok=True)
     local_path = os.path.join(tmp_dir, remote_name)
-    await doc.get_file().download_to_drive(local_path)
+    tg_file = await doc.get_file()
+    await tg_file.download_to_drive(local_path)
     vars_found = extract_variables(local_path)
     upload_file_ftp(local_path, remote_path)
     os.remove(local_path)
