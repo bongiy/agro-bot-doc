@@ -25,7 +25,9 @@ from ftp_utils import download_file_ftp, delete_file_ftp
     INPUT_COUNCIL,
     ASK_OWNER_COUNT,
     ASK_OWNER,
-) = range(10)
+    SEARCH_OWNER,
+    CHOOSE_OWNER,
+) = range(12)
 
 COUNCIL_OPTIONS = [
     "Городоцька сільська рада",
@@ -154,7 +156,7 @@ async def set_owner_count(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Спочатку додайте хоча б одного пайовика!", reply_markup=lands_menu)
         return ConversationHandler.END
     kb = ReplyKeyboardMarkup(
-        [[f"{p['id']}: {p['name']}"] for p in payers], resize_keyboard=True
+        [[f"{p['id']}: {p['name']}"] for p in payers] + [["🔍 Пошук за ПІБ"]], resize_keyboard=True
     )
     context.user_data["payers"] = {f"{p['id']}: {p['name']}": p["id"] for p in payers}
     await update.message.reply_text(
@@ -163,7 +165,11 @@ async def set_owner_count(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ASK_OWNER
 
 async def select_owner(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    payer_id = context.user_data["payers"].get(update.message.text)
+    text = update.message.text
+    if text == "🔍 Пошук за ПІБ":
+        await update.message.reply_text("Введіть частину ПІБ пайовика:")
+        return SEARCH_OWNER
+    payer_id = context.user_data["payers"].get(text)
     if not payer_id:
         await update.message.reply_text("Оберіть пайовика зі списку (натисніть кнопку):")
         return ASK_OWNER
@@ -174,7 +180,54 @@ async def select_owner(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Оберіть власника {context.user_data['owner_index']} з {context.user_data['owner_count']}:"
         )
         return ASK_OWNER
+    return await finalize_land(update, context)
+async def search_owner(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    term = update.message.text.strip()
+    rows = await database.fetch_all(
+        sqlalchemy.select(Payer).where(Payer.c.name.ilike(f"%{term}%")).limit(10)
+    )
+    if not rows:
+        await update.message.reply_text("Нічого не знайдено. Спробуйте ще:")
+        return SEARCH_OWNER
+    kb = ReplyKeyboardMarkup(
+        [[f"{r['id']}: {r['name']}"] for r in rows] + [["◀️ Назад"]],
+        resize_keyboard=True,
+    )
+    context.user_data["search_results"] = {f"{r['id']}: {r['name']}": r["id"] for r in rows}
+    await update.message.reply_text("Оберіть пайовика:", reply_markup=kb)
+    return CHOOSE_OWNER
 
+async def choose_owner(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    if text == "◀️ Назад":
+        kb = ReplyKeyboardMarkup(
+            [[k] for k in context.user_data["payers"].keys()] + [["🔍 Пошук за ПІБ"]],
+            resize_keyboard=True,
+        )
+        await update.message.reply_text(
+            f"Оберіть власника {context.user_data['owner_index']} з {context.user_data['owner_count']}:",
+            reply_markup=kb,
+        )
+        return ASK_OWNER
+    payer_id = context.user_data.get("search_results", {}).get(text)
+    if not payer_id:
+        await update.message.reply_text("Оберіть зі списку або натисніть '◀️ Назад':")
+        return CHOOSE_OWNER
+    context.user_data["owners"].append(payer_id)
+    if len(context.user_data["owners"]) < context.user_data["owner_count"]:
+        context.user_data["owner_index"] += 1
+        kb = ReplyKeyboardMarkup(
+            [[k] for k in context.user_data["payers"].keys()] + [["🔍 Пошук за ПІБ"]],
+            resize_keyboard=True,
+        )
+        await update.message.reply_text(
+            f"Оберіть власника {context.user_data['owner_index']} з {context.user_data['owner_count']}:",
+            reply_markup=kb,
+        )
+        return ASK_OWNER
+    return await finalize_land(update, context)
+
+async def finalize_land(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = LandPlot.insert().values(
         cadaster=context.user_data["cadaster"],
         area=context.user_data["area"],
@@ -219,6 +272,8 @@ add_land_conv = ConversationHandler(
         INPUT_COUNCIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_council)],
         ASK_OWNER_COUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_owner_count)],
         ASK_OWNER: [MessageHandler(filters.TEXT & ~filters.COMMAND, select_owner)],
+        SEARCH_OWNER: [MessageHandler(filters.TEXT & ~filters.COMMAND, search_owner)],
+        CHOOSE_OWNER: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_owner)],
     },
     fallbacks=[]
 )
