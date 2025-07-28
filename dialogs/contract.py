@@ -27,10 +27,12 @@ from db import (
     LandPlot,
     LandPlotOwner,
     Payer,
+    UploadedDocs,
 )
 from keyboards.menu import contracts_menu
 from dialogs.post_creation import prompt_add_docs
-from ftp_utils import download_file_ftp
+from ftp_utils import download_file_ftp, delete_file_ftp
+from contract_pdf import generate_contract
 import sqlalchemy
 
 CHOOSE_COMPANY, SET_DURATION, SET_VALID_FROM, CHOOSE_PAYER, INPUT_LANDS, SET_RENT, SEARCH_LAND = range(7)
@@ -617,8 +619,322 @@ async def contract_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if payer:
                 share = o["share"]
                 text += f"\n   • {payer['name']} — {share:.2f}"
-    await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ До списку", callback_data="to_contracts")]]), parse_mode="HTML")
+    buttons = [
+        [InlineKeyboardButton("✏️ Редагувати договір", callback_data=f"edit_contract:{contract_id}")],
+        [InlineKeyboardButton("📤 Згенерувати PDF", callback_data=f"generate_contract_pdf:{contract_id}")],
+        [InlineKeyboardButton("📎 Документи", callback_data=f"contract_docs:{contract_id}")],
+        [InlineKeyboardButton("🗑 Видалити", callback_data=f"delete_contract:{contract_id}")],
+        [InlineKeyboardButton("⬅️ До списку", callback_data="to_contracts")]
+    ]
+    await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons), parse_mode="HTML")
 
 
 async def to_contracts(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_contracts(update, context)
+
+
+# ==== ДОКУМЕНТИ ДОГОВОРУ ====
+async def contract_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    contract_id = int(query.data.split(":")[1])
+    docs = await database.fetch_all(
+        sqlalchemy.select(UploadedDocs).where(
+            (UploadedDocs.c.entity_type == "contract") &
+            (UploadedDocs.c.entity_id == contract_id)
+        )
+    )
+    keyboard = [
+        [InlineKeyboardButton("📷 Додати документ", callback_data=f"add_docs:contract:{contract_id}")]
+    ]
+    for d in docs:
+        keyboard.append([
+            InlineKeyboardButton(f"⬇️ {d['doc_type']}", callback_data=f"send_pdf:{d['id']}"),
+            InlineKeyboardButton("🗑 Видалити", callback_data=f"delete_pdf_db:{d['id']}")
+        ])
+    keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"contract_card:{contract_id}")])
+    text = "📎 Документи договору:" if docs else "Документи відсутні."
+    await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+# ==== ВИДАЛЕННЯ ДОГОВОРУ ====
+async def delete_contract_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    contract_id = int(query.data.split(":")[1])
+    from db import get_user_by_tg_id
+    user = await get_user_by_tg_id(update.effective_user.id)
+    if not user or user["role"] != "admin":
+        await query.answer("⛔ У вас немає прав на видалення.", show_alert=True)
+        return
+    contract = await database.fetch_one(sqlalchemy.select(Contract).where(Contract.c.id == contract_id))
+    if not contract:
+        await query.answer("Договір не знайдено!", show_alert=True)
+        return
+    text = (
+        f"Ви точно хочете видалити договір <b>{contract['number']}</b>?\n"
+        "Цю дію не можна скасувати."
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Так, видалити", callback_data=f"confirm_delete_contract:{contract_id}")],
+        [InlineKeyboardButton("❌ Скасувати", callback_data=f"contract_card:{contract_id}")],
+    ])
+    await query.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
+
+async def delete_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    contract_id = int(query.data.split(":")[1])
+    from db import get_user_by_tg_id, log_delete
+    user = await get_user_by_tg_id(update.effective_user.id)
+    if not user or user["role"] != "admin":
+        await query.answer("⛔ У вас немає прав на видалення.", show_alert=True)
+        return
+    contract = await database.fetch_one(sqlalchemy.select(Contract).where(Contract.c.id == contract_id))
+    if not contract:
+        await query.answer("Договір не знайдено!", show_alert=True)
+        return
+    docs = await database.fetch_all(
+        sqlalchemy.select(UploadedDocs).where(
+            (UploadedDocs.c.entity_type == "contract") &
+            (UploadedDocs.c.entity_id == contract_id)
+        )
+    )
+    for d in docs:
+        try:
+            delete_file_ftp(d["remote_path"])
+        except Exception:
+            pass
+    if docs:
+        await database.execute(UploadedDocs.delete().where(UploadedDocs.c.id.in_([d["id"] for d in docs])))
+    await database.execute(ContractLandPlot.delete().where(ContractLandPlot.c.contract_id == contract_id))
+    await database.execute(Contract.delete().where(Contract.c.id == contract_id))
+    linked = f"docs:{len(docs)}" if docs else ""
+    await log_delete(update.effective_user.id, user["role"], "contract", contract_id, contract["number"], linked)
+    await query.message.edit_text("✅ Обʼєкт успішно видалено")
+
+
+# ==== ГЕНЕРАЦІЯ PDF ДОГОВОРУ ====
+async def generate_contract_pdf_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    contract_id = int(query.data.split(":")[1])
+    contract = await database.fetch_one(sqlalchemy.select(Contract).where(Contract.c.id == contract_id))
+    if not contract:
+        await query.answer("Договір не знайдено!", show_alert=True)
+        return
+    company = await database.fetch_one(sqlalchemy.select(Company).where(Company.c.id == contract["company_id"]))
+    from db import get_agreement_templates
+    templates = await get_agreement_templates(True)
+    if not templates:
+        await query.message.edit_text(
+            "⚠️ Неможливо згенерувати PDF. Перевірте шаблон або дані договору.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=f"contract_card:{contract_id}")]])
+        )
+        return
+    template = templates[0]
+    tmp_doc = f"temp_docs/template_{contract_id}.docx"
+    try:
+        download_file_ftp(template["file_path"], tmp_doc)
+    except Exception:
+        await query.message.edit_text(
+            "⚠️ Неможливо згенерувати PDF. Перевірте шаблон або дані договору.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=f"contract_card:{contract_id}")]])
+        )
+        return
+    variables = {
+        "contract_number": contract["number"],
+        "contract_date_signed": contract["date_signed"].strftime("%d.%m.%Y"),
+        "contract_date_from": contract["date_valid_from"].strftime("%d.%m.%Y"),
+        "contract_date_to": contract["date_valid_to"].strftime("%d.%m.%Y"),
+        "contract_term": contract["duration_years"],
+        "contract_rent": float(contract["rent_amount"]),
+        "company_name": company["full_name"],
+        "company_code": company["edrpou"],
+        "company_address": company["address_legal"],
+        "company_director": company["director"],
+        "today": datetime.utcnow().strftime("%d.%m.%Y"),
+        "year": datetime.utcnow().year,
+    }
+    try:
+        remote_path = generate_contract(
+            tmp_doc,
+            variables,
+            payer_name=str(contract_id),
+            contract_number=contract["number"],
+            year=datetime.utcnow().year,
+        )
+        os.remove(tmp_doc)
+    except Exception:
+        if os.path.exists(tmp_doc):
+            os.remove(tmp_doc)
+        await query.message.edit_text(
+            "⚠️ Неможливо згенерувати PDF. Перевірте шаблон або дані договору.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=f"contract_card:{contract_id}")]])
+        )
+        return
+    await database.execute(
+        UploadedDocs.delete().where(
+            (UploadedDocs.c.entity_type == "contract") &
+            (UploadedDocs.c.entity_id == contract_id) &
+            (UploadedDocs.c.doc_type == "generated")
+        )
+    )
+    doc_id = await database.execute(
+        UploadedDocs.insert().values(
+            entity_type="contract",
+            entity_id=contract_id,
+            doc_type="generated",
+            remote_path=remote_path,
+        )
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📎 Завантажити PDF", callback_data=f"send_pdf:{doc_id}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"contract_card:{contract_id}")],
+    ])
+    await query.message.edit_text(
+        f"✅ Договір згенеровано\n📐 Шаблон: {os.path.basename(template['file_path'])}\n"
+        f"📆 Діє з {contract['date_valid_from'].date()} по {contract['date_valid_to'].date()}",
+        reply_markup=keyboard,
+    )
+
+
+# ==== РЕДАГУВАННЯ ДОГОВОРУ (спрощене) ====
+EDIT_SIGNED, EDIT_DURATION, EDIT_START, EDIT_RENT, EDIT_LANDS = range(5)
+
+
+async def edit_contract_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    contract_id = int(query.data.split(":")[1])
+    contract = await database.fetch_one(sqlalchemy.select(Contract).where(Contract.c.id == contract_id))
+    if not contract:
+        await query.answer("Договір не знайдено!", show_alert=True)
+        return ConversationHandler.END
+    context.user_data["edit_contract_id"] = contract_id
+    context.user_data["contract_old"] = contract
+    await query.message.edit_text(
+        f"Поточна дата підписання: {contract['date_signed'].date()}\nВведіть нову дату (ДД.ММ.РРРР) або '-' щоб залишити без змін:")
+    return EDIT_SIGNED
+
+
+async def edit_contract_signed(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    contract = context.user_data["contract_old"]
+    if text != "-":
+        try:
+            dt = datetime.strptime(text, "%d.%m.%Y")
+            context.user_data["new_signed"] = dt
+        except ValueError:
+            await update.message.reply_text("Введіть дату у форматі ДД.ММ.РРРР або '-'")
+            return EDIT_SIGNED
+    else:
+        context.user_data["new_signed"] = contract["date_signed"]
+    await update.message.reply_text(
+        f"Поточний строк дії: {contract['duration_years']} років. Введіть новий термін або '-' щоб не змінювати:")
+    return EDIT_DURATION
+
+
+async def edit_contract_duration(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    contract = context.user_data["contract_old"]
+    if text != "-":
+        try:
+            years = int(text)
+            if years <= 0:
+                raise ValueError
+            context.user_data["new_duration"] = years
+        except ValueError:
+            await update.message.reply_text("Введіть ціле число або '-'")
+            return EDIT_DURATION
+    else:
+        context.user_data["new_duration"] = contract["duration_years"]
+    await update.message.reply_text(
+        f"Поточна дата початку: {contract['date_valid_from'].date()}\nВведіть нову дату (ДД.ММ.РРРР) або '-' щоб не змінювати:")
+    return EDIT_START
+
+
+async def edit_contract_start_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    contract = context.user_data["contract_old"]
+    if text != "-":
+        try:
+            dt = datetime.strptime(text, "%d.%m.%Y")
+            context.user_data["new_start"] = dt
+        except ValueError:
+            await update.message.reply_text("Введіть дату у форматі ДД.ММ.РРРР або '-'")
+            return EDIT_START
+    else:
+        context.user_data["new_start"] = contract["date_valid_from"]
+    await update.message.reply_text(
+        f"Поточна сума оренди: {contract['rent_amount']}\nВведіть нову суму або '-' щоб не змінювати:")
+    return EDIT_RENT
+
+
+async def edit_contract_rent(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.replace(',', '.').strip()
+    contract = context.user_data["contract_old"]
+    if text != "-":
+        try:
+            rent = float(text)
+            context.user_data["new_rent"] = rent
+        except ValueError:
+            await update.message.reply_text("Введіть числове значення або '-'")
+            return EDIT_RENT
+    else:
+        context.user_data["new_rent"] = float(contract["rent_amount"])
+    rows = await database.fetch_all(
+        sqlalchemy.select(ContractLandPlot.c.land_plot_id).where(ContractLandPlot.c.contract_id == context.user_data["edit_contract_id"])
+    )
+    current_ids = " ".join(str(r["land_plot_id"]) for r in rows)
+    await update.message.reply_text(
+        f"Поточні ділянки: {current_ids}\nВведіть список ID через пробіл або '-' щоб не змінювати:")
+    return EDIT_LANDS
+
+
+async def edit_contract_lands(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    contract_id = context.user_data["edit_contract_id"]
+    if text != "-":
+        try:
+            land_ids = [int(i) for i in text.replace(',', ' ').split() if i]
+        except ValueError:
+            await update.message.reply_text("Введіть ID через пробіл або '-'")
+            return EDIT_LANDS
+    else:
+        rows = await database.fetch_all(
+            sqlalchemy.select(ContractLandPlot.c.land_plot_id).where(ContractLandPlot.c.contract_id == contract_id)
+        )
+        land_ids = [r["land_plot_id"] for r in rows]
+    new_signed = context.user_data["new_signed"]
+    new_start = context.user_data["new_start"]
+    new_duration = context.user_data["new_duration"]
+    new_end = new_start + timedelta(days=365 * new_duration)
+    new_rent = context.user_data["new_rent"]
+    await database.execute(
+        Contract.update()
+        .where(Contract.c.id == contract_id)
+        .values(
+            date_signed=new_signed,
+            date_valid_from=new_start,
+            date_valid_to=new_end,
+            duration_years=new_duration,
+            rent_amount=new_rent,
+            updated_at=datetime.utcnow(),
+        )
+    )
+    await database.execute(ContractLandPlot.delete().where(ContractLandPlot.c.contract_id == contract_id))
+    for lid in land_ids:
+        await database.execute(ContractLandPlot.insert().values(contract_id=contract_id, land_plot_id=lid))
+    context.user_data.clear()
+    await update.message.reply_text("✅ Зміни збережено", reply_markup=contracts_menu)
+    return ConversationHandler.END
+
+
+edit_contract_conv = ConversationHandler(
+    entry_points=[CallbackQueryHandler(edit_contract_start, pattern=r"^edit_contract:\d+$")],
+    states={
+        EDIT_SIGNED: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_contract_signed)],
+        EDIT_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_contract_duration)],
+        EDIT_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_contract_start_date)],
+        EDIT_RENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_contract_rent)],
+        EDIT_LANDS: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_contract_lands)],
+    },
+    fallbacks=[],
+)
