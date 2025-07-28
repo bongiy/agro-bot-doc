@@ -37,7 +37,10 @@ from dialogs.contract import (
     generate_contract_pdf_cb,
     edit_contract_conv,
     change_status_conv,
+    payment_summary_cb,
+    payment_history_cb,
 )
+from dialogs.payment import add_payment_conv
 from dialogs.edit_field import edit_field_conv
 from dialogs.edit_land import edit_land_conv
 from dialogs.edit_land_owner import edit_land_owner_conv
@@ -143,6 +146,9 @@ application.add_handler(CallbackQueryHandler(to_menu, pattern=r"^to_menu$"))
 application.add_handler(CallbackQueryHandler(agreement_card, pattern=r"^(contract_card|agreement_card):\d+$"))
 application.add_handler(edit_contract_conv)
 application.add_handler(change_status_conv)
+application.add_handler(add_payment_conv)
+application.add_handler(CallbackQueryHandler(payment_summary_cb, pattern=r"^payment_summary:\d+$"))
+application.add_handler(CallbackQueryHandler(payment_history_cb, pattern=r"^payment_history:\d+$"))
 application.add_handler(CallbackQueryHandler(generate_contract_pdf_cb, pattern=r"^generate_contract_pdf:\d+$"))
 application.add_handler(CallbackQueryHandler(contract_docs, pattern=r"^contract_docs:\d+$"))
 application.add_handler(CallbackQueryHandler(delete_contract_prompt, pattern=r"^delete_contract:\d+$"))

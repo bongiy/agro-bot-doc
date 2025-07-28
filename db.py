@@ -199,6 +199,19 @@ AgreementTemplate = sqlalchemy.Table(
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
 )
 
+# === Таблиця виплат орендної плати ===
+Payment = sqlalchemy.Table(
+    "payment",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("agreement_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("contract.id")),
+    sqlalchemy.Column("amount", sqlalchemy.Numeric(12, 2), nullable=False),
+    sqlalchemy.Column("payment_date", sqlalchemy.Date, nullable=False),
+    sqlalchemy.Column("payment_type", sqlalchemy.String),
+    sqlalchemy.Column("notes", sqlalchemy.String),
+    sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
+)
+
 async def add_user(
     tg_id: int,
     username: str | None = None,
