@@ -30,7 +30,14 @@ def docx_to_pdf(docx_path: str, pdf_path: str) -> None:
         Destination path for the generated PDF file.
     """
 
-    libreoffice = shutil.which("libreoffice") or shutil.which("soffice")
+    libreoffice = (
+        os.environ.get("SOFFICE_PATH")
+        or os.environ.get("LIBREOFFICE_PATH")
+        or shutil.which("libreoffice")
+        or shutil.which("soffice")
+        or (os.path.exists("/usr/bin/soffice") and "/usr/bin/soffice")
+        or (os.path.exists("/usr/bin/libreoffice") and "/usr/bin/libreoffice")
+    )
     if libreoffice:
         subprocess.run([
             libreoffice,
@@ -47,7 +54,11 @@ def docx_to_pdf(docx_path: str, pdf_path: str) -> None:
         )
         os.replace(generated, pdf_path)
         return
-    unoconv = shutil.which("unoconv")
+    unoconv = (
+        os.environ.get("UNOCONV_PATH")
+        or shutil.which("unoconv")
+        or (os.path.exists("/usr/bin/unoconv") and "/usr/bin/unoconv")
+    )
     if unoconv:
         subprocess.run([
             unoconv,
