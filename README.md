@@ -71,3 +71,9 @@ manually.
 ### Service
 - `{{today}}` — Поточна дата
 - `{{year}}` — Поточний рік
+
+## Contract generation
+
+Use `contract_pdf.generate_contract()` to render a DOCX template with variables
+and convert it to PDF. The resulting file is uploaded to FTP or saved locally in
+development mode.
