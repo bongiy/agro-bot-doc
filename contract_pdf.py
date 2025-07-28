@@ -10,7 +10,7 @@ from typing import Any, Mapping
 from docxtpl import DocxTemplate
 from docx2pdf import convert
 
-from template_vars import with_default, date_to_words
+from template_vars import with_default, date_to_words, EMPTY_VALUE
 from template_utils import extract_variables
 
 
@@ -85,7 +85,13 @@ def docx_to_pdf(docx_path: str, pdf_path: str) -> None:
 def render_template(template_path: str, context: Mapping[str, Any], output_dir: str) -> str:
     doc = DocxTemplate(template_path)
     vars_in_template = extract_variables(template_path)
-    used_context = {var: context.get(var) for var in vars_in_template}
+    used_context = {}
+    for var in vars_in_template:
+        value = context.get(var)
+        if value is None or (isinstance(value, str) and not str(value).strip()):
+            used_context[var] = EMPTY_VALUE
+        else:
+            used_context[var] = value
     doc.render(used_context)
     os.makedirs(output_dir, exist_ok=True)
     docx_path = os.path.join(output_dir, "contract.docx")

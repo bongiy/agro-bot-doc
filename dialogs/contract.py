@@ -826,7 +826,11 @@ async def generate_contract_pdf_cb(update: Update, context: ContextTypes.DEFAULT
         filled=filled,
         template_name=os.path.basename(template["file_path"]),
     )
-    if msg:
+    if missing:
+        await query.message.reply_text(
+            "⚠️ Частина змінних не була заповнена, у шаблон підставлено порожні рядки\nPDF сформовано успішно"
+        )
+    elif msg:
         await query.message.reply_text(msg)
     try:
         remote_path = generate_contract(
