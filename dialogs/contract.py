@@ -11,6 +11,7 @@ from telegram import (
     ReplyKeyboardRemove,
     InputFile,
 )
+from telegram.error import BadRequest
 from telegram.ext import (
     ConversationHandler,
     MessageHandler,
@@ -677,7 +678,11 @@ async def delete_contract_prompt(update: Update, context: ContextTypes.DEFAULT_T
         [InlineKeyboardButton("✅ Так, видалити", callback_data=f"confirm_delete_contract:{contract_id}")],
         [InlineKeyboardButton("❌ Скасувати", callback_data=f"contract_card:{contract_id}")],
     ])
-    await query.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    try:
+        await query.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except BadRequest as exc:
+        if "message is not modified" not in str(exc).lower():
+            raise
 
 
 async def delete_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
