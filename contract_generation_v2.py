@@ -9,7 +9,64 @@ from docx import Document
 from template_vars import SUPPORTED_VARS, EMPTY_VALUE
 from template_utils import extract_variables
 from ftp_utils import download_file_ftp, upload_file_ftp
-from contract_pdf import docx_to_pdf
+from docx2pdf import convert
+
+import subprocess
+from datetime import datetime
+from decimal import Decimal
+
+
+def docx_to_pdf(docx_path: str, pdf_path: str) -> None:
+    try:
+        convert(docx_path, pdf_path)
+    except Exception:
+        libreoffice = shutil.which("libreoffice") or shutil.which("soffice")
+        if not libreoffice:
+            raise
+        subprocess.run([
+            libreoffice,
+            "--headless",
+            "--convert-to",
+            "pdf",
+            "--outdir",
+            os.path.dirname(pdf_path),
+            docx_path,
+        ], check=True)
+        generated = os.path.join(
+            os.path.dirname(pdf_path),
+            os.path.splitext(os.path.basename(docx_path))[0] + ".pdf",
+        )
+        os.replace(generated, pdf_path)
+
+
+def format_area(area: float | int | str | None) -> str:
+    if area is None or area == "":
+        return EMPTY_VALUE
+    try:
+        return f"{float(area):.4f}"
+    except Exception:
+        return str(area)
+
+
+def format_money(amount: float | Decimal | str | None) -> str:
+    if amount is None or amount == "":
+        return EMPTY_VALUE
+    try:
+        value = float(amount)
+    except Exception:
+        try:
+            value = float(str(amount).replace(",", "."))
+        except Exception:
+            return str(amount)
+    parts = f"{value:,.2f}".split(".")
+    parts[0] = parts[0].replace(",", " ")
+    return f"{parts[0]},{parts[1]} грн"
+
+
+def format_share(share: float | str | None) -> str:
+    if share is None or share == "":
+        return EMPTY_VALUE
+    return str(share)
 
 
 def load_template(remote_path: str, local_dir: str = "temp_docs") -> str:

@@ -34,7 +34,12 @@ from db import (
 from keyboards.menu import contracts_menu
 from dialogs.post_creation import prompt_add_docs
 from ftp_utils import download_file_ftp, delete_file_ftp
-from contract_pdf import generate_contract, format_area, format_money, format_share
+from contract_generation_v2 import (
+    generate_contract,
+    format_area,
+    format_money,
+    format_share,
+)
 from template_utils import analyze_template, build_unresolved_message
 import sqlalchemy
 
@@ -829,7 +834,7 @@ async def generate_contract_pdf_cb(update: Update, context: ContextTypes.DEFAULT
     if msg:
         await query.message.reply_text(msg)
     try:
-        remote_path = generate_contract(
+        remote_path, gen_log = generate_contract(
             tmp_doc,
             variables,
             payer_name=payer["name"],
@@ -860,6 +865,8 @@ async def generate_contract_pdf_cb(update: Update, context: ContextTypes.DEFAULT
             remote_path=remote_path,
         )
     )
+    if gen_log:
+        await query.message.reply_text(gen_log)
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("📎 Завантажити PDF", callback_data=f"send_pdf:{doc_id}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"contract_card:{contract_id}")],
