@@ -39,12 +39,33 @@ def to_latin_filename(text: str, default: str = "template.docx") -> str:
     return name
 
 def extract_variables(path: str) -> set[str]:
-    text = ""
+    """Extract all ``{{variable}}`` placeholders from a docx file.
+
+    This function walks through all XML parts of the document (including
+    headers, footers and text boxes) and correctly joins text runs that may
+    split a variable name. Spaces and other non word characters inside the
+    braces are ignored. Returned variables are unique and sorted.
+    """
+
+    text_parts: list[str] = []
     with zipfile.ZipFile(path) as z:
         for name in z.namelist():
             if name.startswith("word/") and name.endswith(".xml"):
-                text += z.read(name).decode("utf-8", errors="ignore")
-    return set(re.findall(r"\{\{\w+\}\}", text))
+                xml = z.read(name).decode("utf-8", errors="ignore")
+                # Drop all XML tags so neighbouring text joins together
+                cleaned = re.sub(r"<[^>]+>", "", xml)
+                text_parts.append(cleaned)
+
+    full_text = "".join(text_parts)
+    raw_vars = re.findall(r"\{\{.*?\}\}", full_text)
+
+    variables: set[str] = set()
+    for var in raw_vars:
+        inner = re.sub(r"[^\w]", "", var[2:-2])
+        if inner:
+            variables.add(f"{{{{{inner}}}}}")
+
+    return set(sorted(variables))
 
 ADD_TYPE, ADD_NAME, ADD_FILE, REPLACE_FILE = range(4)
 
