@@ -5,6 +5,10 @@ import shutil
 from typing import Any, Mapping, Iterable
 
 from docx import Document
+try:
+    from docx2pdf import convert as docx2pdf_convert
+except Exception:  # pragma: no cover - optional dependency
+    docx2pdf_convert = None
 
 from template_vars import SUPPORTED_VARS, EMPTY_VALUE
 from template_utils import extract_variables
@@ -69,8 +73,16 @@ def docx_to_pdf(docx_path: str, pdf_path: str) -> None:
             docx_path,
         ], check=True)
         return
+    if docx2pdf_convert:
+        try:
+            docx2pdf_convert(docx_path, pdf_path)
+            return
+        except NotImplementedError:
+            pass
+        except Exception:
+            pass
     raise RuntimeError(
-        "LibreOffice or unoconv CLI required for DOCX to PDF conversion"
+        "LibreOffice, unoconv or docx2pdf required for DOCX to PDF conversion"
     )
 
 
