@@ -46,3 +46,6 @@ Pillow
 fpdf
 PyPDF2
 psycopg2-binary>=2.9
+
+docxtpl
+docx2pdf
