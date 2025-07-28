@@ -324,18 +324,16 @@ async def generate_contract_v2(contract_id: int) -> tuple[str, str]:
 
     # Analyze template for unresolved placeholders (result not used yet)
     analyze_template(tmp_doc, variables)
+    if os.path.exists(tmp_doc):
+        os.remove(tmp_doc)
 
-    try:
-        remote_path, gen_log = generate_contract(
-            tmp_doc,
-            variables,
-            payer_name=payer["name"],
-            contract_number=contract["number"],
-            year=datetime.utcnow().year,
-        )
-    finally:
-        if os.path.exists(tmp_doc):
-            os.remove(tmp_doc)
+    remote_path, gen_log = generate_contract(
+        template["file_path"],
+        variables,
+        payer_name=payer["name"],
+        contract_number=contract["number"],
+        year=datetime.utcnow().year,
+    )
 
     await database.execute(
         UploadedDocs.delete().where(
