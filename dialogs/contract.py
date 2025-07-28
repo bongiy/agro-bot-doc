@@ -104,7 +104,7 @@ async def build_land_keyboard(context: ContextTypes.DEFAULT_TYPE) -> InlineKeybo
 async def show_land_options(msg_obj: Any, context: ContextTypes.DEFAULT_TYPE) -> int:
     markup = await build_land_keyboard(context)
     text = "Оберіть ділянки для договору:"
-    if hasattr(msg_obj, "edit_text"):
+    if getattr(getattr(msg_obj, "from_user", None), "is_bot", False):
         await msg_obj.edit_text(text, reply_markup=markup)
     else:
         await msg_obj.reply_text(text, reply_markup=markup)

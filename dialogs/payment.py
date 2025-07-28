@@ -1,5 +1,5 @@
 from datetime import datetime, date
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, InputFile
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, InputFile, CallbackQuery
 from telegram.ext import (
     ContextTypes,
     ConversationHandler,
@@ -43,15 +43,14 @@ def short_fio(full_name: str) -> str:
     return full_name
 
 
-async def add_payment_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    contract_id = int(query.data.split(":")[1])
+async def _show_add_payment(query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE, contract_id: int) -> int:
     contract = await database.fetch_one(
         sqlalchemy.select(Contract).where(Contract.c.id == contract_id)
     )
     if not contract:
         await query.answer("Договір не знайдено!", show_alert=True)
         return ConversationHandler.END
+
     context.user_data["payment_contract_id"] = contract_id
     rent = float(contract["rent_amount"] or 0)
     context.user_data["payment_default_amount"] = rent
@@ -64,6 +63,12 @@ async def add_payment_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=keyboard,
     )
     return PAY_AMOUNT
+
+
+async def add_payment_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    contract_id = int(query.data.split(":")[1])
+    return await _show_add_payment(query, context, contract_id)
 
 
 async def payment_set_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -225,11 +230,7 @@ async def select_payer_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if len(contracts) == 1:
         cid = contracts[0]["id"]
-        orig = query.data
-        query.data = f"add_payment:{cid}"
-        result = await add_payment_start(update, context)
-        query.data = orig
-        return result
+        return await _show_add_payment(query, context, cid)
     keyboard = [
         [
             InlineKeyboardButton(
@@ -245,11 +246,7 @@ async def select_payer_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def select_contract_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     cid = int(query.data.split(":")[1])
-    orig = query.data
-    query.data = f"add_payment:{cid}"
-    result = await add_payment_start(update, context)
-    query.data = orig
-    return result
+    return await _show_add_payment(query, context, cid)
 
 
 # ==== СПИСОК ОСТАННІХ ВИПЛАТ ====
