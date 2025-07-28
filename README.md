@@ -90,4 +90,6 @@ empty.
 
 LibreOffice (``soffice``) must be installed on the system for DOCX→PDF
 conversion. The `docx2pdf` library will automatically attempt to use
-LibreOffice if it is available.
+LibreOffice if it is available. Install ``docx2pdf`` via ``pip install docx2pdf``.
+If LibreOffice is not installed or you prefer another tool, any CLI converter
+such as ``unoconv`` can be used as an alternative.

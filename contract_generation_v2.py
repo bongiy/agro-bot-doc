@@ -17,6 +17,21 @@ from decimal import Decimal
 
 
 def docx_to_pdf(docx_path: str, pdf_path: str) -> None:
+    """Convert a DOCX document to PDF.
+
+    The function first attempts to use :func:`docx2pdf.convert`. If this fails
+    (for example on Linux where Microsoft Word is unavailable), it falls back to
+    running LibreOffice in headless mode, provided that ``libreoffice`` or
+    ``soffice`` is installed on the system.
+
+    Parameters
+    ----------
+    docx_path:
+        Path to the source DOCX file.
+    pdf_path:
+        Destination path for the generated PDF file.
+    """
+
     try:
         convert(docx_path, pdf_path)
     except Exception:
