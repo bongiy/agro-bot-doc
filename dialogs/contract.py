@@ -27,6 +27,7 @@ from db import (
     Company,
     Contract,
     ContractLandPlot,
+    AgreementTemplate,
     LandPlot,
     LandPlotOwner,
     Payer,
@@ -45,6 +46,13 @@ from template_utils import analyze_template, build_unresolved_message
 import sqlalchemy
 
 logger = logging.getLogger(__name__)
+
+status_values = {
+    "signed": "🟡 Підписаний",
+    "sent_for_registration": "🟠 Відправлено на реєстрацію",
+    "returned_for_correction": "🔴 Повернуто з реєстрації на доопрацювання",
+    "registered": "🟢 Зареєстровано в ДРРП",
+}
 
 CHOOSE_COMPANY, SET_DURATION, SET_VALID_FROM, CHOOSE_PAYER, INPUT_LANDS, SET_RENT, SEARCH_LAND = range(7)
 
@@ -512,6 +520,7 @@ async def set_rent_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
             date_valid_to=context.user_data["valid_to"],
             duration_years=context.user_data["duration"],
             rent_amount=rent,
+            status="signed",
             created_at=now,
         )
     )
@@ -588,14 +597,14 @@ async def show_contracts(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for r in rows:
         comp = companies.get(r["company_id"])
         cname = comp["short_name"] or comp["full_name"] if comp else "—"
-        btn = InlineKeyboardButton("Картка", callback_data=f"contract_card:{r['id']}")
+        btn = InlineKeyboardButton("Картка", callback_data=f"agreement_card:{r['id']}")
         await msg.reply_text(
             f"{r['id']}. {r['number']} — {cname}",
             reply_markup=InlineKeyboardMarkup([[btn]]),
         )
 
 
-async def contract_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def agreement_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     contract_id = int(query.data.split(":")[1])
     contract = await database.fetch_one(sqlalchemy.select(Contract).where(Contract.c.id == contract_id))
@@ -603,42 +612,72 @@ async def contract_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("Договір не знайдено!", show_alert=True)
         return
     company = await database.fetch_one(sqlalchemy.select(Company).where(Company.c.id == contract["company_id"]))
+    payer = await database.fetch_one(sqlalchemy.select(Payer).where(Payer.c.id == contract["payer_id"]))
     lands = await database.fetch_all(
         sqlalchemy.select(LandPlot).join(ContractLandPlot, LandPlot.c.id == ContractLandPlot.c.land_plot_id).where(
             ContractLandPlot.c.contract_id == contract_id
         )
     )
-    land_ids = [l["id"] for l in lands]
-    owners = await database.fetch_all(
-        sqlalchemy.select(LandPlotOwner).where(LandPlotOwner.c.land_plot_id.in_(land_ids))
+    land = lands[0] if lands else None
+    docs_count = await database.fetch_val(
+        sqlalchemy.select(sqlalchemy.func.count()).select_from(UploadedDocs).where(
+            (UploadedDocs.c.entity_type == "contract") & (UploadedDocs.c.entity_id == contract_id)
+        )
     )
-    owners_map = {}
-    for o in owners:
-        owners_map.setdefault(o["land_plot_id"], []).append(o)
+    tmpl = None
+    if contract["template_id"]:
+        tmpl = await database.fetch_one(sqlalchemy.select(AgreementTemplate).where(AgreementTemplate.c.id == contract["template_id"]))
+    template_name = tmpl["name"] if tmpl else "—"
+
+    status_text = status_values.get(contract["status"], contract["status"] or "-")
+    registration_block = ""
+    if contract["status"] == "registered":
+        reg_date = contract["registration_date"].strftime("%d.%m.%Y") if contract["registration_date"] else "-"
+        registration_block = f"\nНомер реєстрації: {contract['registration_number']}\nДата реєстрації: {reg_date}"
+
+    location = "—"
+    if land:
+        loc_parts = [land["council"], land["district"], land["region"]]
+        location = ", ".join([p for p in loc_parts if p]) or "-"
+    plot_txt = (
+        f"Кадастровий номер: {land['cadaster']}\n"
+        f"Площа: {land['area']:.4f} га\n"
+        f"НГО: {land['ngo'] if land['ngo'] else '-'} грн\n"
+        f"Розташування: {location}"
+    ) if land else "-"
+
     text = (
-        f"<b>Договір {contract['number']}</b>\n"
-        f"ТОВ: {company['short_name'] or company['full_name']}\n"
+        f"📄 <b>Договір оренди №{contract['number']}</b>\n"
         f"Підписано: {contract['date_signed'].date()}\n"
-        f"Діє з {contract['date_valid_from'].date()} по {contract['date_valid_to'].date()}\n"
-        f"Строк: {contract['duration_years']} років\n\n"
-        "<b>Ділянки:</b>"
+        f"Строк дії: {contract['duration_years']} років (до {contract['date_valid_to'].date()})\n\n"
+        f"📌 Статус: {status_text}{registration_block}\n\n"
+        f"🏢 <b>Орендар (ТОВ)</b>:\n"
+        f"{company['short_name'] or company['full_name']}\n"
+        f"Код ЄДРПОУ: {company['edrpou']}\n"
+        f"Директор: {company['director']}\n\n"
+        f"👤 <b>Орендодавець (пайовик)</b>:\n"
+        f"{payer['name']}\n"
+        f"Паспорт: {payer['passport_series'] or ''} {payer['passport_number'] or ''}\n"
+        f"ІПН: {payer['ipn']}\n"
+        f"Адреса: {payer['oblast']} обл., {payer['rayon']} р-н, {payer['selo']}, {payer['vul']} {payer['bud']} {payer['kv'] or ''}\n"
+        f"Телефон: {payer['phone'] or '-'}\n"
+        f"Картка: {payer['bank_card'] or '-'}\n\n"
+        f"📍 <b>Ділянка</b>:\n{plot_txt}\n\n"
+        f"💰 <b>Орендна плата</b>: {contract['rent_amount']} грн/рік\n\n"
+        f"📎 Шаблон: {template_name}\n\n"
+        f"📥 Завантажені документи: {docs_count} файла(ів)"
     )
-    for l in lands:
-        text += f"\n- {l['cadaster']}"
-        olist = owners_map.get(l["id"], [])
-        for o in olist:
-            payer = await database.fetch_one(sqlalchemy.select(Payer).where(Payer.c.id == o["payer_id"]))
-            if payer:
-                share = o["share"]
-                text += f"\n   • {payer['name']} — {share:.2f}"
     buttons = [
-        [InlineKeyboardButton("✏️ Редагувати договір", callback_data=f"edit_contract:{contract_id}")],
-        [InlineKeyboardButton("📤 Згенерувати PDF", callback_data=f"generate_contract_pdf:{contract_id}")],
-        [InlineKeyboardButton("📎 Документи", callback_data=f"contract_docs:{contract_id}")],
-        [InlineKeyboardButton("🗑 Видалити", callback_data=f"delete_contract:{contract_id}")],
-        [InlineKeyboardButton("⬅️ До списку", callback_data="to_contracts")]
+        [InlineKeyboardButton("📄 Згенерувати договір (docx/pdf)", callback_data=f"generate_contract_pdf:{contract_id}")],
+        [InlineKeyboardButton("📝 Редагувати", callback_data=f"edit_contract:{contract_id}")],
+        [InlineKeyboardButton("📌 Змінити статус", callback_data=f"change_status:{contract_id}")],
+        [InlineKeyboardButton("📁 Документи", callback_data=f"contract_docs:{contract_id}")],
+        [InlineKeyboardButton("⬅️ До списку", callback_data="to_contracts")],
     ]
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons), parse_mode="HTML")
+
+# old name for compatibility
+contract_card = agreement_card
 
 
 async def to_contracts(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -663,7 +702,7 @@ async def contract_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton(f"⬇️ {d['doc_type']}", callback_data=f"send_pdf:{d['id']}"),
             InlineKeyboardButton("🗑 Видалити", callback_data=f"delete_pdf_db:{d['id']}")
         ])
-    keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"contract_card:{contract_id}")])
+    keyboard.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"agreement_card:{contract_id}")])
     text = "📎 Документи договору:" if docs else "Документи відсутні."
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -687,7 +726,7 @@ async def delete_contract_prompt(update: Update, context: ContextTypes.DEFAULT_T
     )
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ Так, видалити", callback_data=f"confirm_delete_contract:{contract_id}")],
-        [InlineKeyboardButton("❌ Скасувати", callback_data=f"contract_card:{contract_id}")],
+        [InlineKeyboardButton("❌ Скасувати", callback_data=f"agreement_card:{contract_id}")],
     ])
     try:
         await query.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
@@ -745,7 +784,7 @@ async def generate_contract_pdf_cb(update: Update, context: ContextTypes.DEFAULT
         await query.message.edit_text(
             "⚠️ Неможливо згенерувати PDF. Перевірте шаблон або дані договору.",
             reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("⬅️ Назад", callback_data=f"contract_card:{contract_id}")]]
+                [[InlineKeyboardButton("⬅️ Назад", callback_data=f"agreement_card:{contract_id}")]]
             ),
         )
         return
@@ -785,7 +824,7 @@ async def generate_contract_pdf_cb(update: Update, context: ContextTypes.DEFAULT
                     callback_data=f"send_pdf:{doc_id}",
                 )
             ],
-            [InlineKeyboardButton("⬅️ Назад", callback_data=f"contract_card:{contract_id}")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data=f"agreement_card:{contract_id}")],
         ]
     )
 
@@ -935,6 +974,86 @@ edit_contract_conv = ConversationHandler(
         EDIT_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_contract_start_date)],
         EDIT_RENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_contract_rent)],
         EDIT_LANDS: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_contract_lands)],
+    },
+    fallbacks=[],
+)
+
+
+# ==== ЗМІНА СТАТУСУ ДОГОВОРУ ====
+CHANGE_STATUS, REG_NUMBER, REG_DATE = range(3)
+
+
+async def change_status_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    contract_id = int(query.data.split(":")[1])
+    context.user_data["status_contract_id"] = contract_id
+    keyboard = [
+        [InlineKeyboardButton(text, callback_data=f"select_status:{key}")]
+        for key, text in status_values.items()
+    ]
+    keyboard.append([InlineKeyboardButton("❌ Скасувати", callback_data=f"agreement_card:{contract_id}")])
+    await query.message.edit_text("Оберіть новий статус:", reply_markup=InlineKeyboardMarkup(keyboard))
+    return CHANGE_STATUS
+
+
+async def select_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    status = query.data.split(":")[1]
+    context.user_data["new_status"] = status
+    contract_id = context.user_data.get("status_contract_id")
+    if status == "registered":
+        await query.message.edit_text("Введіть номер реєстрації:")
+        return REG_NUMBER
+    await database.execute(
+        Contract.update()
+        .where(Contract.c.id == contract_id)
+        .values(status=status, registration_number=None, registration_date=None, updated_at=datetime.utcnow())
+    )
+    await query.message.edit_text("✅ Статус оновлено", reply_markup=InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"agreement_card:{contract_id}")]
+    ]))
+    context.user_data.clear()
+    return ConversationHandler.END
+
+
+async def input_reg_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["registration_number"] = update.message.text.strip()
+    await update.message.reply_text("Введіть дату реєстрації (ДД.ММ.РРРР):")
+    return REG_DATE
+
+
+async def input_reg_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    try:
+        reg_date = datetime.strptime(text, "%d.%m.%Y").date()
+    except ValueError:
+        await update.message.reply_text("Введіть дату у форматі ДД.ММ.РРРР:")
+        return REG_DATE
+    contract_id = context.user_data.get("status_contract_id")
+    await database.execute(
+        Contract.update()
+        .where(Contract.c.id == contract_id)
+        .values(
+            status=context.user_data.get("new_status", "registered"),
+            registration_number=context.user_data.get("registration_number"),
+            registration_date=reg_date,
+            updated_at=datetime.utcnow(),
+        )
+    )
+    context.user_data.clear()
+    await update.message.reply_text(
+        "✅ Статус оновлено",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=f"agreement_card:{contract_id}")]])
+    )
+    return ConversationHandler.END
+
+
+change_status_conv = ConversationHandler(
+    entry_points=[CallbackQueryHandler(change_status_start, pattern=r"^change_status:\d+$")],
+    states={
+        CHANGE_STATUS: [CallbackQueryHandler(select_status, pattern=r"^select_status:\w+$")],
+        REG_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, input_reg_number)],
+        REG_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, input_reg_date)],
     },
     fallbacks=[],
 )

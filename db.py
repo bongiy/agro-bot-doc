@@ -82,6 +82,10 @@ Contract = sqlalchemy.Table(
     sqlalchemy.Column("date_valid_to", sqlalchemy.DateTime),
     sqlalchemy.Column("duration_years", sqlalchemy.Integer),
     sqlalchemy.Column("rent_amount", sqlalchemy.Numeric(12, 2)),
+    sqlalchemy.Column("status", sqlalchemy.String(32), default="signed"),
+    sqlalchemy.Column("registration_number", sqlalchemy.String(64)),
+    sqlalchemy.Column("registration_date", sqlalchemy.Date),
+    sqlalchemy.Column("template_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("agreement_template.id")),
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
     sqlalchemy.Column("updated_at", sqlalchemy.DateTime, onupdate=datetime.utcnow),
     sqlalchemy.UniqueConstraint("company_id", "number", name="uq_contract_number"),
@@ -311,5 +315,17 @@ with engine.begin() as conn:
     ))
     conn.execute(sqlalchemy.text(
         'ALTER TABLE "contract" ADD COLUMN IF NOT EXISTS payer_id INTEGER REFERENCES payer(id)'
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "contract" ADD COLUMN IF NOT EXISTS status VARCHAR'
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "contract" ADD COLUMN IF NOT EXISTS registration_number VARCHAR'
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "contract" ADD COLUMN IF NOT EXISTS registration_date DATE'
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "contract" ADD COLUMN IF NOT EXISTS template_id INTEGER REFERENCES agreement_template(id)'
     ))
 
