@@ -11,6 +11,15 @@ from db import (
     update_agreement_template, delete_agreement_template
 )
 from template_vars import TEMPLATE_VARIABLES
+
+
+def _build_all_vars_text() -> str:
+    """Return full list of available template variables."""
+    sections = []
+    for cat in TEMPLATE_VARIABLES.values():
+        lines = [f"<code>{v}</code> → {d}" for v, d in cat["items"]]
+        sections.append(f"<b>{cat['title']}</b>:\n" + "\n".join(lines))
+    return "\n\n".join(sections)
 import re
 import zipfile
 import unicodedata
@@ -100,40 +109,12 @@ async def show_templates_cb(update, context):
 
 
 async def template_vars_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show list of template variable categories."""
-    text = (
-        "<b>Список змінних</b>\n"
-        "Оберіть категорію. Якщо значення порожнє, у документі буде "
-        "\"<code>______________________</code>\" для ручного заповнення:"
-    )
-    keyboard = [
-        [InlineKeyboardButton(cat["title"], callback_data=f"varcat:{key}")]
-        for key, cat in TEMPLATE_VARIABLES.items()
-    ]
-    keyboard.append([InlineKeyboardButton("↩️ Назад", callback_data="template_list")])
-    msg = update.callback_query if update.callback_query else update.message
+    """Send full list of template variables in one message."""
+    text = _build_all_vars_text()
     if update.callback_query:
-        await update.callback_query.edit_message_text(
-            text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML"
-        )
+        await update.callback_query.edit_message_text(text, parse_mode="HTML")
     else:
-        await update.message.reply_text(
-            text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML"
-        )
-
-
-def _build_vars_text(cat_key: str) -> str:
-    cat = TEMPLATE_VARIABLES[cat_key]
-    lines = [f"<code>{v}</code> — {d}" for v, d in cat["items"]]
-    return f"<b>{cat['title']}</b>\n" + "\n".join(lines)
-
-
-async def template_vars_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    cat_key = query.data.split(":")[1]
-    text = _build_vars_text(cat_key)
-    keyboard = [[InlineKeyboardButton("↩️ Категорії", callback_data="template_vars")]]
-    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        await update.message.reply_text(text, parse_mode="HTML")
 
 async def template_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -314,4 +295,3 @@ template_delete_cb = CallbackQueryHandler(template_delete, pattern=r"^template_d
 template_list_cb = CallbackQueryHandler(show_templates_cb, pattern=r"^template_list$")
 template_vars_cb = MessageHandler(filters.Regex("^📘 Переглянути список змінних$"), template_vars_categories)
 template_vars_categories_cb = CallbackQueryHandler(template_vars_categories, pattern=r"^template_vars$")
-template_var_list_cb = CallbackQueryHandler(template_vars_list, pattern=r"^varcat:\w+$")
