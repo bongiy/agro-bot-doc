@@ -765,17 +765,33 @@ async def generate_contract_pdf_cb(update: Update, context: ContextTypes.DEFAULT
     templates = await get_agreement_templates(True)
     template_name = os.path.basename(templates[0]["file_path"]) if templates else ""
 
+    is_pdf = str(remote_path).lower().endswith(".pdf")
+
     if gen_log:
         await query.message.reply_text(gen_log)
 
+    warn_text = (
+        "⚠️ PDF не згенеровано — на сервері відсутні необхідні компоненти.\n"
+        "📄 Надаємо договір у форматі DOCX.\n\n"
+        if not is_pdf
+        else ""
+    )
+
     keyboard = InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("📎 Завантажити PDF", callback_data=f"send_pdf:{doc_id}")],
+            [
+                InlineKeyboardButton(
+                    "📎 Завантажити PDF" if is_pdf else "📎 Завантажити DOCX",
+                    callback_data=f"send_pdf:{doc_id}",
+                )
+            ],
             [InlineKeyboardButton("⬅️ Назад", callback_data=f"contract_card:{contract_id}")],
         ]
     )
+
     await query.message.edit_text(
-        f"✅ Договір згенеровано\n📐 Шаблон: {os.path.basename(template_name)}\n"
+        warn_text
+        + f"✅ Договір згенеровано\n📐 Шаблон: {os.path.basename(template_name)}\n"
         f"📆 Діє з {contract['date_valid_from'].date()} по {contract['date_valid_to'].date()}",
         reply_markup=keyboard,
     )
