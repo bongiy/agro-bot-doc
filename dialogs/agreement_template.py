@@ -226,7 +226,7 @@ async def add_template_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"✅ Шаблон успішно додано\nНазва: {doc.file_name}\nЗмінні: {used}/{len(allowed)}"
     )
-    msg = build_unresolved_message([], unsupported)
+    msg = build_unresolved_message([], unsupported, len(vars_found))
     if msg:
         await update.message.reply_text(msg)
     context.user_data.pop("tmpl_name", None)
@@ -270,7 +270,7 @@ async def replace_template_file(update: Update, context: ContextTypes.DEFAULT_TY
     await update.message.reply_text(
         f"✅ Файл оновлено\nЗмінні: {used}/{len(allowed)}"
     )
-    msg = build_unresolved_message([], unsupported)
+    msg = build_unresolved_message([], unsupported, len(vars_found))
     if msg:
         await update.message.reply_text(msg)
     await show_templates(update, context)

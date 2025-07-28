@@ -759,8 +759,8 @@ async def generate_contract_pdf_cb(update: Update, context: ContextTypes.DEFAULT
         "today": datetime.utcnow().strftime("%d.%m.%Y"),
         "year": datetime.utcnow().year,
     }
-    missing, unsupported = analyze_template(tmp_doc, variables)
-    msg = build_unresolved_message(missing, unsupported)
+    missing, unsupported, total = analyze_template(tmp_doc, variables)
+    msg = build_unresolved_message(missing, unsupported, total)
     if msg:
         await query.message.reply_text(msg)
     try:
