@@ -34,6 +34,7 @@ from keyboards.menu import contracts_menu
 from dialogs.post_creation import prompt_add_docs
 from ftp_utils import download_file_ftp, delete_file_ftp
 from contract_pdf import generate_contract
+from template_utils import analyze_template, build_unresolved_message
 import sqlalchemy
 
 CHOOSE_COMPANY, SET_DURATION, SET_VALID_FROM, CHOOSE_PAYER, INPUT_LANDS, SET_RENT, SEARCH_LAND = range(7)
@@ -758,6 +759,10 @@ async def generate_contract_pdf_cb(update: Update, context: ContextTypes.DEFAULT
         "today": datetime.utcnow().strftime("%d.%m.%Y"),
         "year": datetime.utcnow().year,
     }
+    missing, unsupported = analyze_template(tmp_doc, variables)
+    msg = build_unresolved_message(missing, unsupported)
+    if msg:
+        await query.message.reply_text(msg)
     try:
         remote_path = generate_contract(
             tmp_doc,
