@@ -9,7 +9,6 @@ from docx import Document
 from template_vars import SUPPORTED_VARS, EMPTY_VALUE
 from template_utils import extract_variables
 from ftp_utils import download_file_ftp, upload_file_ftp
-from docx2pdf import convert
 
 import subprocess
 from datetime import datetime
@@ -17,12 +16,11 @@ from decimal import Decimal
 
 
 def docx_to_pdf(docx_path: str, pdf_path: str) -> None:
-    """Convert a DOCX document to PDF.
+    """Convert a DOCX document to PDF using command line tools.
 
-    The function first attempts to use :func:`docx2pdf.convert`. If this fails
-    (for example on Linux where Microsoft Word is unavailable), it falls back to
-    running LibreOffice in headless mode, provided that ``libreoffice`` or
-    ``soffice`` is installed on the system.
+    LibreOffice (``libreoffice`` or ``soffice``) is used in headless mode if
+    available. If LibreOffice is not installed, the function tries the
+    ``unoconv`` CLI as a fallback.
 
     Parameters
     ----------
@@ -32,39 +30,37 @@ def docx_to_pdf(docx_path: str, pdf_path: str) -> None:
         Destination path for the generated PDF file.
     """
 
-    try:
-        convert(docx_path, pdf_path)
+    libreoffice = shutil.which("libreoffice") or shutil.which("soffice")
+    if libreoffice:
+        subprocess.run([
+            libreoffice,
+            "--headless",
+            "--convert-to",
+            "pdf",
+            "--outdir",
+            os.path.dirname(pdf_path),
+            docx_path,
+        ], check=True)
+        generated = os.path.join(
+            os.path.dirname(pdf_path),
+            os.path.splitext(os.path.basename(docx_path))[0] + ".pdf",
+        )
+        os.replace(generated, pdf_path)
         return
-    except Exception as exc:
-        libreoffice = shutil.which("libreoffice") or shutil.which("soffice")
-        if libreoffice:
-            subprocess.run([
-                libreoffice,
-                "--headless",
-                "--convert-to",
-                "pdf",
-                "--outdir",
-                os.path.dirname(pdf_path),
-                docx_path,
-            ], check=True)
-            generated = os.path.join(
-                os.path.dirname(pdf_path),
-                os.path.splitext(os.path.basename(docx_path))[0] + ".pdf",
-            )
-            os.replace(generated, pdf_path)
-            return
-        unoconv = shutil.which("unoconv")
-        if unoconv:
-            subprocess.run([
-                unoconv,
-                "-f",
-                "pdf",
-                "-o",
-                pdf_path,
-                docx_path,
-            ], check=True)
-            return
-        raise exc
+    unoconv = shutil.which("unoconv")
+    if unoconv:
+        subprocess.run([
+            unoconv,
+            "-f",
+            "pdf",
+            "-o",
+            pdf_path,
+            docx_path,
+        ], check=True)
+        return
+    raise RuntimeError(
+        "LibreOffice or unoconv CLI required for DOCX to PDF conversion"
+    )
 
 
 def format_area(area: float | int | str | None) -> str:
