@@ -74,7 +74,16 @@ manually.
 
 ## Contract generation
 
-Use `contract_generation_v2.generate_contract()` to render a DOCX template with
-variables and convert it to PDF. The resulting file is uploaded to FTP or saved
-locally in development mode. The function also returns a log with information
-about which placeholders were filled.
+Use `contract_generation_v2.generate_contract_v2(contract_id)` to build a
+contract PDF for a specific record. The function loads the contract, payer,
+company and land plot information from the database, fills the first active
+agreement template and converts it to PDF. The PDF is uploaded to the configured
+FTP server.
+
+**Parameters**
+
+- `contract_id` – identifier of the contract to generate.
+
+The call returns `(remote_path, log)` where `remote_path` is the FTP path of the
+uploaded PDF and `log` describes which template placeholders were filled or left
+empty.
