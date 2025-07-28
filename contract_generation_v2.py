@@ -180,3 +180,178 @@ def generate_contract(
 
     return remote_path, log
 
+
+
+async def generate_contract_v2(contract_id: int) -> tuple[str, str]:
+    """Generate a contract PDF for the given contract ID.
+
+    The contract along with its related payer, company and land plots are
+    loaded from the database. The first active agreement template is used
+    to produce the PDF. The resulting file is uploaded via FTP and a record
+    is stored in ``uploaded_docs``.
+
+    Parameters
+    ----------
+    contract_id: int
+        Identifier of the contract to generate.
+
+    Returns
+    -------
+    tuple[str, str]
+        Remote path to the uploaded PDF and generation log.
+    """
+    import sqlalchemy
+    from db import (
+        database,
+        Contract,
+        Company,
+        Payer,
+        LandPlot,
+        LandPlotOwner,
+        ContractLandPlot,
+        UploadedDocs,
+        get_agreement_templates,
+    )
+    from template_utils import analyze_template
+
+    contract = await database.fetch_one(
+        sqlalchemy.select(Contract).where(Contract.c.id == contract_id)
+    )
+    if not contract:
+        raise ValueError("Contract not found")
+
+    if not contract["company_id"]:
+        raise RuntimeError("Contract has no company specified")
+    if not contract["payer_id"]:
+        raise RuntimeError("Contract has no payer specified")
+
+    company = await database.fetch_one(
+        sqlalchemy.select(Company).where(Company.c.id == contract["company_id"])
+    )
+    payer = await database.fetch_one(
+        sqlalchemy.select(Payer).where(Payer.c.id == contract["payer_id"])
+    )
+    if not company or not payer:
+        raise RuntimeError("Required contract relations not found")
+
+    lands = await database.fetch_all(
+        sqlalchemy.select(LandPlot)
+        .join(ContractLandPlot, LandPlot.c.id == ContractLandPlot.c.land_plot_id)
+        .where(ContractLandPlot.c.contract_id == contract_id)
+    )
+    if not lands:
+        raise RuntimeError("Contract has no land plots")
+
+    land_ids = [l["id"] for l in lands]
+    owners_rows = await database.fetch_all(
+        sqlalchemy.select(
+            LandPlotOwner.c.land_plot_id,
+            LandPlotOwner.c.payer_id,
+            LandPlotOwner.c.share,
+            Payer.c.name,
+        )
+        .join(Payer, Payer.c.id == LandPlotOwner.c.payer_id)
+        .where(LandPlotOwner.c.land_plot_id.in_(land_ids))
+    )
+
+    land_owner_map: dict[int, dict[int, float]] = {}
+    payer_shares: dict[int, dict[str, Any]] = {}
+    for r in owners_rows:
+        land_owner_map.setdefault(r["land_plot_id"], {})[r["payer_id"]] = r["share"]
+        info = payer_shares.setdefault(
+            r["payer_id"], {"name": r["name"], "share": 0.0}
+        )
+        info["share"] += float(r["share"])
+
+    payer_share_value = payer_shares.get(contract["payer_id"], {}).get("share")
+    payers_list = "\n".join(
+        f"{info['name']} — {format_share(info['share'])}" for info in payer_shares.values()
+    )
+    plots_table = "\n".join(
+        f"{l['cadaster']} — {format_area(l['area'])}" for l in lands
+    )
+    first_land = lands[0]
+    first_land_share = land_owner_map.get(first_land["id"], {}).get(contract["payer_id"])
+
+    templates = await get_agreement_templates(True)
+    if not templates:
+        raise RuntimeError("No active agreement template")
+    template = templates[0]
+
+    tmp_doc = f"temp_docs/template_{contract_id}.docx"
+    download_file_ftp(template["file_path"], tmp_doc)
+
+    variables = {
+        "contract_number": contract["number"],
+        "contract_date_signed": contract["date_signed"].strftime("%d.%m.%Y"),
+        "contract_date_from": contract["date_valid_from"].strftime("%d.%m.%Y"),
+        "contract_date_to": contract["date_valid_to"].strftime("%d.%m.%Y"),
+        "contract_term": contract["duration_years"],
+        "contract_rent": float(contract["rent_amount"]),
+        "company_name": company["full_name"],
+        "company_code": company["edrpou"],
+        "company_address": company["address_legal"],
+        "company_director": company["director"],
+        "payer_name": payer["name"],
+        "payer_tax_id": payer["ipn"],
+        "payer_birthdate": payer["birth_date"],
+        "payer_passport": (
+            f"{(payer['passport_series'] or payer['id_number'] or '')} "
+            f"{payer['passport_number'] or ''} "
+            f"{payer['passport_issuer'] or payer['idcard_issuer'] or ''} "
+            f"{payer['passport_date'] or payer['idcard_date'] or ''}"
+        ).strip(),
+        "payer_address": (
+            f"{payer['oblast']} обл., {payer['rayon']} р-н, с. {payer['selo']}, "
+            f"вул. {payer['vul']}, буд. {payer['bud']}"
+            f"{(', кв. ' + payer['kv']) if payer['kv'] else ''}"
+        ),
+        "payer_share": format_share(payer_share_value),
+        "payer_phone": payer["phone"],
+        "payer_bank_card": payer["bank_card"],
+        "payers_list": payers_list,
+        "plot_cadastre": first_land["cadaster"],
+        "plot_area": format_area(first_land["area"]),
+        "plot_share": format_share(first_land_share),
+        "plot_ngo": format_money(first_land["ngo"]),
+        "plot_location": ", ".join(
+            filter(None, [first_land["council"], first_land["district"], first_land["region"]])
+        ),
+        "plots_table": plots_table,
+        "today": datetime.utcnow().strftime("%d.%m.%Y"),
+        "year": datetime.utcnow().year,
+    }
+
+    # Analyze template for unresolved placeholders (result not used yet)
+    analyze_template(tmp_doc, variables)
+
+    try:
+        remote_path, gen_log = generate_contract(
+            tmp_doc,
+            variables,
+            payer_name=payer["name"],
+            contract_number=contract["number"],
+            year=datetime.utcnow().year,
+        )
+    finally:
+        if os.path.exists(tmp_doc):
+            os.remove(tmp_doc)
+
+    await database.execute(
+        UploadedDocs.delete().where(
+            (UploadedDocs.c.entity_type == "contract")
+            & (UploadedDocs.c.entity_id == contract_id)
+            & (UploadedDocs.c.doc_type == "generated")
+        )
+    )
+    await database.execute(
+        UploadedDocs.insert().values(
+            entity_type="contract",
+            entity_id=contract_id,
+            doc_type="generated",
+            remote_path=remote_path,
+        )
+    )
+
+    return remote_path, gen_log
+
