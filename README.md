@@ -74,6 +74,7 @@ manually.
 
 ## Contract generation
 
-Use `contract_pdf.generate_contract()` to render a DOCX template with variables
-and convert it to PDF. The resulting file is uploaded to FTP or saved locally in
-development mode.
+Use `contract_generation_v2.generate_contract()` to render a DOCX template with
+variables and convert it to PDF. The resulting file is uploaded to FTP or saved
+locally in development mode. The function also returns a log with information
+about which placeholders were filled.
