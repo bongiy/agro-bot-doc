@@ -11,6 +11,7 @@ from db import (
     update_agreement_template, delete_agreement_template
 )
 from template_vars import TEMPLATE_VARIABLES
+from template_utils import find_unsupported_vars, build_unresolved_message
 
 
 def _build_all_vars_text() -> str:
@@ -216,6 +217,7 @@ async def add_template_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tg_file = await doc.get_file()
     await tg_file.download_to_drive(local_path)
     vars_found = extract_variables(local_path)
+    unsupported = find_unsupported_vars(local_path)
     upload_file_ftp(local_path, remote_path)
     os.remove(local_path)
     await update_agreement_template(template_id, {"file_path": remote_path})
@@ -224,6 +226,9 @@ async def add_template_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"✅ Шаблон успішно додано\nНазва: {doc.file_name}\nЗмінні: {used}/{len(allowed)}"
     )
+    msg = build_unresolved_message([], unsupported)
+    if msg:
+        await update.message.reply_text(msg)
     context.user_data.pop("tmpl_name", None)
     context.user_data.pop("tmpl_type", None)
     await show_templates(update, context)
@@ -256,6 +261,7 @@ async def replace_template_file(update: Update, context: ContextTypes.DEFAULT_TY
     tg_file = await doc.get_file()
     await tg_file.download_to_drive(local_path)
     vars_found = extract_variables(local_path)
+    unsupported = find_unsupported_vars(local_path)
     upload_file_ftp(local_path, remote_path)
     os.remove(local_path)
     await update_agreement_template(template_id, {"file_path": remote_path})
@@ -264,6 +270,9 @@ async def replace_template_file(update: Update, context: ContextTypes.DEFAULT_TY
     await update.message.reply_text(
         f"✅ Файл оновлено\nЗмінні: {used}/{len(allowed)}"
     )
+    msg = build_unresolved_message([], unsupported)
+    if msg:
+        await update.message.reply_text(msg)
     await show_templates(update, context)
     return ConversationHandler.END
 
