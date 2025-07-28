@@ -279,6 +279,7 @@ async def generate_contract_v2(contract_id: int) -> tuple[str, str]:
     template = templates[0]
 
     tmp_doc = f"temp_docs/template_{contract_id}.docx"
+    os.makedirs("temp_docs", exist_ok=True)
     download_file_ftp(template["file_path"], tmp_doc)
 
     variables = {
