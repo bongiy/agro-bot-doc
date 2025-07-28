@@ -75,6 +75,7 @@ Contract = sqlalchemy.Table(
     metadata,
     sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
     sqlalchemy.Column("company_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("company.id")),
+    sqlalchemy.Column("payer_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("payer.id")),
     sqlalchemy.Column("number", sqlalchemy.String(32)),
     sqlalchemy.Column("date_signed", sqlalchemy.DateTime),
     sqlalchemy.Column("date_valid_from", sqlalchemy.DateTime),
@@ -307,5 +308,8 @@ with engine.begin() as conn:
     ))
     conn.execute(sqlalchemy.text(
         'ALTER TABLE "contract" ADD COLUMN IF NOT EXISTS rent_amount NUMERIC(12,2)'
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "contract" ADD COLUMN IF NOT EXISTS payer_id INTEGER REFERENCES payer(id)'
     ))
 

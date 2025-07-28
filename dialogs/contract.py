@@ -2,6 +2,7 @@ import os
 import unicodedata
 import re
 from datetime import datetime, timedelta
+from typing import Any
 
 from telegram import (
     Update,
@@ -33,7 +34,7 @@ from db import (
 from keyboards.menu import contracts_menu
 from dialogs.post_creation import prompt_add_docs
 from ftp_utils import download_file_ftp, delete_file_ftp
-from contract_pdf import generate_contract
+from contract_pdf import generate_contract, format_area, format_money, format_share
 from template_utils import analyze_template, build_unresolved_message
 import sqlalchemy
 
@@ -496,6 +497,7 @@ async def set_rent_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
     contract_id = await database.execute(
         Contract.insert().values(
             company_id=context.user_data["company_id"],
+            payer_id=context.user_data["payer_id"],
             number=context.user_data["contract_number"],
             date_signed=now,
             date_valid_from=context.user_data["valid_from"],
@@ -726,7 +728,49 @@ async def generate_contract_pdf_cb(update: Update, context: ContextTypes.DEFAULT
     if not contract:
         await query.answer("Договір не знайдено!", show_alert=True)
         return
+    if not contract["company_id"]:
+        await query.answer("⚠️ У договорі не вказано ТОВ. Неможливо підставити дані.", show_alert=True)
+        return
     company = await database.fetch_one(sqlalchemy.select(Company).where(Company.c.id == contract["company_id"]))
+    if not company:
+        await query.answer("⚠️ У договорі не вказано ТОВ. Неможливо підставити дані.", show_alert=True)
+        return
+    if not contract["payer_id"]:
+        await query.answer("⚠️ У договорі не вказано пайовика. Неможливо підставити дані.", show_alert=True)
+        return
+    payer = await database.fetch_one(sqlalchemy.select(Payer).where(Payer.c.id == contract["payer_id"]))
+    if not payer:
+        await query.answer("⚠️ У договорі не вказано пайовика. Неможливо підставити дані.", show_alert=True)
+        return
+    lands = await database.fetch_all(
+        sqlalchemy.select(LandPlot)
+        .join(ContractLandPlot, LandPlot.c.id == ContractLandPlot.c.land_plot_id)
+        .where(ContractLandPlot.c.contract_id == contract_id)
+    )
+    if not lands:
+        await query.answer("⚠️ У договорі не вказано ділянки. Неможливо підставити дані.", show_alert=True)
+        return
+    land_ids = [l["id"] for l in lands]
+    owners_rows = await database.fetch_all(
+        sqlalchemy.select(LandPlotOwner.c.land_plot_id, LandPlotOwner.c.payer_id, LandPlotOwner.c.share, Payer.c.name)
+        .join(Payer, Payer.c.id == LandPlotOwner.c.payer_id)
+        .where(LandPlotOwner.c.land_plot_id.in_(land_ids))
+    )
+    land_owner_map: dict[int, dict[int, float]] = {}
+    payer_shares: dict[int, dict[str, Any]] = {}
+    for r in owners_rows:
+        land_owner_map.setdefault(r["land_plot_id"], {})[r["payer_id"]] = r["share"]
+        info = payer_shares.setdefault(r["payer_id"], {"name": r["name"], "share": 0.0})
+        info["share"] += float(r["share"])
+    payer_share_value = payer_shares.get(contract["payer_id"], {}).get("share")
+    payers_list = "\n".join(
+        f"{info['name']} — {format_share(info['share'])}" for info in payer_shares.values()
+    )
+    plots_table = "\n".join(
+        f"{l['cadaster']} — {format_area(l['area'])}" for l in lands
+    )
+    first_land = lands[0]
+    first_land_share = land_owner_map.get(first_land["id"], {}).get(contract["payer_id"])
     from db import get_agreement_templates
     templates = await get_agreement_templates(True)
     if not templates:
@@ -756,6 +800,21 @@ async def generate_contract_pdf_cb(update: Update, context: ContextTypes.DEFAULT
         "company_code": company["edrpou"],
         "company_address": company["address_legal"],
         "company_director": company["director"],
+        "payer_name": payer["name"],
+        "payer_tax_id": payer["ipn"],
+        "payer_birthdate": payer["birth_date"],
+        "payer_passport": f"{(payer['passport_series'] or payer['id_number'] or '')} {payer['passport_number'] or ''} {payer['passport_issuer'] or payer['idcard_issuer'] or ''} {payer['passport_date'] or payer['idcard_date'] or ''}".strip(),
+        "payer_address": f"{payer['oblast']} обл., {payer['rayon']} р-н, с. {payer['selo']}, вул. {payer['vul']}, буд. {payer['bud']}{(', кв. ' + payer['kv']) if payer['kv'] else ''}",
+        "payer_share": format_share(payer_share_value),
+        "payer_phone": payer["phone"],
+        "payer_bank_card": payer["bank_card"],
+        "payers_list": payers_list,
+        "plot_cadastre": first_land["cadaster"],
+        "plot_area": format_area(first_land["area"]),
+        "plot_share": format_share(first_land_share),
+        "plot_ngo": format_money(first_land["ngo"]),
+        "plot_location": ", ".join(filter(None, [first_land["council"], first_land["district"], first_land["region"]])),
+        "plots_table": plots_table,
         "today": datetime.utcnow().strftime("%d.%m.%Y"),
         "year": datetime.utcnow().year,
     }
@@ -773,7 +832,7 @@ async def generate_contract_pdf_cb(update: Update, context: ContextTypes.DEFAULT
         remote_path = generate_contract(
             tmp_doc,
             variables,
-            payer_name=str(contract_id),
+            payer_name=payer["name"],
             contract_number=contract["number"],
             year=datetime.utcnow().year,
         )
