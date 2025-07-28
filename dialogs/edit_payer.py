@@ -1,6 +1,7 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ConversationHandler, MessageHandler, CallbackQueryHandler, CommandHandler, filters, ContextTypes
 from db import database, Payer
+from dialogs.payer import normalize_bank_card
 
 EDIT_SELECT, EDIT_VALUE = range(2)
 
@@ -14,6 +15,7 @@ FIELDS = [
     ("bud", "Будинок"),
     ("kv", "Квартира"),
     ("phone", "Телефон"),
+    ("bank_card", "Картка для виплат"),
     ("doc_type", "Тип документа"),
     ("passport_series", "Серія паспорта"),
     ("passport_number", "Номер паспорта"),
@@ -59,6 +61,15 @@ async def edit_field_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     payer_id = context.user_data.get("edit_payer_id")
     field_key = context.user_data.get("edit_field")
     print(f"DEBUG: id={payer_id} key={field_key} value={value}")
+    if field_key == "bank_card":
+        if value != "-":
+            card = normalize_bank_card(value)
+            if not card:
+                await update.message.reply_text("❗️ Введіть 16 або 19 цифр картки")
+                return EDIT_VALUE
+            value = card
+        else:
+            value = None
     query_db = Payer.update().where(Payer.c.id == payer_id).values({field_key: value})
     await database.execute(query_db)
     await update.message.reply_text("✅ Зміни збережено!")

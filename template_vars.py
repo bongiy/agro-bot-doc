@@ -41,6 +41,8 @@ TEMPLATE_VARIABLES = {
             ("{{payer_passport}}", "Паспортні дані"),
             ("{{payer_address}}", "Адреса"),
             ("{{payer_share}}", "Частка"),
+            ("{{payer_phone}}", "Телефон"),
+            ("{{payer_bank_card}}", "Банківська картка"),
             ("{{payers_list}}", "Таблиця пайовиків"),
         ],
     },

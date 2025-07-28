@@ -22,6 +22,7 @@ Payer = sqlalchemy.Table(
     sqlalchemy.Column("bud", sqlalchemy.String),
     sqlalchemy.Column("kv", sqlalchemy.String),
     sqlalchemy.Column("phone", sqlalchemy.String),
+    sqlalchemy.Column("bank_card", sqlalchemy.String),
     sqlalchemy.Column("doc_type", sqlalchemy.String),
     sqlalchemy.Column("passport_series", sqlalchemy.String),
     sqlalchemy.Column("passport_number", sqlalchemy.String),
@@ -300,5 +301,8 @@ with engine.begin() as conn:
     ))
     conn.execute(sqlalchemy.text(
         'ALTER TABLE "land_plot" ADD COLUMN IF NOT EXISTS council VARCHAR'
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "payer" ADD COLUMN IF NOT EXISTS bank_card VARCHAR'
     ))
 
