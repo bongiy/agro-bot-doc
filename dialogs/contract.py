@@ -33,7 +33,7 @@ from dialogs.post_creation import prompt_add_docs
 from ftp_utils import download_file_ftp
 import sqlalchemy
 
-CHOOSE_COMPANY, SET_DURATION, SET_VALID_FROM, CHOOSE_PAYER, INPUT_LANDS, SEARCH_LAND = range(6)
+CHOOSE_COMPANY, SET_DURATION, SET_VALID_FROM, CHOOSE_PAYER, INPUT_LANDS, SET_RENT, SEARCH_LAND = range(7)
 
 BACK_BTN = "◀️ Назад"  # ◀️ Назад
 CANCEL_BTN = "❌ Скасувати"  # ❌ Скасувати
@@ -157,7 +157,32 @@ async def contract_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Back to input lands
         payer_id = context.user_data.get("payer_id")
         lands = await database.fetch_all(
-            sqlalchemy.select(LandPlot).where(LandPlot.c.payer_id == payer_id)
+            sqlalchemy.select(LandPlot)
+            .join(LandPlotOwner, LandPlot.c.id == LandPlotOwner.c.land_plot_id)
+            .where(LandPlotOwner.c.payer_id == payer_id)
+        )
+        if lands:
+            land_list = " ".join(str(l["id"]) for l in lands)
+            msg = (
+                f"Ділянки пайовика: {land_list}\n"
+                "Вкажіть ID ділянок через пробіл або скористайтеся пошуком."
+            )
+        else:
+            msg = "У цього пайовика немає ділянок. Вкажіть ID вручну або скористайтеся пошуком."
+        kb = ReplyKeyboardMarkup(
+            [["🔍 Пошук ділянки", "✅ Завершити"], [BACK_BTN, CANCEL_BTN]],
+            resize_keyboard=True,
+        )
+        await query.message.reply_text(msg, reply_markup=kb)
+        await query.message.reply_text("⬇️ Навігація", reply_markup=back_cancel_kb)
+        context.user_data["current_state"] = INPUT_LANDS
+        return INPUT_LANDS
+    if state == SET_RENT:
+        payer_id = context.user_data.get("payer_id")
+        lands = await database.fetch_all(
+            sqlalchemy.select(LandPlot)
+            .join(LandPlotOwner, LandPlot.c.id == LandPlotOwner.c.land_plot_id)
+            .where(LandPlotOwner.c.payer_id == payer_id)
         )
         if lands:
             land_list = " ".join(str(l["id"]) for l in lands)
@@ -368,7 +393,9 @@ async def choose_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return CHOOSE_PAYER
 
     lands = await database.fetch_all(
-        sqlalchemy.select(LandPlot).where(LandPlot.c.payer_id == payer_id)
+        sqlalchemy.select(LandPlot)
+        .join(LandPlotOwner, LandPlot.c.id == LandPlotOwner.c.land_plot_id)
+        .where(LandPlotOwner.c.payer_id == payer_id)
     )
     context.user_data["land_ids"] = []
     if lands:
@@ -407,6 +434,27 @@ async def save_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not land_ids:
             await update.message.reply_text("Не додано жодної ділянки.")
             return INPUT_LANDS
+        invalid = []
+        for lid in land_ids:
+            total = await database.fetch_val(
+                sqlalchemy.select(sqlalchemy.func.sum(LandPlotOwner.c.share)).where(
+                    LandPlotOwner.c.land_plot_id == lid
+                )
+            )
+            if total is None or abs(total - 1.0) > 0.01:
+                invalid.append(lid)
+        if invalid:
+            await update.message.reply_text(
+                f"⚠️ Не охоплено 100% частки по ділянках: {', '.join(map(str, invalid))}"
+            )
+            return INPUT_LANDS
+        await update.message.reply_text(
+            "Введіть суму орендної плати (грн):",
+            reply_markup=ReplyKeyboardMarkup([[BACK_BTN, CANCEL_BTN]], resize_keyboard=True),
+        )
+        await update.message.reply_text("⬇️ Навігація", reply_markup=back_cancel_kb)
+        context.user_data["current_state"] = SET_RENT
+        return SET_RENT
     else:
         try:
             new_ids = [int(i) for i in text.replace(",", " ").split() if i]
@@ -426,21 +474,20 @@ async def save_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["current_state"] = INPUT_LANDS
         return INPUT_LANDS
         
+    # Should not reach here
+
+async def set_rent_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    result = await back_or_cancel(update, context, INPUT_LANDS)
+    if result is not None:
+        return result
+    text = update.message.text.replace(',', '.').strip()
+    try:
+        rent = float(text)
+    except ValueError:
+        await update.message.reply_text("Введіть числове значення:")
+        return SET_RENT
+    context.user_data["rent_amount"] = rent
     land_ids = context.user_data.get("land_ids", [])
-    invalid = []
-    for lid in land_ids:
-        total = await database.fetch_val(
-            sqlalchemy.select(sqlalchemy.func.sum(LandPlotOwner.c.share)).where(
-                LandPlotOwner.c.land_plot_id == lid
-            )
-        )
-        if total is None or abs(total - 1.0) > 0.01:
-            invalid.append(lid)
-    if invalid:
-        await update.message.reply_text(
-            f"⚠️ Не охоплено 100% частки по ділянках: {', '.join(map(str, invalid))}"
-        )
-        return INPUT_LANDS
     now = datetime.utcnow()
     contract_id = await database.execute(
         Contract.insert().values(
@@ -450,6 +497,7 @@ async def save_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
             date_valid_from=context.user_data["valid_from"],
             date_valid_to=context.user_data["valid_to"],
             duration_years=context.user_data["duration"],
+            rent_amount=rent,
             created_at=now,
         )
     )
@@ -467,7 +515,6 @@ async def save_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
         contracts_menu,
     )
     return ConversationHandler.END
-
 
 add_contract_conv = ConversationHandler(
     entry_points=[MessageHandler(filters.Regex("^➕ Створити договір$"), add_contract_start)],
@@ -494,6 +541,11 @@ add_contract_conv = ConversationHandler(
         INPUT_LANDS: [
             MessageHandler(filters.TEXT & ~filters.COMMAND, save_contract),
             CallbackQueryHandler(add_land_from_search, pattern=r"^add_land_to_contract:\d+$"),
+            CallbackQueryHandler(contract_back, pattern=f"^{BACK_CB}$"),
+            CallbackQueryHandler(contract_cancel, pattern=f"^{CANCEL_CB}$"),
+        ],
+        SET_RENT: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, set_rent_amount),
             CallbackQueryHandler(contract_back, pattern=f"^{BACK_CB}$"),
             CallbackQueryHandler(contract_cancel, pattern=f"^{CANCEL_CB}$"),
         ],

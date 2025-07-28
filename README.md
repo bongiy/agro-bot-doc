@@ -47,6 +47,7 @@ manually.
 - `{{contract_date_from}}` — Дата початку дії договору
 - `{{contract_date_to}}` — Дата закінчення дії договору
 - `{{contract_term}}` — Строк дії договору (у роках)
+- `{{contract_rent}}` — Сума орендної плати
 
 ### Payer
 - `{{payer_name}}` — ПІБ пайовика

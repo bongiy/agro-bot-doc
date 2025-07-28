@@ -79,6 +79,7 @@ Contract = sqlalchemy.Table(
     sqlalchemy.Column("date_valid_from", sqlalchemy.DateTime),
     sqlalchemy.Column("date_valid_to", sqlalchemy.DateTime),
     sqlalchemy.Column("duration_years", sqlalchemy.Integer),
+    sqlalchemy.Column("rent_amount", sqlalchemy.Numeric(12, 2)),
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
     sqlalchemy.Column("updated_at", sqlalchemy.DateTime, onupdate=datetime.utcnow),
     sqlalchemy.UniqueConstraint("company_id", "number", name="uq_contract_number"),

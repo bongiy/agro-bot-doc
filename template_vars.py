@@ -23,6 +23,7 @@ TEMPLATE_VARIABLES = {
             ("{{contract_date_from}}", "Початок дії"),
             ("{{contract_date_to}}", "Кінець дії"),
             ("{{contract_term}}", "Строк дії"),
+            ("{{contract_rent}}", "Сума орендної плати"),
         ],
     },
     "payer": {

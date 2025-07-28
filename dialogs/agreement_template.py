@@ -11,6 +11,9 @@ from db import (
     update_agreement_template, delete_agreement_template
 )
 from template_vars import TEMPLATE_VARIABLES
+import re
+import zipfile
+import unicodedata
 from ftp_utils import upload_file_ftp, delete_file_ftp
 
 TEMPLATE_TYPES = {
@@ -24,6 +27,24 @@ ALLOWED_VARS = [
     for cat in TEMPLATE_VARIABLES.values()
     for var, desc in cat["items"]
 ]
+
+def to_latin_filename(text: str, default: str = "template.docx") -> str:
+    name = unicodedata.normalize('NFKD', str(text)).encode('ascii', 'ignore').decode('ascii')
+    name = name.replace(" ", "_")
+    name = re.sub(r'[^A-Za-z0-9_.-]', '', name)
+    if not name or name.startswith('.docx') or name.lower() == '.docx':
+        return default
+    if not name.lower().endswith('.docx'):
+        name += '.docx'
+    return name
+
+def extract_variables(path: str) -> set[str]:
+    text = ""
+    with zipfile.ZipFile(path) as z:
+        for name in z.namelist():
+            if name.startswith("word/") and name.endswith(".xml"):
+                text += z.read(name).decode("utf-8", errors="ignore")
+    return set(re.findall(r"\{\{\w+\}\}", text))
 
 ADD_TYPE, ADD_NAME, ADD_FILE, REPLACE_FILE = range(4)
 
@@ -185,15 +206,21 @@ async def add_template_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "created_at": datetime.utcnow(),
     }
     template_id = await add_agreement_template(tmpl_data)
-    remote_path = f"templates/agreements/{template_id}.docx"
+    remote_name = to_latin_filename(doc.file_name)
+    remote_path = f"templates/agreements/{template_id}_{remote_name}"
     tmp_dir = "temp_docs"
     os.makedirs(tmp_dir, exist_ok=True)
-    local_path = os.path.join(tmp_dir, f"{template_id}.docx")
+    local_path = os.path.join(tmp_dir, remote_name)
     await doc.get_file().download_to_drive(local_path)
+    vars_found = extract_variables(local_path)
     upload_file_ftp(local_path, remote_path)
     os.remove(local_path)
     await update_agreement_template(template_id, {"file_path": remote_path})
-    await update.message.reply_text("✅ Шаблон збережено")
+    allowed = {v for cat in TEMPLATE_VARIABLES.values() for v, _ in cat["items"]}
+    used = len([v for v in vars_found if v in allowed])
+    await update.message.reply_text(
+        f"✅ Шаблон успішно додано\nНазва: {doc.file_name}\nЗмінні: {used}/{len(allowed)}"
+    )
     context.user_data.pop("tmpl_name", None)
     context.user_data.pop("tmpl_type", None)
     await show_templates(update, context)
@@ -218,15 +245,21 @@ async def replace_template_file(update: Update, context: ContextTypes.DEFAULT_TY
     if not template_id:
         await update.message.reply_text("Сталася помилка.")
         return ConversationHandler.END
-    remote_path = f"templates/agreements/{template_id}.docx"
+    remote_name = to_latin_filename(doc.file_name)
+    remote_path = f"templates/agreements/{template_id}_{remote_name}"
     tmp_dir = "temp_docs"
     os.makedirs(tmp_dir, exist_ok=True)
-    local_path = os.path.join(tmp_dir, f"{template_id}.docx")
+    local_path = os.path.join(tmp_dir, remote_name)
     await doc.get_file().download_to_drive(local_path)
+    vars_found = extract_variables(local_path)
     upload_file_ftp(local_path, remote_path)
     os.remove(local_path)
     await update_agreement_template(template_id, {"file_path": remote_path})
-    await update.message.reply_text("✅ Файл оновлено")
+    allowed = {v for cat in TEMPLATE_VARIABLES.values() for v, _ in cat["items"]}
+    used = len([v for v in vars_found if v in allowed])
+    await update.message.reply_text(
+        f"✅ Файл оновлено\nЗмінні: {used}/{len(allowed)}"
+    )
     await show_templates(update, context)
     return ConversationHandler.END
 
