@@ -25,9 +25,19 @@ from dialogs.edit_payer import edit_payer_conv
 from dialogs.search import search_payer_conv, search_land_conv
 from dialogs.field import add_field_conv, show_fields, delete_field, delete_field_prompt, to_fields_list, field_card, edit_field
 from dialogs.land import add_land_conv, show_lands, land_card, delete_land, delete_land_prompt, to_lands_list
-from dialogs.contract import add_contract_conv, show_contracts, contract_card, to_contracts, send_contract_pdf
-from dialogs.contract import contract_docs, delete_contract_prompt, delete_contract
-from dialogs.contract import generate_contract_pdf_cb, edit_contract_conv
+from dialogs.contract import (
+    add_contract_conv,
+    show_contracts,
+    agreement_card,
+    to_contracts,
+    send_contract_pdf,
+    contract_docs,
+    delete_contract_prompt,
+    delete_contract,
+    generate_contract_pdf_cb,
+    edit_contract_conv,
+    change_status_conv,
+)
 from dialogs.edit_field import edit_field_conv
 from dialogs.edit_land import edit_land_conv
 from dialogs.edit_land_owner import edit_land_owner_conv
@@ -130,8 +140,9 @@ application.add_handler(CallbackQueryHandler(payer_card, pattern=r"^payer_card:"
 application.add_handler(CallbackQueryHandler(delete_payer_prompt, pattern=r"^delete_payer:\d+$"))
 application.add_handler(CallbackQueryHandler(delete_payer, pattern=r"^confirm_delete_payer:\d+$"))
 application.add_handler(CallbackQueryHandler(to_menu, pattern=r"^to_menu$"))
-application.add_handler(CallbackQueryHandler(contract_card, pattern=r"^contract_card:\d+$"))
+application.add_handler(CallbackQueryHandler(agreement_card, pattern=r"^(contract_card|agreement_card):\d+$"))
 application.add_handler(edit_contract_conv)
+application.add_handler(change_status_conv)
 application.add_handler(CallbackQueryHandler(generate_contract_pdf_cb, pattern=r"^generate_contract_pdf:\d+$"))
 application.add_handler(CallbackQueryHandler(contract_docs, pattern=r"^contract_docs:\d+$"))
 application.add_handler(CallbackQueryHandler(delete_contract_prompt, pattern=r"^delete_contract:\d+$"))
