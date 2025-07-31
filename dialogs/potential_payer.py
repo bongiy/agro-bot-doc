@@ -69,6 +69,9 @@ async def show_potential_payers_menu(update: Update, context: ContextTypes.DEFAU
     ADD_MORE,
 ) = range(8)
 
+# States for filtering potential payers
+(FILTER_MENU, FILTER_VILLAGE, FILTER_STATUS, FILTER_DATE) = range(100, 104)
+
 
 def normalize_phone(text: str | None):
     if not text:
@@ -356,3 +359,101 @@ potential_callbacks = [
     CallbackQueryHandler(set_status, pattern=r"^pp_set:\d+:.+"),
     CallbackQueryHandler(convert_cb, pattern=r"^pp_conv:\d+$"),
 ]
+
+# === Фільтрація потенційних пайовиків ===
+
+async def filter_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("🏘 За селом", callback_data="filter_village")],
+            [InlineKeyboardButton("📘 За статусом", callback_data="filter_status")],
+            [InlineKeyboardButton("📅 За датою", callback_data="filter_date")],
+        ]
+    )
+    await update.message.reply_text("Оберіть тип фільтру:", reply_markup=keyboard)
+    return FILTER_MENU
+
+
+async def filter_village_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.message.edit_text("Введіть назву села:")
+    return FILTER_VILLAGE
+
+
+async def filter_status_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    keyboard = [[InlineKeyboardButton(s, callback_data=f"status:{s}")] for s in STATUS_CHOICES]
+    await query.message.edit_text("Оберіть статус:", reply_markup=InlineKeyboardMarkup(keyboard))
+    return FILTER_STATUS
+
+
+async def filter_date_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.message.edit_text("Введіть дату у форматі ДД.ММ.РРРР:")
+    return FILTER_DATE
+
+
+async def do_filter_list(target, rows):
+    msg = getattr(target, "message", target)
+    if not rows:
+        await msg.reply_text("Нічого не знайдено.")
+        return
+    for r in rows:
+        btn = InlineKeyboardButton("Картка", callback_data=f"pp_card:{r['id']}")
+        await msg.reply_text(
+            f"{r['id']}. {r['full_name']} ({r['village'] or '-'})",
+            reply_markup=InlineKeyboardMarkup([[btn]])
+        )
+
+
+async def filter_village_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    village = update.message.text.strip()
+    rows = await database.fetch_all(
+        sqlalchemy.select(PotentialPayer).where(PotentialPayer.c.village.ilike(f"%{village}%"))
+    )
+    await do_filter_list(update, rows)
+    return ConversationHandler.END
+
+
+async def filter_status_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    status = query.data.split(":", 1)[1]
+    rows = await database.fetch_all(
+        sqlalchemy.select(PotentialPayer).where(PotentialPayer.c.status == status)
+    )
+    await do_filter_list(query, rows)
+    return ConversationHandler.END
+
+
+async def filter_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    try:
+        date = datetime.strptime(text, "%d.%m.%Y").date()
+    except ValueError:
+        await update.message.reply_text("Некоректна дата. Спробуйте ще:")
+        return FILTER_DATE
+    rows = await database.fetch_all(
+        sqlalchemy.select(PotentialPayer).where(PotentialPayer.c.last_contact_date == date)
+    )
+    await do_filter_list(update, rows)
+    return ConversationHandler.END
+
+
+filter_potential_conv = ConversationHandler(
+    entry_points=[MessageHandler(filters.Regex("^🔍 Фільтр$"), filter_start)],
+    states={
+        FILTER_MENU: [
+            CallbackQueryHandler(filter_village_cb, pattern="^filter_village$"),
+            CallbackQueryHandler(filter_status_cb, pattern="^filter_status$"),
+            CallbackQueryHandler(filter_date_cb, pattern="^filter_date$"),
+        ],
+        FILTER_VILLAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, filter_village_input)],
+        FILTER_STATUS: [CallbackQueryHandler(filter_status_select, pattern=r"^status:.+")],
+        FILTER_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, filter_date_input)],
+    },
+    fallbacks=[],
+)

@@ -63,7 +63,12 @@ from db import database, ensure_admin
 
 from dialogs.admin_tov import admin_tov_add_conv
 from dialogs.edit_company import edit_company_conv
-from dialogs.potential_payer import add_potential_conv, list_potential, potential_callbacks
+from dialogs.potential_payer import (
+    add_potential_conv,
+    list_potential,
+    potential_callbacks,
+    filter_potential_conv,
+)
 from dialogs.agreement_template import (
     add_template_conv, replace_template_conv,
     template_card_cb, template_toggle_cb, template_delete_cb,
@@ -132,6 +137,7 @@ application.add_handler(MessageHandler(filters.Regex("^💳 Звіти по ви
 # --- Потенційні пайовики ---
 application.add_handler(add_potential_conv)
 application.add_handler(MessageHandler(filters.Regex("^📋 Список$"), list_potential))
+application.add_handler(filter_potential_conv)
 
 # --- ДІЛЯНКИ/ПОЛЯ ---
 application.add_handler(add_field_conv)
