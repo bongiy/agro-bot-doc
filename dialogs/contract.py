@@ -589,6 +589,10 @@ async def agreement_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📥 Завантажені документи: {docs_count} файла(ів)"
     )
 
+    from crm.events_integration import get_events_text, events_button
+    events_block = await get_events_text("contract", contract_id)
+    text += "\n\n" + events_block
+
     # === Платежі ===
     payments = await database.fetch_all(
         sqlalchemy.select(Payment).where(Payment.c.agreement_id == contract_id).order_by(Payment.c.payment_date)
@@ -638,6 +642,7 @@ async def agreement_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📝 Редагувати", callback_data=f"edit_contract:{contract_id}")],
         [InlineKeyboardButton("📌 Змінити статус", callback_data=f"change_status:{contract_id}")],
         [InlineKeyboardButton("📁 Документи", callback_data=f"contract_docs:{contract_id}")],
+        [events_button("contract", contract_id)],
     ]
     from db import get_user_by_tg_id
     user = await get_user_by_tg_id(update.effective_user.id)

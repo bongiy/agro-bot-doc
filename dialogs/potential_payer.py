@@ -318,10 +318,16 @@ async def card_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📅 Останній контакт: {payer['last_contact_date'] or '-'}\n"
         f"📘 Статус: {payer['status']}"
     )
+
+    from crm.events_integration import get_events_text, events_button
+    events_block = await get_events_text("potential_payer", pp_id)
+    text += "\n\n" + events_block
+
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("✏️ Змінити статус", callback_data=f"pp_chst:{pp_id}")],
         [InlineKeyboardButton("🔄 Перевести в активні", callback_data=f"pp_conv:{pp_id}")],
         [InlineKeyboardButton("🗑 Видалити", callback_data=f"pp_del:{pp_id}")],
+        [events_button("potential_payer", pp_id)],
         [InlineKeyboardButton("⬅️ Назад", callback_data="pp_list")],
     ])
     await query.message.edit_text(text, reply_markup=keyboard)
@@ -509,10 +515,16 @@ async def send_pp_card(msg, pp_id: int):
         f"📅 Останній контакт: {payer['last_contact_date'] or '-'}\n"
         f"📘 Статус: {payer['status']}"
     )
+
+    from crm.events_integration import get_events_text, events_button
+    events_block = await get_events_text("potential_payer", pp_id)
+    text += "\n\n" + events_block
+
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("✏️ Змінити статус", callback_data=f"pp_chst:{pp_id}")],
         [InlineKeyboardButton("🔄 Перевести в активні", callback_data=f"pp_conv:{pp_id}")],
         [InlineKeyboardButton("🗑 Видалити", callback_data=f"pp_del:{pp_id}")],
+        [events_button("potential_payer", pp_id)],
         [InlineKeyboardButton("⬅️ Назад", callback_data="pp_list")],
     ])
     await msg.reply_text(text, reply_markup=keyboard)
