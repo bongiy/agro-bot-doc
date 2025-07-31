@@ -4,7 +4,9 @@ from telegram.ext import ConversationHandler, ContextTypes
 BACK_BTN = "⬅️ Назад"
 CANCEL_BTN = "❌ Скасувати"
 
-back_cancel_keyboard = ReplyKeyboardMarkup([[BACK_BTN, CANCEL_BTN]], resize_keyboard=True)
+back_cancel_keyboard = ReplyKeyboardMarkup(
+    [[BACK_BTN, CANCEL_BTN]], resize_keyboard=True
+)
 
 
 def push_state(context: ContextTypes.DEFAULT_TYPE, state: int) -> None:
@@ -21,7 +23,21 @@ def pop_state(context: ContextTypes.DEFAULT_TYPE):
     return history[-1] if history else None
 
 
-async def handle_back_cancel(update, context: ContextTypes.DEFAULT_TYPE):
+def cancel_handler(menu_function):
+    """Factory for creating cancel handlers that return to a menu."""
+
+    async def _cancel(update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text(
+            "❌ Додавання скасовано. Дані не збережено.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        context.user_data.clear()
+        return await menu_function(update, context)
+
+    return _cancel
+
+
+async def handle_back_cancel(update, context: ContextTypes.DEFAULT_TYPE, menu_function=None):
     """Handle navigation buttons for FSM dialogs."""
     text = update.message.text if update.message else None
     if text == CANCEL_BTN:
@@ -30,6 +46,8 @@ async def handle_back_cancel(update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=ReplyKeyboardRemove(),
         )
         context.user_data.clear()
+        if menu_function:
+            return await menu_function(update, context)
         return ConversationHandler.END
     if text == BACK_BTN:
         prev_state = pop_state(context)
@@ -39,6 +57,8 @@ async def handle_back_cancel(update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=ReplyKeyboardRemove(),
             )
             context.user_data.clear()
+            if menu_function:
+                return await menu_function(update, context)
             return ConversationHandler.END
         return prev_state
     return None
