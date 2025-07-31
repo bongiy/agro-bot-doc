@@ -33,6 +33,13 @@ from utils.fsm_navigation import (
     handle_back_cancel,
     cancel_handler,
 )
+from crm.event_fsm_navigation import (
+    back_cancel_keyboard as view_back_cancel_keyboard,
+    push_state as view_push_state,
+    handle_back_cancel as view_handle_back_cancel,
+    cancel_handler as view_cancel_handler,
+    show_crm_menu,
+)
 
 (
     CAT,
@@ -351,6 +358,9 @@ add_event_conv = ConversationHandler(
 )
 
 async def list_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data.clear()
+    context.user_data["fsm_history"] = []
+    view_push_state(context, FILTER_MENU)
     kb = InlineKeyboardMarkup(
         [
             [InlineKeyboardButton("\U0001F4C5 За датою", callback_data="f:date")],
@@ -367,21 +377,40 @@ async def filter_menu_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await query.answer()
     ftype = query.data.split(":")[1]
     if ftype == "date":
-        await query.message.edit_text("Введіть дату (ДД.ММ.РРРР):")
+        view_push_state(context, FILTER_DATE)
+        await query.message.edit_text(
+            "Введіть дату (ДД.ММ.РРРР):",
+            reply_markup=view_back_cancel_keyboard,
+        )
         return FILTER_DATE
     if ftype == "payer":
-        await query.message.edit_text("Введіть ID пайовика:")
+        view_push_state(context, FILTER_PAYER)
+        await query.message.edit_text(
+            "Введіть ID пайовика:", reply_markup=view_back_cancel_keyboard
+        )
         context.user_data["filter_state"] = FILTER_PAYER
         return FILTER_PAYER
     if ftype == "contract":
-        await query.message.edit_text("Введіть ID договору:")
+        view_push_state(context, FILTER_CONTRACT)
+        await query.message.edit_text(
+            "Введіть ID договору:", reply_markup=view_back_cancel_keyboard
+        )
         context.user_data["filter_state"] = FILTER_CONTRACT
         return FILTER_CONTRACT
     if ftype == "land":
-        await query.message.edit_text("Введіть ID ділянки:")
+        view_push_state(context, FILTER_LAND)
+        await query.message.edit_text(
+            "Введіть ID ділянки:", reply_markup=view_back_cancel_keyboard
+        )
         context.user_data["filter_state"] = FILTER_LAND
         return FILTER_LAND
     return FILTER_MENU
+
+
+async def filter_menu_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle back/cancel in filter menu."""
+    result = await view_handle_back_cancel(update, context, show_crm_menu)
+    return result
 
 async def _show_rows(msg, rows):
     if not rows:
@@ -392,8 +421,10 @@ async def _show_rows(msg, rows):
         await msg.reply_text(text)
 
 async def filter_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    result = await handle_back_cancel(update, context, show_menu)
+    result = await view_handle_back_cancel(update, context, show_crm_menu)
     if result is not None:
+        if result == FILTER_MENU:
+            return await list_start(update, context)
         return result
     try:
         d = datetime.strptime(update.message.text.strip(), "%d.%m.%Y").date()
@@ -409,8 +440,10 @@ async def filter_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return ConversationHandler.END
 
 async def filter_id_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    result = await handle_back_cancel(update, context, show_menu)
+    result = await view_handle_back_cancel(update, context, show_crm_menu)
     if result is not None:
+        if result == FILTER_MENU:
+            return await list_start(update, context)
         return result
     text = update.message.text.strip()
     if not text.isdigit():
@@ -453,11 +486,14 @@ async def format_event(row) -> str:
 list_events_conv = ConversationHandler(
     entry_points=[MessageHandler(filters.Regex("^📋 Переглянути події$"), list_start)],
     states={
-        FILTER_MENU: [CallbackQueryHandler(filter_menu_cb, pattern=r"^f:(date|payer|contract|land)$")],
+        FILTER_MENU: [
+            CallbackQueryHandler(filter_menu_cb, pattern=r"^f:(date|payer|contract|land)$"),
+            MessageHandler(filters.TEXT & ~filters.COMMAND, filter_menu_text),
+        ],
         FILTER_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, filter_date_input)],
         FILTER_PAYER: [MessageHandler(filters.TEXT & ~filters.COMMAND, filter_id_input)],
         FILTER_CONTRACT: [MessageHandler(filters.TEXT & ~filters.COMMAND, filter_id_input)],
         FILTER_LAND: [MessageHandler(filters.TEXT & ~filters.COMMAND, filter_id_input)],
     },
-    fallbacks=[MessageHandler(filters.Regex(f"^{CANCEL_BTN}$"), cancel_handler(show_menu))],
+    fallbacks=[MessageHandler(filters.Regex(f"^{CANCEL_BTN}$"), view_cancel_handler(show_crm_menu))],
 )
