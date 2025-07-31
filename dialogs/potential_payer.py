@@ -297,6 +297,7 @@ async def card_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("✏️ Змінити статус", callback_data=f"pp_chst:{pp_id}")],
         [InlineKeyboardButton("🔄 Перевести в активні", callback_data=f"pp_conv:{pp_id}")],
+        [InlineKeyboardButton("🗑 Видалити", callback_data=f"pp_del:{pp_id}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="pp_list")],
     ])
     await query.message.edit_text(text, reply_markup=keyboard)
@@ -352,12 +353,61 @@ async def convert_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.message.edit_text("✅ Переведено в активні")
 
 
+async def delete_pp_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    pp_id = int(query.data.split(":")[1])
+    from db import get_user_by_tg_id
+    user = await get_user_by_tg_id(update.effective_user.id)
+    if not user or user["role"] != "admin":
+        await query.answer("⛔ У вас немає прав на видалення.", show_alert=True)
+        return
+    payer = await database.fetch_one(
+        sqlalchemy.select(PotentialPayer).where(PotentialPayer.c.id == pp_id)
+    )
+    if not payer:
+        await query.answer("Не знайдено", show_alert=True)
+        return
+    text = (
+        f"Ви точно хочете видалити <b>{payer['full_name']}</b>?\n"
+        "Цю дію не можна скасувати."
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Так, видалити", callback_data=f"pp_delc:{pp_id}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"pp_card:{pp_id}")],
+    ])
+    await query.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
+
+async def delete_pp(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    pp_id = int(query.data.split(":")[1])
+    from db import get_user_by_tg_id, log_delete
+    user = await get_user_by_tg_id(update.effective_user.id)
+    if not user or user["role"] != "admin":
+        await query.answer("⛔ У вас немає прав на видалення.", show_alert=True)
+        return
+    payer = await database.fetch_one(
+        sqlalchemy.select(PotentialPayer).where(PotentialPayer.c.id == pp_id)
+    )
+    if not payer:
+        await query.answer("Не знайдено", show_alert=True)
+        return
+    await database.execute(
+        PotentialLandPlot.delete().where(PotentialLandPlot.c.potential_payer_id == pp_id)
+    )
+    await database.execute(PotentialPayer.delete().where(PotentialPayer.c.id == pp_id))
+    await log_delete(update.effective_user.id, user["role"], "potential_payer", pp_id, payer["full_name"], "")
+    await query.message.edit_text("✅ Запис успішно видалено")
+
+
 potential_callbacks = [
     CallbackQueryHandler(card_cb, pattern=r"^pp_card:\d+$"),
     CallbackQueryHandler(list_cb, pattern=r"^pp_list$"),
     CallbackQueryHandler(status_menu, pattern=r"^pp_chst:\d+$"),
     CallbackQueryHandler(set_status, pattern=r"^pp_set:\d+:.+"),
     CallbackQueryHandler(convert_cb, pattern=r"^pp_conv:\d+$"),
+    CallbackQueryHandler(delete_pp_prompt, pattern=r"^pp_del:\d+$"),
+    CallbackQueryHandler(delete_pp, pattern=r"^pp_delc:\d+$"),
 ]
 
 # === Фільтрація потенційних пайовиків ===
