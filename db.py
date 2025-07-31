@@ -212,6 +212,34 @@ Payment = sqlalchemy.Table(
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
 )
 
+# === Таблиця потенційних пайовиків ===
+PotentialPayer = sqlalchemy.Table(
+    "potential_payer",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("full_name", sqlalchemy.String, nullable=False),
+    sqlalchemy.Column("phone", sqlalchemy.String),
+    sqlalchemy.Column("village", sqlalchemy.String),
+    sqlalchemy.Column("area_estimate", sqlalchemy.Float),
+    sqlalchemy.Column("note", sqlalchemy.String),
+    sqlalchemy.Column("status", sqlalchemy.String, default="new"),
+    sqlalchemy.Column("last_contact_date", sqlalchemy.Date),
+)
+
+# === Таблиця ділянок потенційних пайовиків ===
+PotentialLandPlot = sqlalchemy.Table(
+    "potential_land_plot",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column(
+        "potential_payer_id",
+        sqlalchemy.Integer,
+        sqlalchemy.ForeignKey("potential_payer.id"),
+    ),
+    sqlalchemy.Column("cadastre", sqlalchemy.String(25)),
+    sqlalchemy.Column("area", sqlalchemy.Float),
+)
+
 async def add_user(
     tg_id: int,
     username: str | None = None,

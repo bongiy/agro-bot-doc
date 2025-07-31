@@ -63,6 +63,7 @@ from db import database, ensure_admin
 
 from dialogs.admin_tov import admin_tov_add_conv
 from dialogs.edit_company import edit_company_conv
+from dialogs.potential_payer import add_potential_conv, list_potential, potential_callbacks
 from dialogs.agreement_template import (
     add_template_conv, replace_template_conv,
     template_card_cb, template_toggle_cb, template_delete_cb,
@@ -128,6 +129,10 @@ application.add_handler(global_add_payment_conv)
 application.add_handler(MessageHandler(filters.Regex("^📋 Перелік виплат$"), show_payments))
 application.add_handler(MessageHandler(filters.Regex("^💳 Звіти по виплатах$"), payment_reports_start))
 
+# --- Потенційні пайовики ---
+application.add_handler(add_potential_conv)
+application.add_handler(MessageHandler(filters.Regex("^📋 Список$"), list_potential))
+
 # --- ДІЛЯНКИ/ПОЛЯ ---
 application.add_handler(add_field_conv)
 application.add_handler(MessageHandler(filters.Regex("^📋 Список полів$"), show_fields))
@@ -182,6 +187,8 @@ application.add_handler(CallbackQueryHandler(agreement_delete_prompt, pattern=r"
 application.add_handler(CallbackQueryHandler(agreement_delete_confirm, pattern=r"^agreement_delete_confirm$"))
 application.add_handler(CallbackQueryHandler(to_contracts, pattern=r"^to_contracts$"))
 application.add_handler(CallbackQueryHandler(send_contract_pdf, pattern=r"^view_pdf:contract:\d+:.+"))
+for cb in potential_callbacks:
+    application.add_handler(cb)
 
 # fallback: обробляємо всі невідомі команди поверненням у головне меню
 application.add_handler(MessageHandler(filters.COMMAND, to_main_menu))
