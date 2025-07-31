@@ -376,30 +376,35 @@ async def filter_menu_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     query = update.callback_query
     await query.answer()
     ftype = query.data.split(":")[1]
+    # remove inline keyboard from the menu message
+    try:
+        await query.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
     if ftype == "date":
         view_push_state(context, FILTER_DATE)
-        await query.message.edit_text(
+        await query.message.reply_text(
             "Введіть дату (ДД.ММ.РРРР):",
             reply_markup=view_back_cancel_keyboard,
         )
         return FILTER_DATE
     if ftype == "payer":
         view_push_state(context, FILTER_PAYER)
-        await query.message.edit_text(
+        await query.message.reply_text(
             "Введіть ID пайовика:", reply_markup=view_back_cancel_keyboard
         )
         context.user_data["filter_state"] = FILTER_PAYER
         return FILTER_PAYER
     if ftype == "contract":
         view_push_state(context, FILTER_CONTRACT)
-        await query.message.edit_text(
+        await query.message.reply_text(
             "Введіть ID договору:", reply_markup=view_back_cancel_keyboard
         )
         context.user_data["filter_state"] = FILTER_CONTRACT
         return FILTER_CONTRACT
     if ftype == "land":
         view_push_state(context, FILTER_LAND)
-        await query.message.edit_text(
+        await query.message.reply_text(
             "Введіть ID ділянки:", reply_markup=view_back_cancel_keyboard
         )
         context.user_data["filter_state"] = FILTER_LAND
