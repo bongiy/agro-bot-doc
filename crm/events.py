@@ -98,7 +98,7 @@ async def category_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
             sqlalchemy.select(Payer).order_by(Payer.c.id.desc()).limit(5)
         )
         keyboard = [[InlineKeyboardButton(f"{r['id']}: {r['name']}", callback_data=f"person:{r['id']}")] for r in rows]
-    keyboard.append([InlineKeyboardButton("🔢 Ввести ID", callback_data="manual")])
+    keyboard.append([InlineKeyboardButton("🔎 Пошук", callback_data="manual")])
     keyboard.append([InlineKeyboardButton(BACK_BTN, callback_data="back")])
     await query.message.edit_text("Оберіть особу:", reply_markup=InlineKeyboardMarkup(keyboard))
     return PERSON_CHOOSE
@@ -111,7 +111,9 @@ async def person_choose_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return await add_start(query, context)
     if data == "manual":
         push_state(context, PERSON_ID)
-        await query.message.reply_text("Введіть ID:", reply_markup=back_cancel_keyboard)
+        await query.message.reply_text(
+            "Введіть ID або частину ПІБ:", reply_markup=back_cancel_keyboard
+        )
         return PERSON_ID
     pid = int(data.split(":")[1])
     context.user_data["person_id"] = pid
@@ -123,18 +125,42 @@ async def person_id_input(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if result is not None:
         return result
     text = update.message.text.strip()
-    if not text.isdigit():
-        await update.message.reply_text("Введіть числовий ID:")
-        return PERSON_ID
-    pid = int(text)
     table = PotentialPayer if context.user_data.get("category") == "pot" else Payer
-    row = await database.fetch_one(sqlalchemy.select(table).where(table.c.id == pid))
-    if not row:
-        await update.message.reply_text("Не знайдено. Введіть інший ID:")
+    from crm.potential_payer_flexible_search import search_potential_payers
+
+    rows = await search_potential_payers(text) if context.user_data.get("category") == "pot" else None
+    if rows is None:
+        # current payers search by ID only
+        if not text.isdigit():
+            await update.message.reply_text("Введіть числовий ID:")
+            return PERSON_ID
+        pid = int(text)
+        row = await database.fetch_one(sqlalchemy.select(table).where(table.c.id == pid))
+        rows = [row] if row else []
+    if not rows:
+        await update.message.reply_text("Не знайдено. Спробуйте ще:")
         return PERSON_ID
-    context.user_data["person_id"] = pid
-    context.user_data["entity_type"] = "potential_payer" if context.user_data["category"] == "pot" else "payer"
-    return await after_person_chosen(update.message, context)
+    if len(rows) == 1:
+        pid = rows[0]["id"]
+        context.user_data["person_id"] = pid
+        context.user_data["entity_type"] = (
+            "potential_payer" if context.user_data.get("category") == "pot" else "payer"
+        )
+        return await after_person_chosen(update.message, context)
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                f"\U0001F464 {r['full_name']} (ID: {r['id']})",
+                callback_data=f"person:{r['id']}",
+            )
+        ]
+        for r in rows[:10]
+    ]
+    keyboard.append([InlineKeyboardButton(BACK_BTN, callback_data="back")])
+    await update.message.reply_text(
+        "Оберіть пайовика:", reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return PERSON_CHOOSE
 
 async def after_person_chosen(msg, context: ContextTypes.DEFAULT_TYPE) -> int:
     if context.user_data.get("category") == "cur":
