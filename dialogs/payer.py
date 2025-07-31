@@ -398,6 +398,10 @@ async def payer_card(update, context):
         f"🏠 Адреса: {payer.oblast} обл., {payer.rayon} р-н, с. {payer.selo}, вул. {payer.vul}, буд. {payer.bud}, кв. {payer.kv}"
     )
 
+    from crm.events_integration import get_events_text, events_button
+    events_block = await get_events_text("payer", payer.id)
+    text += "\n\n" + events_block
+
     keyboard = []
 
     # Визначаємо тип документу (entity_type) для пайовика: паспорт чи ID
@@ -427,6 +431,7 @@ async def payer_card(update, context):
         [InlineKeyboardButton("Редагувати", callback_data=f"edit_payer:{payer.id}")],
         [InlineKeyboardButton("Видалити", callback_data=f"delete_payer:{payer.id}")],
         [InlineKeyboardButton("Створити договір оренди", callback_data=f"create_contract:{payer.id}")],
+        [events_button("payer", payer.id)],
         [InlineKeyboardButton("До меню", callback_data="to_menu")]
     ])
 

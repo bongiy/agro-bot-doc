@@ -336,6 +336,10 @@ async def land_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Власники: {owners_txt}"
     )
 
+    from crm.events_integration import get_events_text, events_button
+    events_block = await get_events_text("land", land_id)
+    text += "\n\n" + events_block
+
     buttons = []
     # --- Додати документи ---
     buttons.append([
@@ -363,6 +367,7 @@ async def land_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     buttons.extend([
         [InlineKeyboardButton("✏️ Редагувати", callback_data=f"edit_land:{land['id']}")],
         [InlineKeyboardButton("🗑 Видалити", callback_data=f"delete_land:{land['id']}")],
+        [events_button("land", land_id)],
         [InlineKeyboardButton("⬅️ До списку", callback_data="to_lands_list")]
     ])
 

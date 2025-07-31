@@ -77,6 +77,7 @@ from dialogs.agreement_template import (
 )
 
 from crm.events import add_event_conv, list_events_conv
+from crm.events_integration import add_event_from_card_conv
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
@@ -145,6 +146,7 @@ application.add_handler(add_field_conv)
 application.add_handler(MessageHandler(filters.Regex("^📋 Список полів$"), show_fields))
 # --- Планування та події ---
 application.add_handler(add_event_conv)
+application.add_handler(add_event_from_card_conv)
 application.add_handler(list_events_conv)
 
 application.add_handler(add_land_conv)
