@@ -16,13 +16,15 @@ from telegram.ext import (
 )
 
 from db import database, CRMEvent
-from utils.fsm_navigation import (
+from crm.event_fsm_navigation import (
     back_cancel_keyboard,
     CANCEL_BTN,
+    push_state,
     handle_back_cancel,
     cancel_handler,
+    show_crm_menu,
 )
-from crm.events import format_event, show_menu
+from crm.events import format_event
 
 
 DATE_INPUT, SHOW_PAGE = range(2)
@@ -31,6 +33,9 @@ PAGE_SIZE = 5
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Ask user for date to view events."""
+    context.user_data.clear()
+    context.user_data["fsm_history"] = []
+    push_state(context, DATE_INPUT)
     await update.message.reply_text(
         "Введіть дату (ДД.ММ.РРРР):", reply_markup=back_cancel_keyboard
     )
@@ -39,7 +44,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def date_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle date input and show first page."""
-    result = await handle_back_cancel(update, context, show_menu)
+    result = await handle_back_cancel(update, context, show_crm_menu)
     if result is not None:
         return result
     try:
@@ -55,6 +60,7 @@ async def date_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     )
     context.user_data["ev_rows"] = [dict(r) for r in rows]
     context.user_data["ev_page"] = 0
+    push_state(context, SHOW_PAGE)
     return await _show_page(update.message, context)
 
 
@@ -72,6 +78,21 @@ async def page_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     elif action == "next" and page < total_pages - 1:
         context.user_data["ev_page"] = page + 1
     return await _show_page(query.message, context)
+
+
+async def page_text_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle back/cancel text while viewing pages."""
+    result = await handle_back_cancel(update, context, show_crm_menu)
+    if result is None:
+        return SHOW_PAGE
+    if result == DATE_INPUT:
+        await update.message.reply_text(
+            "Введіть дату (ДД.ММ.РРРР):",
+            reply_markup=back_cancel_keyboard,
+        )
+        push_state(context, DATE_INPUT)
+        return DATE_INPUT
+    return result
 
 
 async def _show_page(msg, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -115,8 +136,9 @@ view_events_conv = ConversationHandler(
         DATE_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, date_input)],
         SHOW_PAGE: [
             CallbackQueryHandler(page_cb, pattern="^(prev|next)$"),
-            CallbackQueryHandler(lambda u, c: u.callback_query.answer(), pattern="^noop$")
+            CallbackQueryHandler(lambda u, c: u.callback_query.answer(), pattern="^noop$"),
+            MessageHandler(filters.TEXT & ~filters.COMMAND, page_text_cb),
         ],
     },
-    fallbacks=[MessageHandler(filters.Regex(f"^{CANCEL_BTN}$"), cancel_handler(show_menu))],
+    fallbacks=[MessageHandler(filters.Regex(f"^{CANCEL_BTN}$"), cancel_handler(show_crm_menu))],
 )
