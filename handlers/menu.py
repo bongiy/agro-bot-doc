@@ -11,7 +11,7 @@ from keyboards.menu import (
     main_menu, main_menu_admin,
     payers_menu, lands_menu, fields_menu, contracts_menu,
     payments_menu, reports_menu, search_menu, admin_panel_menu, admin_tov_menu,
-    admin_templates_menu, crm_menu
+    admin_templates_menu, crm_menu, crm_events_menu
 )
 from db import (
     get_companies,
@@ -111,11 +111,9 @@ async def crm_current_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text(
         "Розділ «Поточні пайовики» в розробці."
     )
-
 async def crm_planning_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Розділ «Планування і нагадування» в розробці."
-    )
+    from keyboards.menu import crm_events_menu
+    await update.message.reply_text("Меню «Планування і нагадування»", reply_markup=crm_events_menu)
 
 async def crm_inbox_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(

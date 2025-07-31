@@ -118,6 +118,12 @@ crm_potential_menu = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True
 )
+crm_events_menu = ReplyKeyboardMarkup([
+    ["➕ Додати подію"],
+    ["📋 Переглянути події"],
+    ["◀️ Назад"],
+], resize_keyboard=True)
+
 # --- Адмінпанель ---
 admin_panel_menu = ReplyKeyboardMarkup(
     [

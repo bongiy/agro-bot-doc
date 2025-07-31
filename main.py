@@ -76,6 +76,7 @@ from dialogs.agreement_template import (
     template_vars_cb, template_vars_categories_cb
 )
 
+from crm.events import add_event_conv, list_events_conv
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
@@ -142,6 +143,10 @@ application.add_handler(filter_potential_conv)
 # --- ДІЛЯНКИ/ПОЛЯ ---
 application.add_handler(add_field_conv)
 application.add_handler(MessageHandler(filters.Regex("^📋 Список полів$"), show_fields))
+# --- Планування та події ---
+application.add_handler(add_event_conv)
+application.add_handler(list_events_conv)
+
 application.add_handler(add_land_conv)
 application.add_handler(MessageHandler(filters.Regex("^📋 Список ділянок$"), show_lands))
 application.add_handler(add_contract_conv)
