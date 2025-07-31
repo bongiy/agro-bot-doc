@@ -638,8 +638,14 @@ async def agreement_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📝 Редагувати", callback_data=f"edit_contract:{contract_id}")],
         [InlineKeyboardButton("📌 Змінити статус", callback_data=f"change_status:{contract_id}")],
         [InlineKeyboardButton("📁 Документи", callback_data=f"contract_docs:{contract_id}")],
-        [InlineKeyboardButton("⬅️ До списку", callback_data="to_contracts")],
     ]
+    from db import get_user_by_tg_id
+    user = await get_user_by_tg_id(update.effective_user.id)
+    if user and user["role"] == "admin":
+        buttons.append([InlineKeyboardButton("🗑 Видалити договір", callback_data=f"agreement_delete:{contract_id}")])
+    buttons.append(
+        [InlineKeyboardButton("⬅️ До списку", callback_data="to_contracts")]
+    )
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons), parse_mode="HTML")
 
 # old name for compatibility
@@ -731,6 +737,76 @@ async def delete_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
     linked = f"docs:{len(docs)}" if docs else ""
     await log_delete(update.effective_user.id, user["role"], "contract", contract_id, contract["number"], linked)
     await query.message.edit_text("✅ Обʼєкт успішно видалено")
+
+
+async def agreement_delete_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    contract_id = int(query.data.split(":")[1])
+    from db import get_user_by_tg_id
+    user = await get_user_by_tg_id(update.effective_user.id)
+    if not user or user["role"] != "admin":
+        await query.answer("⛔ У вас немає прав на видалення.", show_alert=True)
+        return
+    contract = await database.fetch_one(sqlalchemy.select(Contract).where(Contract.c.id == contract_id))
+    if not contract:
+        await query.answer("Договір не знайдено!", show_alert=True)
+        return
+    context.user_data["delete_agreement_id"] = contract_id
+    text = (
+        f"⚠️ Ви дійсно хочете видалити договір №{contract['number']}?\n\n"
+        "Це призведе до:\n"
+        "• Видалення запису про договір\n"
+        "• Видалення всіх пов'язаних виплат\n"
+        "• Видалення файлів договору з FTP (PDF, скани)\n\n"
+        "❗ Цю дію неможливо скасувати."
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Так, видалити", callback_data="agreement_delete_confirm")],
+        [InlineKeyboardButton("⬅️ Скасувати", callback_data=f"agreement_card:{contract_id}")],
+    ])
+    await query.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
+
+async def agreement_delete_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    contract_id = context.user_data.get("delete_agreement_id")
+    from db import get_user_by_tg_id, log_delete
+    if not contract_id:
+        await query.answer("Невірний запит на видалення.", show_alert=True)
+        return
+    user = await get_user_by_tg_id(update.effective_user.id)
+    if not user or user["role"] != "admin":
+        await query.answer("⛔ У вас немає прав на видалення.", show_alert=True)
+        return
+    contract = await database.fetch_one(sqlalchemy.select(Contract).where(Contract.c.id == contract_id))
+    if not contract:
+        await query.answer("Договір не знайдено!", show_alert=True)
+        return
+    payments = await database.fetch_all(sqlalchemy.select(Payment).where(Payment.c.agreement_id == contract_id))
+    if payments:
+        await database.execute(Payment.delete().where(Payment.c.agreement_id == contract_id))
+    docs = await database.fetch_all(
+        sqlalchemy.select(UploadedDocs).where(
+            (UploadedDocs.c.entity_type == "contract") & (UploadedDocs.c.entity_id == contract_id)
+        )
+    )
+    for d in docs:
+        try:
+            delete_file_ftp(d["remote_path"])
+        except Exception:
+            pass
+    if docs:
+        await database.execute(UploadedDocs.delete().where(UploadedDocs.c.id.in_([d["id"] for d in docs])))
+    await database.execute(ContractLandPlot.delete().where(ContractLandPlot.c.contract_id == contract_id))
+    await database.execute(Contract.delete().where(Contract.c.id == contract_id))
+    info = []
+    if payments:
+        info.append(f"payments:{len(payments)}")
+    if docs:
+        info.append(f"docs:{len(docs)}")
+    await log_delete(update.effective_user.id, user["role"], "contract", contract_id, contract["number"], ",".join(info))
+    context.user_data.pop("delete_agreement_id", None)
+    await query.message.edit_text(f"✅ Договір №{contract['number']} успішно видалено.")
 
 
 # ==== ГЕНЕРАЦІЯ PDF ДОГОВОРУ ====
