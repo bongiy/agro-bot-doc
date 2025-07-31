@@ -6,7 +6,6 @@ from telegram import (
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    ReplyKeyboardRemove,
 )
 from telegram.ext import (
     ContextTypes,
@@ -23,6 +22,14 @@ from db import (
     PotentialLandPlot,
     Payer,
     LandPlot,
+)
+
+from utils.fsm_navigation import (
+    BACK_BTN,
+    CANCEL_BTN,
+    back_cancel_keyboard,
+    push_state,
+    handle_back_cancel,
 )
 
 # --- Statuses ---
@@ -67,63 +74,106 @@ def normalize_phone(text: str | None):
 async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     context.user_data["plots"] = []
+    context.user_data["fsm_history"] = []
+    push_state(context, FIO)
     await update.message.reply_text(
         "Введіть ПІБ потенційного пайовика:",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=back_cancel_keyboard,
     )
     return FIO
 
 
 async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    result = await handle_back_cancel(update, context)
+    if result is not None:
+        return result
     context.user_data["full_name"] = update.message.text.strip()
-    await update.message.reply_text("Введіть телефон (або пропустіть '-'):")
+    push_state(context, PHONE)
+    await update.message.reply_text(
+        "Введіть телефон (або пропустіть '-'):",
+        reply_markup=back_cancel_keyboard,
+    )
     return PHONE
 
 
 async def get_village(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    result = await handle_back_cancel(update, context)
+    if result is not None:
+        return result
     phone = normalize_phone(update.message.text)
     context.user_data["phone"] = phone
-    await update.message.reply_text("Введіть назву села:")
+    push_state(context, VILLAGE)
+    await update.message.reply_text(
+        "Введіть назву села:", reply_markup=back_cancel_keyboard
+    )
     return VILLAGE
 
 
 async def get_area_est(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    result = await handle_back_cancel(update, context)
+    if result is not None:
+        return result
     context.user_data["village"] = update.message.text.strip()
-    await update.message.reply_text("Орієнтовна площа, га (можна пропустити '-'):")
+    push_state(context, AREA_EST)
+    await update.message.reply_text(
+        "Орієнтовна площа, га (можна пропустити '-'):",
+        reply_markup=back_cancel_keyboard,
+    )
     return AREA_EST
 
 
 async def get_note(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    result = await handle_back_cancel(update, context)
+    if result is not None:
+        return result
     text = update.message.text.strip()
     try:
         area = float(text.replace(",", "."))
     except ValueError:
         area = None
     context.user_data["area_estimate"] = area
-    await update.message.reply_text("Нотатка (можна пропустити '-'):")
+    push_state(context, NOTE)
+    await update.message.reply_text(
+        "Нотатка (можна пропустити '-'):", reply_markup=back_cancel_keyboard
+    )
     return NOTE
 
 
 async def ask_land(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    result = await handle_back_cancel(update, context)
+    if result is not None:
+        return result
     note = update.message.text.strip()
     if note == "-":
         note = None
     context.user_data["note"] = note
-    await update.message.reply_text("Введіть кадастровий номер ділянки:")
+    push_state(context, LAND_CAD)
+    await update.message.reply_text(
+        "Введіть кадастровий номер ділянки:", reply_markup=back_cancel_keyboard
+    )
     return LAND_CAD
 
 
 async def land_area(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    result = await handle_back_cancel(update, context)
+    if result is not None:
+        return result
     cad = re.sub(r"\s", "", update.message.text)
     digits = re.sub(r"\D", "", cad)
     if len(digits) == 19:
         cad = f"{digits[:10]}:{digits[10:12]}:{digits[12:15]}:{digits[15:]}"
     context.user_data["cad"] = cad
-    await update.message.reply_text("Площа ділянки, га:")
+    push_state(context, LAND_AREA)
+    await update.message.reply_text(
+        "Площа ділянки, га:", reply_markup=back_cancel_keyboard
+    )
     return LAND_AREA
 
 
 async def add_plot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    result = await handle_back_cancel(update, context)
+    if result is not None:
+        return result
     try:
         area = float(update.message.text.replace(",", "."))
     except ValueError:
@@ -136,6 +186,7 @@ async def add_plot(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("✅ Завершити", callback_data="finish")],
         ]
     )
+    push_state(context, ADD_MORE)
     await update.message.reply_text("Додати ще ділянку?", reply_markup=keyboard)
     return ADD_MORE
 
@@ -143,7 +194,10 @@ async def add_plot(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def add_more_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.message.reply_text("Введіть кадастровий номер ділянки:")
+    push_state(context, LAND_CAD)
+    await query.message.reply_text(
+        "Введіть кадастровий номер ділянки:", reply_markup=back_cancel_keyboard
+    )
     return LAND_CAD
 
 
@@ -185,7 +239,7 @@ add_potential_conv = ConversationHandler(
             CallbackQueryHandler(finish_cb, pattern="^finish$"),
         ],
     },
-    fallbacks=[MessageHandler(filters.Regex("^◀️ Назад$"), lambda u, c: ConversationHandler.END)],
+    fallbacks=[MessageHandler(filters.Regex(f"^{CANCEL_BTN}$"), handle_back_cancel)],
 )
 
 
