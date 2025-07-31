@@ -43,14 +43,14 @@ async def get_events_text(entity_type: str, entity_id: int) -> str:
             CRMEvent.c.entity_type == entity_type,
             CRMEvent.c.entity_id == entity_id,
         )
-        .order_by(CRMEvent.c.event_date.desc())
+        .order_by(CRMEvent.c.event_datetime.desc())
         .limit(5)
     )
     rows = await database.fetch_all(query)
     if not rows:
         return "\U0001F4C5 \u041F\u043E\u0434\u0456\u0439 \u043D\u0435 \u0437\u0430\u043F\u043B\u0430\u043D\u043E\u0432\u0430\u043D\u043E."
     lines = [
-        f"\u2022 {r['event_date'].strftime('%d.%m.%Y')} \u2014 {r['event_type']} \u2014 {STATUS_ICONS.get(r['status'], '')}"
+        f"\u2022 {r['event_datetime'].strftime('%d.%m.%Y %H:%M')} \u2014 {r['event_type']} \u2014 {STATUS_ICONS.get(r['status'], '')}"
         for r in rows
     ]
     return "\U0001F4C5 \u041F\u043E\u0434\u0456\u0457:\n" + "\n".join(lines)
@@ -75,7 +75,7 @@ async def add_event_from_card(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     push_state(context, DATE_INPUT)
     await query.message.reply_text(
-        "\u0412\u0432\u0435\u0434\u0456\u0442\u044C \u0434\u0430\u0442\u0443 \u043F\u043E\u0434\u0456\u0457 (\u0414\u0414.\u041C.\u0420\u0420\u0420\u0420):",
+        "\u0412\u0432\u0435\u0434\u0456\u0442\u044C \u0434\u0430\u0442\u0443 \u0442\u0430 \u0447\u0430\u0441 \u043F\u043E\u0434\u0456\u0457 (\u0414\u0414.\u041C.\u0420\u0420\u0420\u0420 \u0413\u0413:\u0425\u0425). \u042F\u043A\u0449\u043E \u0447\u0430\u0441 \u043D\u0435 \u0432\u043A\u0430\u0437\u0430\u043D\u043E, \u0431\u0443\u0434\u0435 09:00",
         reply_markup=back_cancel_keyboard,
     )
     return DATE_INPUT

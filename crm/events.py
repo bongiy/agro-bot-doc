@@ -1,6 +1,6 @@
 """CRM events module for planning and reminders."""
 
-from datetime import datetime
+from datetime import datetime, time
 
 from telegram import (
     Update,
@@ -149,7 +149,10 @@ async def after_person_chosen(msg, context: ContextTypes.DEFAULT_TYPE) -> int:
         return TARGET_CHOOSE
     else:
         push_state(context, DATE_INPUT)
-        await msg.reply_text("Введіть дату події (ДД.ММ.РРРР):", reply_markup=back_cancel_keyboard)
+        await msg.reply_text(
+            "Введіть дату та час події (ДД.ММ.РРРР ГГ:ХХ). Якщо час не вказано, буде 09:00",
+            reply_markup=back_cancel_keyboard,
+        )
         return DATE_INPUT
 
 async def target_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -163,7 +166,10 @@ async def target_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         context.user_data["entity_type"] = "payer"
         context.user_data["entity_id"] = context.user_data.get("person_id")
         push_state(context, DATE_INPUT)
-        await query.message.reply_text("Введіть дату події (ДД.ММ.РРРР):", reply_markup=back_cancel_keyboard)
+        await query.message.reply_text(
+            "Введіть дату та час події (ДД.ММ.РРРР ГГ:ХХ). Якщо час не вказано, буде 09:00",
+            reply_markup=back_cancel_keyboard,
+        )
         return DATE_INPUT
     if target == "contract":
         rows = await database.fetch_all(
@@ -174,7 +180,10 @@ async def target_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             context.user_data["entity_type"] = "payer"
             context.user_data["entity_id"] = context.user_data.get("person_id")
             push_state(context, DATE_INPUT)
-            await query.message.reply_text("Введіть дату події (ДД.ММ.РРРР):", reply_markup=back_cancel_keyboard)
+            await query.message.reply_text(
+                "Введіть дату та час події (ДД.ММ.РРРР ГГ:ХХ). Якщо час не вказано, буде 09:00",
+                reply_markup=back_cancel_keyboard,
+            )
             return DATE_INPUT
         push_state(context, CONTRACT_CHOOSE)
         kb = [[InlineKeyboardButton(f"{r['id']}: {r['number']}", callback_data=f"contract:{r['id']}")] for r in rows]
@@ -192,7 +201,10 @@ async def target_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             context.user_data["entity_type"] = "payer"
             context.user_data["entity_id"] = context.user_data.get("person_id")
             push_state(context, DATE_INPUT)
-            await query.message.reply_text("Введіть дату події (ДД.ММ.РРРР):", reply_markup=back_cancel_keyboard)
+            await query.message.reply_text(
+                "Введіть дату та час події (ДД.ММ.РРРР ГГ:ХХ). Якщо час не вказано, буде 09:00",
+                reply_markup=back_cancel_keyboard,
+            )
             return DATE_INPUT
         push_state(context, LAND_CHOOSE)
         kb = [[InlineKeyboardButton(f"{r['id']}: {r['cadaster']}", callback_data=f"land:{r['id']}")] for r in rows]
@@ -211,7 +223,10 @@ async def contract_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     context.user_data["entity_id"] = cid
     push_state(context, DATE_INPUT)
     await query.message.edit_text("Обрано договір.")
-    await query.message.reply_text("Введіть дату події (ДД.ММ.РРРР):", reply_markup=back_cancel_keyboard)
+    await query.message.reply_text(
+        "Введіть дату та час події (ДД.ММ.РРРР ГГ:ХХ). Якщо час не вказано, буде 09:00",
+        reply_markup=back_cancel_keyboard,
+    )
     return DATE_INPUT
 
 async def land_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -224,7 +239,10 @@ async def land_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["entity_id"] = lid
     push_state(context, DATE_INPUT)
     await query.message.edit_text("Обрано ділянку.")
-    await query.message.reply_text("Введіть дату події (ДД.ММ.РРРР):", reply_markup=back_cancel_keyboard)
+    await query.message.reply_text(
+        "Введіть дату та час події (ДД.ММ.РРРР ГГ:ХХ). Якщо час не вказано, буде 09:00",
+        reply_markup=back_cancel_keyboard,
+    )
     return DATE_INPUT
 
 async def set_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -233,11 +251,15 @@ async def set_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         return result
     text = update.message.text.strip()
     try:
-        event_date = datetime.strptime(text, "%d.%m.%Y").date()
+        event_dt = datetime.strptime(text, "%d.%m.%Y %H:%M")
     except ValueError:
-        await update.message.reply_text("Некоректна дата. Спробуйте ще:")
-        return DATE_INPUT
-    context.user_data["event_date"] = event_date
+        try:
+            d = datetime.strptime(text, "%d.%m.%Y").date()
+            event_dt = datetime.combine(d, time(hour=9, minute=0))
+        except ValueError:
+            await update.message.reply_text("Некоректна дата. Спробуйте ще:")
+            return DATE_INPUT
+    context.user_data["event_datetime"] = event_dt
     push_state(context, TYPE_CHOOSE)
     kb = InlineKeyboardMarkup(
         [[InlineKeyboardButton(t, callback_data=f"etype:{i}")] for i, t in enumerate(EVENT_TYPES)] +
@@ -250,7 +272,10 @@ async def type_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     if query.data == "back":
-        await query.message.reply_text("Введіть дату події (ДД.ММ.РРРР):", reply_markup=back_cancel_keyboard)
+        await query.message.reply_text(
+            "Введіть дату та час події (ДД.ММ.РРРР ГГ:ХХ). Якщо час не вказано, буде 09:00",
+            reply_markup=back_cancel_keyboard,
+        )
         return DATE_INPUT
     idx = int(query.data.split(":")[1])
     context.user_data["event_type"] = EVENT_TYPES[idx]
@@ -269,11 +294,13 @@ async def save_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         CRMEvent.insert().values(
             entity_type=context.user_data.get("entity_type"),
             entity_id=context.user_data.get("entity_id", context.user_data.get("person_id")),
-            event_date=context.user_data.get("event_date"),
+            event_datetime=context.user_data.get("event_datetime"),
             event_type=context.user_data.get("event_type"),
             comment=comment,
             status="planned",
             created_at=datetime.utcnow(),
+            created_by_user_id=update.effective_user.id,
+            reminder_status={"daily": False, "1h": False, "now": False},
         )
     )
     context.user_data.clear()
@@ -348,7 +375,9 @@ async def filter_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.message.reply_text("Некоректна дата. Спробуйте ще:")
         return FILTER_DATE
     rows = await database.fetch_all(
-        sqlalchemy.select(CRMEvent).where(CRMEvent.c.event_date == d).order_by(CRMEvent.c.event_date)
+        sqlalchemy.select(CRMEvent)
+        .where(sqlalchemy.func.date(CRMEvent.c.event_datetime) == d)
+        .order_by(CRMEvent.c.event_datetime)
     )
     await _show_rows(update.message, rows)
     return ConversationHandler.END
@@ -391,7 +420,7 @@ async def format_event(row) -> str:
     else:
         land = await database.fetch_one(sqlalchemy.select(LandPlot).where(LandPlot.c.id == row["entity_id"]))
         entity = f"\U0001F4CD {land['cadaster']}" if land else f"ID {row['entity_id']}"
-    d = row["event_date"].strftime("%d.%m.%Y")
+    d = row["event_datetime"].strftime("%d.%m.%Y %H:%M")
     txt = f"\U0001F4C5 {d} — {row['event_type']}\n{entity}\n\U0001F4DD {row['comment'] or '-'}"
     return txt
 

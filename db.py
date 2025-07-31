@@ -1,5 +1,6 @@
 import sqlalchemy
 from databases import Database
+from sqlalchemy.dialects.postgresql import JSONB
 import os
 from datetime import datetime
 
@@ -242,15 +243,18 @@ PotentialLandPlot = sqlalchemy.Table(
 
 # === Таблиця подій CRM ===
 CRMEvent = sqlalchemy.Table(
-    "crm_events", metadata,
+    "crm_events",
+    metadata,
     sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
     sqlalchemy.Column("entity_type", sqlalchemy.String),
     sqlalchemy.Column("entity_id", sqlalchemy.Integer),
-    sqlalchemy.Column("event_date", sqlalchemy.Date),
+    sqlalchemy.Column("event_datetime", sqlalchemy.DateTime),
     sqlalchemy.Column("event_type", sqlalchemy.String),
     sqlalchemy.Column("comment", sqlalchemy.String),
     sqlalchemy.Column("status", sqlalchemy.String, default="planned"),
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
+    sqlalchemy.Column("created_by_user_id", sqlalchemy.BigInteger),
+    sqlalchemy.Column("reminder_status", JSONB, default=dict),
 )
 
 async def add_user(
@@ -381,5 +385,14 @@ with engine.begin() as conn:
     ))
     conn.execute(sqlalchemy.text(
         'ALTER TABLE "contract" ADD COLUMN IF NOT EXISTS template_id INTEGER REFERENCES agreement_template(id)'
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "crm_events" ADD COLUMN IF NOT EXISTS event_datetime TIMESTAMP'
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "crm_events" ADD COLUMN IF NOT EXISTS created_by_user_id BIGINT'
+    ))
+    conn.execute(sqlalchemy.text(
+        "ALTER TABLE \"crm_events\" ADD COLUMN IF NOT EXISTS reminder_status JSONB DEFAULT '{}'::jsonb"
     ))
 

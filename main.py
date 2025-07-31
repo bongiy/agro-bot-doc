@@ -78,6 +78,7 @@ from dialogs.agreement_template import (
 
 from crm.events import add_event_conv, list_events_conv
 from crm.events_integration import add_event_from_card_conv
+from crm.event_reminders import start_reminder_tasks, stop_reminder_tasks
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
@@ -96,10 +97,12 @@ async def on_startup():
     if not is_initialized:
         await application.initialize()
         await application.bot.set_webhook(WEBHOOK_URL)
+        start_reminder_tasks(application)
         is_initialized = True
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    await stop_reminder_tasks()
     await database.disconnect()
 
 # === Основні handlers ===
