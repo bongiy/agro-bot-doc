@@ -34,6 +34,8 @@ from dialogs.contract import (
     contract_docs,
     delete_contract_prompt,
     delete_contract,
+    agreement_delete_prompt,
+    agreement_delete_confirm,
     generate_contract_pdf_cb,
     edit_contract_conv,
     change_status_conv,
@@ -169,6 +171,8 @@ application.add_handler(CallbackQueryHandler(generate_contract_pdf_cb, pattern=r
 application.add_handler(CallbackQueryHandler(contract_docs, pattern=r"^contract_docs:\d+$"))
 application.add_handler(CallbackQueryHandler(delete_contract_prompt, pattern=r"^delete_contract:\d+$"))
 application.add_handler(CallbackQueryHandler(delete_contract, pattern=r"^confirm_delete_contract:\d+$"))
+application.add_handler(CallbackQueryHandler(agreement_delete_prompt, pattern=r"^agreement_delete:\d+$"))
+application.add_handler(CallbackQueryHandler(agreement_delete_confirm, pattern=r"^agreement_delete_confirm$"))
 application.add_handler(CallbackQueryHandler(to_contracts, pattern=r"^to_contracts$"))
 application.add_handler(CallbackQueryHandler(send_contract_pdf, pattern=r"^view_pdf:contract:\d+:.+"))
 
