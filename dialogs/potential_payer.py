@@ -30,6 +30,7 @@ from utils.fsm_navigation import (
     back_cancel_keyboard,
     push_state,
     handle_back_cancel,
+    cancel_handler,
 )
 
 # --- Statuses ---
@@ -46,6 +47,15 @@ STATUS_CHOICES = [
     STATUS_REFUSED,
     STATUS_SIGNED,
 ]
+
+
+async def show_potential_payers_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from keyboards.menu import crm_potential_menu
+    await update.message.reply_text(
+        "Меню «Потенційні пайовики»",
+        reply_markup=crm_potential_menu,
+    )
+    return ConversationHandler.END
 
 # --- FSM states ---
 (
@@ -84,7 +94,7 @@ async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    result = await handle_back_cancel(update, context)
+    result = await handle_back_cancel(update, context, show_potential_payers_menu)
     if result is not None:
         return result
     context.user_data["full_name"] = update.message.text.strip()
@@ -97,7 +107,7 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def get_village(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    result = await handle_back_cancel(update, context)
+    result = await handle_back_cancel(update, context, show_potential_payers_menu)
     if result is not None:
         return result
     phone = normalize_phone(update.message.text)
@@ -110,7 +120,7 @@ async def get_village(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def get_area_est(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    result = await handle_back_cancel(update, context)
+    result = await handle_back_cancel(update, context, show_potential_payers_menu)
     if result is not None:
         return result
     context.user_data["village"] = update.message.text.strip()
@@ -123,7 +133,7 @@ async def get_area_est(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def get_note(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    result = await handle_back_cancel(update, context)
+    result = await handle_back_cancel(update, context, show_potential_payers_menu)
     if result is not None:
         return result
     text = update.message.text.strip()
@@ -140,7 +150,7 @@ async def get_note(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def ask_land(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    result = await handle_back_cancel(update, context)
+    result = await handle_back_cancel(update, context, show_potential_payers_menu)
     if result is not None:
         return result
     note = update.message.text.strip()
@@ -155,7 +165,7 @@ async def ask_land(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def land_area(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    result = await handle_back_cancel(update, context)
+    result = await handle_back_cancel(update, context, show_potential_payers_menu)
     if result is not None:
         return result
     cad = re.sub(r"\s", "", update.message.text)
@@ -171,7 +181,7 @@ async def land_area(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def add_plot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    result = await handle_back_cancel(update, context)
+    result = await handle_back_cancel(update, context, show_potential_payers_menu)
     if result is not None:
         return result
     try:
@@ -239,7 +249,7 @@ add_potential_conv = ConversationHandler(
             CallbackQueryHandler(finish_cb, pattern="^finish$"),
         ],
     },
-    fallbacks=[MessageHandler(filters.Regex(f"^{CANCEL_BTN}$"), handle_back_cancel)],
+    fallbacks=[MessageHandler(filters.Regex(f"^{CANCEL_BTN}$"), cancel_handler(show_potential_payers_menu))],
 )
 
 
