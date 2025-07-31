@@ -240,6 +240,19 @@ PotentialLandPlot = sqlalchemy.Table(
     sqlalchemy.Column("area", sqlalchemy.Float),
 )
 
+# === Таблиця подій CRM ===
+CRMEvent = sqlalchemy.Table(
+    "crm_events", metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("entity_type", sqlalchemy.String),
+    sqlalchemy.Column("entity_id", sqlalchemy.Integer),
+    sqlalchemy.Column("event_date", sqlalchemy.Date),
+    sqlalchemy.Column("event_type", sqlalchemy.String),
+    sqlalchemy.Column("comment", sqlalchemy.String),
+    sqlalchemy.Column("status", sqlalchemy.String, default="planned"),
+    sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
+)
+
 async def add_user(
     tg_id: int,
     username: str | None = None,
