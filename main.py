@@ -8,6 +8,8 @@ from telegram.ext import (
 from handlers.menu import (
     start, to_main_menu, payers_menu_handler, lands_menu_handler, fields_menu_handler,
     contracts_menu_handler, payments_menu_handler, reports_menu_handler, search_menu_handler,
+    crm_menu_handler, crm_potential_handler, crm_current_handler,
+    crm_planning_handler, crm_inbox_handler,
     admin_panel_handler, admin_tov_handler, admin_templates_handler,
     admin_users_handler, admin_tov_list_handler,
     admin_tov_edit_handler, admin_tov_delete_handler, to_admin_panel, admin_company_card_callback,
@@ -108,6 +110,11 @@ application.add_handler(MessageHandler(filters.Regex("^🌾 Поля$"), fields_
 application.add_handler(MessageHandler(filters.Regex("^📄 Договори$"), contracts_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^💳 Виплати$"), payments_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^📊 Звіти$"), reports_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^📒 CRM$"), crm_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^🧑‍🌾 Потенційні пайовики$"), crm_potential_handler))
+application.add_handler(MessageHandler(filters.Regex("^👤 Поточні пайовики$"), crm_current_handler))
+application.add_handler(MessageHandler(filters.Regex("^📅 Планування і нагадування$"), crm_planning_handler))
+application.add_handler(MessageHandler(filters.Regex("^📨 Звернення та заяви$"), crm_inbox_handler))
 application.add_handler(MessageHandler(filters.Regex("^🔎 Пошук$"), search_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^🛡️ Адмінпанель$"), admin_panel_handler))
 
