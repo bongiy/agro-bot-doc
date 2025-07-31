@@ -63,7 +63,7 @@ async def check_daily(app: Application):
             continue
         text = await _format_reminder(r, "\u23F0 \u041F\u043E\u0434\u0456\u044F \u0441\u044C\u043E\u0433\u043E\u0434\u043D\u0456:")
         recipients = set(admin_ids)
-        recipients.add(r["created_by_user_id"])
+        recipients.add(r["responsible_user_id"])
         await _send_to(recipients, text, app)
         await _update_status(r["id"], "daily", status)
 
@@ -88,7 +88,7 @@ async def check_one_hour(app: Application):
             continue
         text = await _format_reminder(r, "\u23F0 \u041F\u043E\u0434\u0456\u044F \u0437\u0430 \u0433\u043E\u0434\u0438\u043D\u0443:")
         recipients = set(admin_ids)
-        recipients.add(r["created_by_user_id"])
+        recipients.add(r["responsible_user_id"])
         await _send_to(recipients, text, app)
         await _update_status(r["id"], "1h", status)
 
@@ -113,7 +113,7 @@ async def check_now(app: Application):
             continue
         text = await _format_reminder(r, "\u23F0 \u041F\u043E\u0434\u0456\u044F \u0437\u0430\u0440\u0430\u0437:")
         recipients = set(admin_ids)
-        recipients.add(r["created_by_user_id"])
+        recipients.add(r["responsible_user_id"])
         await _send_to(recipients, text, app)
         await _update_status(r["id"], "now", status)
 

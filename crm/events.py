@@ -24,6 +24,7 @@ from db import (
     Contract,
     LandPlot,
     LandPlotOwner,
+    User,
 )
 from utils.fsm_navigation import (
     BACK_BTN,
@@ -51,7 +52,9 @@ from crm.event_fsm_navigation import (
     DATE_INPUT,
     TYPE_CHOOSE,
     COMMENT_INPUT,
-) = range(9)
+    RESPONSIBLE_CHOOSE,
+    RESPONSIBLE_ID,
+) = range(11)
 
 (
     FILTER_MENU,
@@ -323,23 +326,113 @@ async def save_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     comment = update.message.text.strip()
     if comment == "-":
         comment = ""
+    context.user_data["event_comment"] = comment
+    push_state(context, RESPONSIBLE_CHOOSE)
+    kb = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("\U0001F464 Я (автор події)", callback_data="resp:self")],
+            [InlineKeyboardButton("\U0001F465 Інший користувач", callback_data="resp:other")],
+            [InlineKeyboardButton(BACK_BTN, callback_data="back")],
+        ]
+    )
+    await update.message.reply_text("👤 Хто відповідальний за подію?", reply_markup=kb)
+    return RESPONSIBLE_CHOOSE
+
+
+async def _save_event(msg, context: ContextTypes.DEFAULT_TYPE, responsible_id: int) -> int:
     await database.execute(
         CRMEvent.insert().values(
             entity_type=context.user_data.get("entity_type"),
             entity_id=context.user_data.get("entity_id", context.user_data.get("person_id")),
             event_datetime=context.user_data.get("event_datetime"),
             event_type=context.user_data.get("event_type"),
-            comment=comment,
+            comment=context.user_data.get("event_comment", ""),
+            responsible_user_id=responsible_id,
             status="planned",
             created_at=datetime.utcnow(),
-            created_by_user_id=update.effective_user.id,
+            created_by_user_id=msg.from_user.id,
             reminder_status={"daily": False, "1h": False, "now": False},
         )
     )
     context.user_data.clear()
     from keyboards.menu import crm_events_menu
-    await update.message.reply_text("✅ Подію збережено.", reply_markup=crm_events_menu)
+    await msg.reply_text("✅ Подію збережено.", reply_markup=crm_events_menu)
     return ConversationHandler.END
+
+
+async def _show_user_list(msg, context: ContextTypes.DEFAULT_TYPE) -> int:
+    rows = await database.fetch_all(
+        sqlalchemy.select(User).where(User.c.is_active == True).order_by(User.c.id).limit(10)
+    )
+    keyboard = [
+        [InlineKeyboardButton(f"\U0001F464 {r['full_name'] or r['telegram_id']}", callback_data=f"user:{r['telegram_id']}")]
+        for r in rows
+    ]
+    keyboard.append([InlineKeyboardButton("🔎 Пошук", callback_data="manual")])
+    keyboard.append([InlineKeyboardButton(BACK_BTN, callback_data="back")])
+    if getattr(msg, "edit_text", None):
+        await msg.edit_text("Оберіть користувача:", reply_markup=InlineKeyboardMarkup(keyboard))
+    else:
+        await msg.reply_text("Оберіть користувача:", reply_markup=InlineKeyboardMarkup(keyboard))
+    return RESPONSIBLE_CHOOSE
+
+
+async def responsible_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if data == "back":
+        history = context.user_data.get("fsm_history", [])
+        if history:
+            history.pop()
+        await query.message.edit_text("Введіть коментар або '-' щоб пропустити:")
+        return COMMENT_INPUT
+    if data == "resp:self":
+        return await _save_event(query.message, context, update.effective_user.id)
+    if data == "resp:other":
+        push_state(context, RESPONSIBLE_CHOOSE)
+        return await _show_user_list(query.message, context)
+    if data.startswith("user:"):
+        uid = int(data.split(":")[1])
+        return await _save_event(query.message, context, uid)
+    if data == "manual":
+        push_state(context, RESPONSIBLE_ID)
+        await query.message.edit_text("Введіть ID або частину ПІБ:", reply_markup=back_cancel_keyboard)
+        return RESPONSIBLE_ID
+    return RESPONSIBLE_CHOOSE
+
+
+async def responsible_id_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    result = await handle_back_cancel(update, context, show_menu)
+    if result is not None:
+        if result == RESPONSIBLE_CHOOSE:
+            return await _show_user_list(update.message, context)
+        return result
+    text = update.message.text.strip()
+    rows = []
+    if text.isdigit():
+        row = await database.fetch_one(
+            sqlalchemy.select(User).where(User.c.telegram_id == int(text), User.c.is_active == True)
+        )
+        if row:
+            rows = [row]
+    else:
+        rows = await database.fetch_all(
+            sqlalchemy.select(User).where(User.c.full_name.ilike(f"%{text}%"), User.c.is_active == True)
+        )
+    if not rows:
+        await update.message.reply_text("Не знайдено. Спробуйте ще:")
+        return RESPONSIBLE_ID
+    if len(rows) == 1:
+        uid = rows[0]["telegram_id"]
+        return await _save_event(update.message, context, uid)
+    keyboard = [
+        [InlineKeyboardButton(f"\U0001F464 {r['full_name'] or r['telegram_id']}", callback_data=f"user:{r['telegram_id']}")]
+        for r in rows[:10]
+    ]
+    keyboard.append([InlineKeyboardButton(BACK_BTN, callback_data="back")])
+    await update.message.reply_text("Оберіть користувача:", reply_markup=InlineKeyboardMarkup(keyboard))
+    return RESPONSIBLE_CHOOSE
 
 add_event_conv = ConversationHandler(
     entry_points=[MessageHandler(filters.Regex("^➕ Додати подію$"), add_start)],
@@ -353,6 +446,8 @@ add_event_conv = ConversationHandler(
         DATE_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_date)],
         TYPE_CHOOSE: [CallbackQueryHandler(type_cb, pattern=r"^(etype:\d+|back)$")],
         COMMENT_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_comment)],
+        RESPONSIBLE_CHOOSE: [CallbackQueryHandler(responsible_cb, pattern=r"^(resp:(self|other)|user:\d+|manual|back)$")],
+        RESPONSIBLE_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, responsible_id_input)],
     },
     fallbacks=[MessageHandler(filters.Regex(f"^{CANCEL_BTN}$"), cancel_handler(show_menu))],
 )
@@ -485,7 +580,14 @@ async def format_event(row) -> str:
         land = await database.fetch_one(sqlalchemy.select(LandPlot).where(LandPlot.c.id == row["entity_id"]))
         entity = f"\U0001F4CD {land['cadaster']}" if land else f"ID {row['entity_id']}"
     d = row["event_datetime"].strftime("%d.%m.%Y %H:%M")
-    txt = f"\U0001F4C5 {d} — {row['event_type']}\n{entity}\n\U0001F4DD {row['comment'] or '-'}"
+    user = await database.fetch_one(sqlalchemy.select(User).where(User.c.telegram_id == row["responsible_user_id"]))
+    resp = user["full_name"] if user else f"ID {row['responsible_user_id']}"
+    txt = (
+        f"\U0001F4C5 {d} — {row['event_type']}\n"
+        f"{entity}\n"
+        f"\U0001F9D1\u200D\U0001F4BC Відповідальний: {resp}\n"
+        f"\U0001F4DD {row['comment'] or '-'}"
+    )
     return txt
 
 list_events_conv = ConversationHandler(

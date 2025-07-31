@@ -251,6 +251,7 @@ CRMEvent = sqlalchemy.Table(
     sqlalchemy.Column("event_datetime", sqlalchemy.DateTime),
     sqlalchemy.Column("event_type", sqlalchemy.String),
     sqlalchemy.Column("comment", sqlalchemy.String),
+    sqlalchemy.Column("responsible_user_id", sqlalchemy.BigInteger, nullable=False),
     sqlalchemy.Column("status", sqlalchemy.String, default="planned"),
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
     sqlalchemy.Column("created_by_user_id", sqlalchemy.BigInteger),
@@ -394,5 +395,8 @@ with engine.begin() as conn:
     ))
     conn.execute(sqlalchemy.text(
         "ALTER TABLE \"crm_events\" ADD COLUMN IF NOT EXISTS reminder_status JSONB DEFAULT '{}'::jsonb"
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "crm_events" ADD COLUMN IF NOT EXISTS responsible_user_id BIGINT NOT NULL DEFAULT 0'
     ))
 

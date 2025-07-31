@@ -23,9 +23,13 @@ from crm.events import (
     DATE_INPUT,
     TYPE_CHOOSE,
     COMMENT_INPUT,
+    RESPONSIBLE_CHOOSE,
+    RESPONSIBLE_ID,
     set_date,
     type_cb,
     save_comment,
+    responsible_cb,
+    responsible_id_input,
     show_menu,
 )
 
@@ -92,6 +96,8 @@ add_event_from_card_conv = ConversationHandler(
         DATE_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_date)],
         TYPE_CHOOSE: [CallbackQueryHandler(type_cb, pattern=r"^(etype:\d+|back)$")],
         COMMENT_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_comment)],
+        RESPONSIBLE_CHOOSE: [CallbackQueryHandler(responsible_cb, pattern=r"^(resp:(self|other)|user:\d+|manual|back)$")],
+        RESPONSIBLE_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, responsible_id_input)],
     },
     fallbacks=[MessageHandler(filters.Regex(f"^{CANCEL_BTN}$"), cancel_handler(show_menu))],
 )
