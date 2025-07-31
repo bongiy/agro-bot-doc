@@ -70,7 +70,8 @@ async def show_potential_payers_menu(update: Update, context: ContextTypes.DEFAU
 ) = range(8)
 
 # States for filtering potential payers
-(FILTER_MENU, FILTER_VILLAGE, FILTER_STATUS, FILTER_DATE) = range(100, 104)
+(FILTER_MENU, FILTER_VILLAGE, FILTER_STATUS, FILTER_DATE,
+ SEARCH_MENU, SEARCH_FIO, SEARCH_ID, SEARCH_CAD) = range(100, 108)
 
 
 def normalize_phone(text: str | None):
@@ -82,6 +83,29 @@ def normalize_phone(text: str | None):
     if re.fullmatch(r"\+380\d{9}", text):
         return text
     return None
+
+
+def normalize_cadastre(text: str) -> str:
+    """Normalize cadastre number by inserting colons if missing."""
+    raw = re.sub(r"\s", "", text)
+    if ":" in raw:
+        return raw
+    digits = re.sub(r"\D", "", raw)
+    parts = []
+    if len(digits) > 10:
+        parts.append(digits[:10])
+        digits = digits[10:]
+        if digits:
+            parts.append(digits[:2])
+            digits = digits[2:]
+            if digits:
+                parts.append(digits[:3])
+                digits = digits[3:]
+                if digits:
+                    parts.append(digits)
+    else:
+        parts.append(digits)
+    return ":".join([p for p in parts if p])
 
 
 async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -418,6 +442,7 @@ async def filter_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🏘 За селом", callback_data="filter_village")],
             [InlineKeyboardButton("📘 За статусом", callback_data="filter_status")],
             [InlineKeyboardButton("📅 За датою", callback_data="filter_date")],
+            [InlineKeyboardButton("🔍 Пошук", callback_data="filter_search")],
         ]
     )
     await update.message.reply_text("Оберіть тип фільтру:", reply_markup=keyboard)
@@ -450,6 +475,56 @@ async def do_filter_list(target, rows):
     msg = getattr(target, "message", target)
     if not rows:
         await msg.reply_text("Нічого не знайдено.")
+        return
+    for r in rows:
+        btn = InlineKeyboardButton("Картка", callback_data=f"pp_card:{r['id']}")
+        await msg.reply_text(
+            f"{r['id']}. {r['full_name']} ({r['village'] or '-'})",
+            reply_markup=InlineKeyboardMarkup([[btn]])
+        )
+
+
+async def send_pp_card(msg, pp_id: int):
+    payer = await database.fetch_one(
+        sqlalchemy.select(PotentialPayer).where(PotentialPayer.c.id == pp_id)
+    )
+    if not payer:
+        await msg.reply_text("Не знайдено")
+        return
+    plots = await database.fetch_all(
+        sqlalchemy.select(PotentialLandPlot).where(
+            PotentialLandPlot.c.potential_payer_id == pp_id
+        )
+    )
+    plots_txt = "\n".join(
+        [f"   ├ {p['cadastre']} — {p['area']:.4f} га" for p in plots]
+    ) or "—"
+    text = (
+        f"👤 ПІБ: {payer['full_name']}\n"
+        f"📞 Телефон: {payer['phone'] or '-'}\n"
+        f"🏘 Село: {payer['village'] or '-'}\n"
+        f"📏 Орієнтовна площа: {payer['area_estimate'] or '-'} га\n"
+        f"📍 Ділянки:\n{plots_txt}\n"
+        f"📝 Нотатка: {payer['note'] or '-'}\n"
+        f"📅 Останній контакт: {payer['last_contact_date'] or '-'}\n"
+        f"📘 Статус: {payer['status']}"
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✏️ Змінити статус", callback_data=f"pp_chst:{pp_id}")],
+        [InlineKeyboardButton("🔄 Перевести в активні", callback_data=f"pp_conv:{pp_id}")],
+        [InlineKeyboardButton("🗑 Видалити", callback_data=f"pp_del:{pp_id}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="pp_list")],
+    ])
+    await msg.reply_text(text, reply_markup=keyboard)
+
+
+async def show_search_results(target, rows):
+    msg = getattr(target, "message", target)
+    if not rows:
+        await msg.reply_text("Нічого не знайдено.")
+        return
+    if len(rows) == 1:
+        await send_pp_card(msg, rows[0]["id"])
         return
     for r in rows:
         btn = InlineKeyboardButton("Картка", callback_data=f"pp_card:{r['id']}")
@@ -493,6 +568,77 @@ async def filter_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+async def filter_search_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔡 За ПІБ", callback_data="search_fio")],
+        [InlineKeyboardButton("🆔 За ID", callback_data="search_id")],
+        [InlineKeyboardButton("📍 За кадастровим номером", callback_data="search_cad")],
+    ])
+    await query.message.edit_text("Оберіть тип пошуку:", reply_markup=keyboard)
+    return SEARCH_MENU
+
+
+async def search_fio_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.message.edit_text("Введіть ПІБ або його частину:")
+    return SEARCH_FIO
+
+
+async def search_id_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.message.edit_text("Введіть ID:")
+    return SEARCH_ID
+
+
+async def search_cad_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.message.edit_text("Введіть кадастровий номер:")
+    return SEARCH_CAD
+
+
+async def search_fio_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    rows = await database.fetch_all(
+        sqlalchemy.select(PotentialPayer).where(
+            PotentialPayer.c.full_name.ilike(f"%{text}%")
+        )
+    )
+    await show_search_results(update, rows)
+    return ConversationHandler.END
+
+
+async def search_id_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    if not text.isdigit():
+        await update.message.reply_text("Некоректний ID. Спробуйте ще:")
+        return SEARCH_ID
+    pid = int(text)
+    row = await database.fetch_one(
+        sqlalchemy.select(PotentialPayer).where(PotentialPayer.c.id == pid)
+    )
+    rows = [row] if row else []
+    await show_search_results(update, rows)
+    return ConversationHandler.END
+
+
+async def search_cad_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    cad = normalize_cadastre(update.message.text)
+    pattern = f"%{cad}%"
+    rows = await database.fetch_all(
+        sqlalchemy.select(PotentialPayer)
+        .join(PotentialLandPlot, PotentialLandPlot.c.potential_payer_id == PotentialPayer.c.id)
+        .where(PotentialLandPlot.c.cadastre.ilike(pattern))
+        .distinct()
+    )
+    await show_search_results(update, rows)
+    return ConversationHandler.END
+
+
 filter_potential_conv = ConversationHandler(
     entry_points=[MessageHandler(filters.Regex("^🔍 Фільтр$"), filter_start)],
     states={
@@ -500,10 +646,19 @@ filter_potential_conv = ConversationHandler(
             CallbackQueryHandler(filter_village_cb, pattern="^filter_village$"),
             CallbackQueryHandler(filter_status_cb, pattern="^filter_status$"),
             CallbackQueryHandler(filter_date_cb, pattern="^filter_date$"),
+            CallbackQueryHandler(filter_search_cb, pattern="^filter_search$"),
         ],
         FILTER_VILLAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, filter_village_input)],
         FILTER_STATUS: [CallbackQueryHandler(filter_status_select, pattern=r"^status:.+")],
         FILTER_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, filter_date_input)],
+        SEARCH_MENU: [
+            CallbackQueryHandler(search_fio_cb, pattern="^search_fio$"),
+            CallbackQueryHandler(search_id_cb, pattern="^search_id$"),
+            CallbackQueryHandler(search_cad_cb, pattern="^search_cad$"),
+        ],
+        SEARCH_FIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, search_fio_input)],
+        SEARCH_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, search_id_input)],
+        SEARCH_CAD: [MessageHandler(filters.TEXT & ~filters.COMMAND, search_cad_input)],
     },
     fallbacks=[],
 )
