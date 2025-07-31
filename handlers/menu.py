@@ -102,8 +102,9 @@ async def crm_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Меню «CRM»", reply_markup=crm_menu)
 
 async def crm_potential_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from keyboards.menu import crm_potential_menu
     await update.message.reply_text(
-        "Розділ «Потенційні пайовики» в розробці."
+        "Меню «Потенційні пайовики»", reply_markup=crm_potential_menu
     )
 
 async def crm_current_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):

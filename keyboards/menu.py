@@ -108,6 +108,16 @@ crm_menu = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True
 )
+
+# --- Меню потенційних пайовиків ---
+crm_potential_menu = ReplyKeyboardMarkup(
+    [
+        ["➕ Додати", "📋 Список"],
+        ["🔍 Фільтр"],
+        ["◀️ Назад"],
+    ],
+    resize_keyboard=True
+)
 # --- Адмінпанель ---
 admin_panel_menu = ReplyKeyboardMarkup(
     [
