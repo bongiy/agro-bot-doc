@@ -41,6 +41,7 @@ from crm.event_fsm_navigation import (
     cancel_handler as view_cancel_handler,
     show_crm_menu,
 )
+import crm.events_filter_by_date as events_filter_by_date
 
 (
     CAT,
@@ -58,11 +59,13 @@ from crm.event_fsm_navigation import (
 
 (
     FILTER_MENU,
-    FILTER_DATE,
+    FILTER_DATE_MODE,
+    FILTER_DATE_LIST,
+    FILTER_ALL_EVENTS,
     FILTER_PAYER,
     FILTER_CONTRACT,
     FILTER_LAND,
-) = range(100, 105)
+) = range(100, 107)
 
 EVENT_TYPES = [
     "\U0001F4DE Зв’язатись",
@@ -520,12 +523,7 @@ async def filter_menu_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     except Exception:
         pass
     if ftype == "date":
-        view_push_state(context, FILTER_DATE)
-        await query.message.reply_text(
-            "Введіть дату (ДД.ММ.РРРР):",
-            reply_markup=view_back_cancel_keyboard,
-        )
-        return FILTER_DATE
+        return await events_filter_by_date.start(query.message, context)
     if ftype == "payer":
         view_push_state(context, FILTER_PAYER)
         await query.message.reply_text(
@@ -563,24 +561,6 @@ async def _show_rows(msg, rows):
         text = await format_event(r)
         await msg.reply_text(text)
 
-async def filter_date_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    result = await view_handle_back_cancel(update, context, show_crm_menu)
-    if result is not None:
-        if result == FILTER_MENU:
-            return await list_start(update, context)
-        return result
-    try:
-        d = datetime.strptime(update.message.text.strip(), "%d.%m.%Y").date()
-    except ValueError:
-        await update.message.reply_text("Некоректна дата. Спробуйте ще:")
-        return FILTER_DATE
-    rows = await database.fetch_all(
-        sqlalchemy.select(CRMEvent)
-        .where(sqlalchemy.func.date(CRMEvent.c.event_datetime) == d)
-        .order_by(CRMEvent.c.event_datetime)
-    )
-    await _show_rows(update.message, rows)
-    return ConversationHandler.END
 
 async def filter_id_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     result = await view_handle_back_cancel(update, context, show_crm_menu)
@@ -640,7 +620,13 @@ list_events_conv = ConversationHandler(
             CallbackQueryHandler(filter_menu_cb, pattern=r"^f:(date|payer|contract|land)$"),
             MessageHandler(filters.TEXT & ~filters.COMMAND, filter_menu_text),
         ],
-        FILTER_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, filter_date_input)],
+        FILTER_DATE_MODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, events_filter_by_date.mode_input)],
+        FILTER_DATE_LIST: [CallbackQueryHandler(events_filter_by_date.dates_cb, pattern=r"^(d:|prev$|next$|back$|noop$)")],
+        FILTER_ALL_EVENTS: [
+            CallbackQueryHandler(events_filter_by_date.page_cb, pattern="^(prev|next)$"),
+            CallbackQueryHandler(lambda u, c: u.callback_query.answer(), pattern="^noop$"),
+            MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u, c: FILTER_ALL_EVENTS),
+        ],
         FILTER_PAYER: [MessageHandler(filters.TEXT & ~filters.COMMAND, filter_id_input)],
         FILTER_CONTRACT: [MessageHandler(filters.TEXT & ~filters.COMMAND, filter_id_input)],
         FILTER_LAND: [MessageHandler(filters.TEXT & ~filters.COMMAND, filter_id_input)],
