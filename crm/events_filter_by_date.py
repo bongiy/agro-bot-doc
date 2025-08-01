@@ -27,7 +27,7 @@ from crm.event_fsm_navigation import (
     cancel_handler,
     show_crm_menu,
 )
-from crm.events import format_event
+from crm.event_utils import format_event
 
 
 # conversation states for date filtering

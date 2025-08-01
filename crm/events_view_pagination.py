@@ -21,7 +21,7 @@ from crm.event_fsm_navigation import (
     cancel_handler,
     show_crm_menu,
 )
-from crm.events import format_event
+from crm.event_utils import format_event
 
 # conversation states
 MODE_CHOOSE, SHOW_PAGE, SHOW_CARD = range(3)
