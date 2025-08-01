@@ -116,8 +116,10 @@ async def crm_planning_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text("Меню «Планування і нагадування»", reply_markup=crm_events_menu)
 
 async def crm_inbox_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from keyboards.menu import crm_inbox_menu
     await update.message.reply_text(
-        "Розділ «Звернення та заяви» в розробці."
+        "Меню «Звернення та заяви»",
+        reply_markup=crm_inbox_menu,
     )
 
 # --- АДМІНПАНЕЛЬ ---

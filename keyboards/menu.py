@@ -124,6 +124,14 @@ crm_events_menu = ReplyKeyboardMarkup([
     ["◀️ Назад"],
 ], resize_keyboard=True)
 
+crm_inbox_menu = ReplyKeyboardMarkup(
+    [
+        ["➕ Додати звернення"],
+        ["◀️ Назад"],
+    ],
+    resize_keyboard=True,
+)
+
 # --- Адмінпанель ---
 admin_panel_menu = ReplyKeyboardMarkup(
     [
