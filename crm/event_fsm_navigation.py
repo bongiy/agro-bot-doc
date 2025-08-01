@@ -38,7 +38,9 @@ def cancel_handler(menu_function=show_crm_menu):
             reply_markup=ReplyKeyboardRemove(),
         )
         context.user_data.clear()
-        return await menu_function(update, context)
+        if menu_function:
+            await menu_function(update, context)
+        return ConversationHandler.END
 
     return _cancel
 
@@ -53,7 +55,7 @@ async def handle_back_cancel(update, context: ContextTypes.DEFAULT_TYPE, menu_fu
         )
         context.user_data.clear()
         if menu_function:
-            return await menu_function(update, context)
+            await menu_function(update, context)
         return ConversationHandler.END
     if text == BACK_BTN:
         prev_state = pop_state(context)
@@ -64,7 +66,7 @@ async def handle_back_cancel(update, context: ContextTypes.DEFAULT_TYPE, menu_fu
             )
             context.user_data.clear()
             if menu_function:
-                return await menu_function(update, context)
+                await menu_function(update, context)
             return ConversationHandler.END
         return prev_state
     return None

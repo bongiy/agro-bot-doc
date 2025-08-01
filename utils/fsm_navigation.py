@@ -28,11 +28,13 @@ def cancel_handler(menu_function):
 
     async def _cancel(update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
-            "❌ Додавання скасовано. Дані не збережено.",
+            "❌ Додавання події скасовано. Ви повернулись до CRM.",
             reply_markup=ReplyKeyboardRemove(),
         )
         context.user_data.clear()
-        return await menu_function(update, context)
+        if menu_function:
+            await menu_function(update, context)
+        return ConversationHandler.END
 
     return _cancel
 
@@ -42,23 +44,23 @@ async def handle_back_cancel(update, context: ContextTypes.DEFAULT_TYPE, menu_fu
     text = update.message.text if update.message else None
     if text == CANCEL_BTN:
         await update.message.reply_text(
-            "❌ Додавання скасовано. Дані не збережено.",
+            "❌ Додавання події скасовано. Ви повернулись до CRM.",
             reply_markup=ReplyKeyboardRemove(),
         )
         context.user_data.clear()
         if menu_function:
-            return await menu_function(update, context)
+            await menu_function(update, context)
         return ConversationHandler.END
     if text == BACK_BTN:
         prev_state = pop_state(context)
         if prev_state is None:
             await update.message.reply_text(
-                "❌ Додавання скасовано. Дані не збережено.",
+                "❌ Додавання події скасовано. Ви повернулись до CRM.",
                 reply_markup=ReplyKeyboardRemove(),
             )
             context.user_data.clear()
             if menu_function:
-                return await menu_function(update, context)
+                await menu_function(update, context)
             return ConversationHandler.END
         return prev_state
     return None
