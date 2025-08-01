@@ -77,7 +77,11 @@ from dialogs.agreement_template import (
 )
 
 from crm.events import add_event_conv, list_events_conv
-from crm.events_view_pagination import view_events_conv
+from crm.events_view_pagination import (
+    view_events_conv,
+    retry_event_filter,
+    cancel_event_filter,
+)
 from crm.events_integration import add_event_from_card_conv
 from crm.event_reminders import start_reminder_tasks, stop_reminder_tasks
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -153,6 +157,8 @@ application.add_handler(add_event_conv)
 application.add_handler(add_event_from_card_conv)
 application.add_handler(list_events_conv)
 application.add_handler(view_events_conv)
+application.add_handler(CallbackQueryHandler(retry_event_filter, pattern="^retry_event_filter$"))
+application.add_handler(CallbackQueryHandler(cancel_event_filter, pattern="^cancel_event_filter$"))
 
 application.add_handler(add_land_conv)
 application.add_handler(MessageHandler(filters.Regex("^📋 Список ділянок$"), show_lands))
