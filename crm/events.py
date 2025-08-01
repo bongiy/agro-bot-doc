@@ -445,7 +445,8 @@ async def responsible_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return await _save_event(query.message, context, uid)
     if data == "manual":
         push_state(context, RESPONSIBLE_ID)
-        await query.message.edit_text("Введіть ID або частину ПІБ:", reply_markup=back_cancel_keyboard)
+        await query.message.delete()
+        await query.message.reply_text("Введіть ID або частину ПІБ:", reply_markup=back_cancel_keyboard)
         return RESPONSIBLE_ID
     return RESPONSIBLE_CHOOSE
 

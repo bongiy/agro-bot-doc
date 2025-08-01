@@ -94,7 +94,8 @@ async def choose_payer_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     data = query.data
     if data == "search":
         push_state(context, SEARCH_INPUT)
-        await query.message.edit_text("Введіть частину ПІБ:", reply_markup=back_cancel_keyboard)
+        await query.message.delete()
+        await query.message.reply_text("Введіть частину ПІБ:", reply_markup=back_cancel_keyboard)
         return SEARCH_INPUT
     pid = int(data.split(":")[1])
     context.user_data["payer_id"] = pid
@@ -147,7 +148,8 @@ async def type_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     typ = query.data.split(":")[1]
     if typ == "other":
         push_state(context, CUSTOM_TYPE)
-        await query.message.edit_text("Введіть тип звернення:", reply_markup=back_cancel_keyboard)
+        await query.message.delete()
+        await query.message.reply_text("Введіть тип звернення:", reply_markup=back_cancel_keyboard)
         return CUSTOM_TYPE
     context.user_data["req_type"] = REQUEST_TYPES[typ]
     return await ask_description(query.message, context)
@@ -207,7 +209,8 @@ async def date_choice_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return STATUS_CHOOSE
     if choice == "manual":
         push_state(context, DATE_INPUT)
-        await query.message.edit_text(
+        await query.message.delete()
+        await query.message.reply_text(
             "Введіть дату звернення (ДД.ММ.РРРР):",
             reply_markup=back_cancel_keyboard,
         )
@@ -243,7 +246,8 @@ async def status_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     status = query.data.split(":")[1]
     context.user_data["status"] = STATUS_TYPES[status]
     push_state(context, DOCUMENT)
-    await query.message.edit_text(
+    await query.message.delete()
+    await query.message.reply_text(
         "Надішліть документ (фото або PDF):",
         reply_markup=back_cancel_keyboard,
     )
@@ -301,7 +305,8 @@ async def confirm_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     data = query.data
     if data == "back":
         push_state(context, DOCUMENT)
-        await query.message.edit_text(
+        await query.message.delete()
+        await query.message.reply_text(
             "Надішліть документ (фото або PDF):",
             reply_markup=back_cancel_keyboard,
         )
