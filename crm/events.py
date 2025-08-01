@@ -92,26 +92,42 @@ async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("👤 До кого стосується подія?", reply_markup=kb)
     return CAT
 
+
+async def _show_person_list(msg, context: ContextTypes.DEFAULT_TYPE, push=True) -> int:
+    """Display list of persons based on selected category."""
+    cat = context.user_data.get("category")
+    if push:
+        push_state(context, PERSON_CHOOSE)
+    if cat == "pot":
+        rows = await database.fetch_all(
+            sqlalchemy.select(PotentialPayer).order_by(PotentialPayer.c.id.desc()).limit(5)
+        )
+        keyboard = [
+            [InlineKeyboardButton(f"{r['id']}: {r['full_name']}", callback_data=f"person:{r['id']}")]
+            for r in rows
+        ]
+    else:
+        rows = await database.fetch_all(
+            sqlalchemy.select(Payer).order_by(Payer.c.id.desc()).limit(5)
+        )
+        keyboard = [
+            [InlineKeyboardButton(f"{r['id']}: {r['name']}", callback_data=f"person:{r['id']}")]
+            for r in rows
+        ]
+    keyboard.append([InlineKeyboardButton("🔎 Пошук", callback_data="manual")])
+    keyboard.append([InlineKeyboardButton(BACK_BTN, callback_data="back")])
+    if getattr(msg, "edit_text", None):
+        await msg.edit_text("Оберіть особу:", reply_markup=InlineKeyboardMarkup(keyboard))
+    else:
+        await msg.reply_text("Оберіть особу:", reply_markup=InlineKeyboardMarkup(keyboard))
+    return PERSON_CHOOSE
+
 async def category_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     cat = query.data.split(":")[1]
     context.user_data["category"] = cat
-    push_state(context, PERSON_CHOOSE)
-    if cat == "pot":
-        rows = await database.fetch_all(
-            sqlalchemy.select(PotentialPayer).order_by(PotentialPayer.c.id.desc()).limit(5)
-        )
-        keyboard = [[InlineKeyboardButton(f"{r['id']}: {r['full_name']}", callback_data=f"person:{r['id']}")] for r in rows]
-    else:
-        rows = await database.fetch_all(
-            sqlalchemy.select(Payer).order_by(Payer.c.id.desc()).limit(5)
-        )
-        keyboard = [[InlineKeyboardButton(f"{r['id']}: {r['name']}", callback_data=f"person:{r['id']}")] for r in rows]
-    keyboard.append([InlineKeyboardButton("🔎 Пошук", callback_data="manual")])
-    keyboard.append([InlineKeyboardButton(BACK_BTN, callback_data="back")])
-    await query.message.edit_text("Оберіть особу:", reply_markup=InlineKeyboardMarkup(keyboard))
-    return PERSON_CHOOSE
+    return await _show_person_list(query.message, context, push=True)
 
 async def person_choose_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
@@ -196,7 +212,10 @@ async def target_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await query.answer()
     data = query.data
     if data == "back":
-        return await category_cb(update, context)
+        history = context.user_data.get("fsm_history", [])
+        if history:
+            history.pop()
+        return await _show_person_list(query.message, context, push=False)
     target = data.split(":")[1]
     if target == "payer":
         context.user_data["entity_type"] = "payer"
@@ -253,7 +272,19 @@ async def contract_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     query = update.callback_query
     await query.answer()
     if query.data == "back":
-        return await target_cb(update, context)
+        history = context.user_data.get("fsm_history", [])
+        if history:
+            history.pop()
+        kb = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("👤 Лише пайовик", callback_data="target:payer")],
+                [InlineKeyboardButton("📜 Договір", callback_data="target:contract")],
+                [InlineKeyboardButton("📍 Ділянка", callback_data="target:land")],
+                [InlineKeyboardButton(BACK_BTN, callback_data="back")],
+            ]
+        )
+        await query.message.edit_text("Прив'язати подію до:", reply_markup=kb)
+        return TARGET_CHOOSE
     cid = int(query.data.split(":")[1])
     context.user_data["entity_type"] = "contract"
     context.user_data["entity_id"] = cid
@@ -269,7 +300,19 @@ async def land_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     if query.data == "back":
-        return await target_cb(update, context)
+        history = context.user_data.get("fsm_history", [])
+        if history:
+            history.pop()
+        kb = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("👤 Лише пайовик", callback_data="target:payer")],
+                [InlineKeyboardButton("📜 Договір", callback_data="target:contract")],
+                [InlineKeyboardButton("📍 Ділянка", callback_data="target:land")],
+                [InlineKeyboardButton(BACK_BTN, callback_data="back")],
+            ]
+        )
+        await query.message.edit_text("Прив'язати подію до:", reply_markup=kb)
+        return TARGET_CHOOSE
     lid = int(query.data.split(":")[1])
     context.user_data["entity_type"] = "land"
     context.user_data["entity_id"] = lid
