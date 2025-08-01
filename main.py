@@ -26,7 +26,15 @@ from dialogs.payer import (
 from dialogs.edit_payer import edit_payer_conv
 from dialogs.search import search_payer_conv, search_land_conv
 from dialogs.field import add_field_conv, show_fields, delete_field, delete_field_prompt, to_fields_list, field_card, edit_field
-from dialogs.land import add_land_conv, show_lands, land_card, delete_land, delete_land_prompt, to_lands_list
+from dialogs.land import (
+    add_land_conv,
+    show_lands,
+    land_card,
+    delete_land,
+    delete_land_prompt,
+    to_lands_list,
+    start_land_for_payer,
+)
 from dialogs.contract import (
     add_contract_conv,
     show_contracts,
@@ -173,6 +181,7 @@ application.add_handler(CallbackQueryHandler(land_card, pattern=r"^land_card:"))
 application.add_handler(CallbackQueryHandler(delete_land_prompt, pattern=r"^delete_land:\d+$"))
 application.add_handler(CallbackQueryHandler(delete_land, pattern=r"^confirm_delete_land:\d+$"))
 application.add_handler(CallbackQueryHandler(to_lands_list, pattern=r"^to_lands_list$"))
+application.add_handler(CallbackQueryHandler(start_land_for_payer, pattern=r"^start_land:\d+$"))
 
 application.add_handler(edit_field_conv)
 application.add_handler(edit_land_conv)
