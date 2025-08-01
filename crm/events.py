@@ -591,23 +591,3 @@ async def filter_id_input(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await _show_rows(update.message, rows)
     return ConversationHandler.END
 
-list_events_conv = ConversationHandler(
-    entry_points=[MessageHandler(filters.Regex("^📋 Переглянути події$"), list_start)],
-    states={
-        FILTER_MENU: [
-            CallbackQueryHandler(filter_menu_cb, pattern=r"^f:(date|payer|contract|land)$"),
-            MessageHandler(filters.TEXT & ~filters.COMMAND, filter_menu_text),
-        ],
-        FILTER_DATE_MODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, events_filter_by_date.mode_input)],
-        FILTER_DATE_LIST: [CallbackQueryHandler(events_filter_by_date.dates_cb, pattern=r"^(d:|prev$|next$|back$|noop$)")],
-        FILTER_ALL_EVENTS: [
-            CallbackQueryHandler(events_filter_by_date.page_cb, pattern="^(prev|next)$"),
-            CallbackQueryHandler(lambda u, c: u.callback_query.answer(), pattern="^noop$"),
-            MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u, c: FILTER_ALL_EVENTS),
-        ],
-        FILTER_PAYER: [MessageHandler(filters.TEXT & ~filters.COMMAND, filter_id_input)],
-        FILTER_CONTRACT: [MessageHandler(filters.TEXT & ~filters.COMMAND, filter_id_input)],
-        FILTER_LAND: [MessageHandler(filters.TEXT & ~filters.COMMAND, filter_id_input)],
-    },
-    fallbacks=[MessageHandler(filters.Regex(f"^{CANCEL_BTN}$"), view_cancel_handler(show_crm_menu))],
-)
