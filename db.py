@@ -252,6 +252,7 @@ PayerRequest = sqlalchemy.Table(
     sqlalchemy.Column("date_submitted", sqlalchemy.Date),
     sqlalchemy.Column("status", sqlalchemy.String),
     sqlalchemy.Column("document_path", sqlalchemy.String),
+    sqlalchemy.Column("responsible_user_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("user.id")),
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
 )
 
@@ -412,5 +413,8 @@ with engine.begin() as conn:
     ))
     conn.execute(sqlalchemy.text(
         'ALTER TABLE "crm_events" ADD COLUMN IF NOT EXISTS responsible_user_id BIGINT NOT NULL DEFAULT 0'
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "payer_requests" ADD COLUMN IF NOT EXISTS responsible_user_id INTEGER REFERENCES "user"(id)'
     ))
 
