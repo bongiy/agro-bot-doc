@@ -167,7 +167,32 @@ async def status_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             .where(PayerRequest.c.id == rid)
             .values(status=STATUS_TYPES[st])
         )
-        return await _show_card(query.message, context)
+        row = await _get_request(rid)
+        payer = await database.fetch_one(
+            sqlalchemy.select(Payer).where(Payer.c.id == row["payer_id"])
+        )
+        user_txt = "-"
+        if row.get("responsible_user_id"):
+            user = await database.fetch_one(
+                sqlalchemy.select(User).where(User.c.id == row["responsible_user_id"])
+            )
+            if user:
+                user_txt = user["full_name"] or str(user["id"])
+        d = row["date_submitted"].strftime("%d.%m.%Y") if row["date_submitted"] else "-"
+        text = (
+            f"🏷️ {row['type']}\n"
+            f"📆 {d}\n"
+            f"🧑 {payer['name'] if payer else row['payer_id']}\n"
+            f"📝 {row['description'] or '-'}\n"
+            f"🚦 {row['status']}\n"
+            f"👤 {user_txt}"
+        )
+        kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("⬅️ Назад до меню", callback_data="to_menu")]]
+        )
+        await query.message.edit_text(text, reply_markup=kb)
+        context.user_data.clear()
+        return ConversationHandler.END
     return STATUS_CHOOSE
 
 
