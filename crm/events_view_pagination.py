@@ -4,7 +4,12 @@ from datetime import datetime
 from math import ceil
 
 import sqlalchemy
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReplyKeyboardMarkup,
+)
 from telegram.ext import (
     ContextTypes,
     ConversationHandler,
@@ -28,8 +33,8 @@ MODE_CHOOSE, SHOW_PAGE, SHOW_CARD = range(3)
 PAGE_SIZE = 5
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Show view mode choice."""
+async def _start_msg(msg, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Send the view mode selection message."""
     context.user_data.clear()
     context.user_data["fsm_history"] = []
     push_state(context, MODE_CHOOSE)
@@ -37,8 +42,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         [["1️⃣ Події на сьогодні"], ["2️⃣ Найближчі події"], ["⬅️ Назад", CANCEL_BTN]],
         resize_keyboard=True,
     )
-    await update.message.reply_text("📅 Оберіть режим перегляду:", reply_markup=kb)
+    await msg.reply_text(
+        "📆 Оберіть режим перегляду:\n1️⃣ Події на сьогодні\n2️⃣ Найближчі події",
+        reply_markup=kb,
+    )
     return MODE_CHOOSE
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Show view mode choice."""
+    return await _start_msg(update.message, context)
 
 
 async def mode_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -71,7 +84,16 @@ async def _show_today(msg) -> int:
         .order_by(CRMEvent.c.event_datetime.asc())
     )
     if not rows:
-        await msg.reply_text("📭 Подій не знайдено.")
+        reply_markup = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("🔁 Спробувати знову", callback_data="retry_event_filter")],
+                [InlineKeyboardButton("❌ Вийти", callback_data="cancel_event_filter")],
+            ]
+        )
+        await msg.reply_text(
+            "📭 Подій не знайдено за вибраним критерієм.",
+            reply_markup=reply_markup,
+        )
         return ConversationHandler.END
     texts = [await format_event(r) for r in rows]
     await msg.reply_text("\n\n".join(texts))
@@ -191,7 +213,16 @@ async def _show_page(msg, context: ContextTypes.DEFAULT_TYPE) -> int:
     rows = context.user_data.get("ev_rows", [])
     page = context.user_data.get("ev_page", 0)
     if not rows:
-        await msg.reply_text("📭 Подій не знайдено.")
+        reply_markup = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("🔁 Спробувати знову", callback_data="retry_event_filter")],
+                [InlineKeyboardButton("❌ Вийти", callback_data="cancel_event_filter")],
+            ]
+        )
+        await msg.reply_text(
+            "📭 Подій не знайдено за вибраним критерієм.",
+            reply_markup=reply_markup,
+        )
         return ConversationHandler.END
 
     total_pages = max(1, ceil(len(rows) / PAGE_SIZE))
@@ -220,8 +251,26 @@ async def _show_page(msg, context: ContextTypes.DEFAULT_TYPE) -> int:
     return SHOW_PAGE
 
 
+async def retry_event_filter(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Restart event viewing after empty result."""
+    query = update.callback_query
+    await query.answer()
+    return await _start_msg(query.message, context)
+
+
+async def cancel_event_filter(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Cancel viewing events after empty result."""
+    query = update.callback_query
+    await query.answer()
+    await query.message.edit_text("❌ Перегляд подій завершено.")
+    return ConversationHandler.END
+
+
 view_events_conv = ConversationHandler(
-    entry_points=[MessageHandler(filters.Regex("^📅 Події за датою$"), start)],
+    entry_points=[
+        MessageHandler(filters.Regex("^📅 Події за датою$"), start),
+        CallbackQueryHandler(retry_event_filter, pattern="^retry_event_filter$"),
+    ],
     states={
         MODE_CHOOSE: [MessageHandler(filters.TEXT & ~filters.COMMAND, mode_input)],
         SHOW_PAGE: [
