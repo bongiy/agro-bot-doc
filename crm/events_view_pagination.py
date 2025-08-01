@@ -71,7 +71,7 @@ async def _show_today(msg) -> int:
         .order_by(CRMEvent.c.event_datetime.asc())
     )
     if not rows:
-        await msg.reply_text("📭 Подій на сьогодні немає")
+        await msg.reply_text("📭 Подій не знайдено.")
         return ConversationHandler.END
     texts = [await format_event(r) for r in rows]
     await msg.reply_text("\n\n".join(texts))
@@ -191,7 +191,7 @@ async def _show_page(msg, context: ContextTypes.DEFAULT_TYPE) -> int:
     rows = context.user_data.get("ev_rows", [])
     page = context.user_data.get("ev_page", 0)
     if not rows:
-        await msg.reply_text("Подій не знайдено.")
+        await msg.reply_text("📭 Подій не знайдено.")
         return ConversationHandler.END
 
     total_pages = max(1, ceil(len(rows) / PAGE_SIZE))
