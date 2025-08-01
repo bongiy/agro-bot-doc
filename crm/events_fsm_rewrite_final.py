@@ -5,7 +5,13 @@ from datetime import datetime
 
 import sqlalchemy
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, ConversationHandler, CallbackQueryHandler
+from telegram.ext import (
+    ContextTypes,
+    ConversationHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    filters,
+)
 
 from db import database, CRMEvent
 from crm.event_utils import format_event
@@ -15,6 +21,7 @@ SELECT_VIEW_MODE, SHOW_EVENTS = range(2)
 
 async def start_event_view(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Show event view mode selection."""
+    print("\u2705 FSM view_events \u2014 STARTED")
     context.user_data.clear()
     buttons = [
         [InlineKeyboardButton("1️⃣ Події на сьогодні", callback_data="view_today")],
@@ -108,7 +115,10 @@ async def retry_view(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 view_event_conv = ConversationHandler(
-    entry_points=[CallbackQueryHandler(start_event_view, pattern="^view_events$")],
+    entry_points=[
+        MessageHandler(filters.Regex("^📋 Переглянути події$"), start_event_view),
+        CallbackQueryHandler(start_event_view, pattern="^view_events$"),
+    ],
     states={
         SELECT_VIEW_MODE: [
             CallbackQueryHandler(view_today_handler, pattern="^view_today$"),
