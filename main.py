@@ -81,6 +81,7 @@ from crm.events_fsm_rewrite_final import view_event_conv
 from crm.events_integration import add_event_from_card_conv
 from crm.event_reminders import start_reminder_tasks, stop_reminder_tasks
 from crm.payer_request import add_request_conv
+from crm.fsm_view_payer_requests import view_requests_conv
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
@@ -154,6 +155,7 @@ application.add_handler(add_event_conv)
 application.add_handler(add_event_from_card_conv)
 application.add_handler(view_event_conv)
 application.add_handler(add_request_conv)
+application.add_handler(view_requests_conv)
 
 application.add_handler(add_land_conv)
 application.add_handler(MessageHandler(filters.Regex("^📋 Список ділянок$"), show_lands))
