@@ -265,7 +265,7 @@ async def _show_card(msg, context: ContextTypes.DEFAULT_TYPE, rid: int) -> int:
     kb = []
     if row["document_path"]:
         kb.append([InlineKeyboardButton("📎 Переглянути документ", callback_data=f"doc:{rid}")])
-    kb.append([InlineKeyboardButton("✏️ Змінити статус", callback_data=f"chg_status:{rid}")])
+    kb.append([InlineKeyboardButton("✏️ Редагувати", callback_data=f"update_request:{rid}")])
     kb.append([InlineKeyboardButton("❌ Видалити", callback_data=f"del:{rid}")])
     kb.append([InlineKeyboardButton("🔙 Назад", callback_data="back_list")])
     await msg.edit_text(text, reply_markup=InlineKeyboardMarkup(kb))
