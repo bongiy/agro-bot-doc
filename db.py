@@ -241,6 +241,20 @@ PotentialLandPlot = sqlalchemy.Table(
     sqlalchemy.Column("area", sqlalchemy.Float),
 )
 
+# === Таблиця звернень пайовиків ===
+PayerRequest = sqlalchemy.Table(
+    "payer_requests",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("payer_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("payer.id")),
+    sqlalchemy.Column("type", sqlalchemy.String),
+    sqlalchemy.Column("description", sqlalchemy.String),
+    sqlalchemy.Column("date_submitted", sqlalchemy.Date),
+    sqlalchemy.Column("status", sqlalchemy.String),
+    sqlalchemy.Column("document_path", sqlalchemy.String),
+    sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
+)
+
 # === Таблиця подій CRM ===
 CRMEvent = sqlalchemy.Table(
     "crm_events",
