@@ -454,6 +454,12 @@ async def delete_land(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await database.execute(
             UploadedDocs.delete().where(UploadedDocs.c.id.in_([d["id"] for d in docs]))
         )
+
+    # Remove owners linked to the land plot before deleting the plot itself
+    await database.execute(
+        LandPlotOwner.delete().where(LandPlotOwner.c.land_plot_id == land_id)
+    )
+
     await database.execute(LandPlot.delete().where(LandPlot.c.id == land_id))
     linked = f"docs:{len(docs)}" if docs else ""
     await log_delete(update.effective_user.id, user["role"], "land", land_id, land.cadaster, linked)

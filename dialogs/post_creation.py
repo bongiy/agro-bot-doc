@@ -15,7 +15,9 @@ async def prompt_add_docs(
     context.user_data["post_create_msg"] = final_text
     context.user_data["post_create_markup"] = final_markup
 
-    await update.message.reply_text(
+    msg = update.message or update.callback_query.message
+
+    await msg.reply_text(
         "✅ Об’єкт створено.\n📎 Бажаєте одразу додати документи?",
         reply_markup=InlineKeyboardMarkup(
             [
