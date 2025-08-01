@@ -39,11 +39,12 @@ from utils.fsm_navigation import (
     CHOOSE_TYPE,
     CUSTOM_TYPE,
     DESCRIPTION,
+    DATE_CHOICE,
     DATE_INPUT,
     STATUS_CHOOSE,
     DOCUMENT,
     CONFIRM,
-) = range(9)
+) = range(10)
 
 REQUEST_TYPES = {
     "pay": "Заява на виплату",
@@ -178,12 +179,40 @@ async def description_input(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.message.reply_text("До 500 символів. Спробуйте ще:")
         return DESCRIPTION
     context.user_data["description"] = text
-    push_state(context, DATE_INPUT)
-    await update.message.reply_text(
-        "Введіть дату звернення (ДД.ММ.РРРР) або '-' для сьогодні:",
-        reply_markup=back_cancel_keyboard,
+    push_state(context, DATE_CHOICE)
+    kb = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("\U0001F4C5 Сьогодні", callback_data="today")],
+            [InlineKeyboardButton("\u2328\ufe0f Ввести вручну", callback_data="manual")],
+        ]
     )
-    return DATE_INPUT
+    await update.message.reply_text("Оберіть дату звернення:", reply_markup=kb)
+    return DATE_CHOICE
+
+
+async def date_choice_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    choice = query.data
+    if choice == "today":
+        context.user_data["date_submitted"] = datetime.utcnow().date()
+        push_state(context, STATUS_CHOOSE)
+        keyboard = [
+            [InlineKeyboardButton(txt, callback_data=f"status:{key}")]
+            for key, txt in STATUS_TYPES.items()
+        ]
+        await query.message.edit_text(
+            "Оберіть статус:", reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return STATUS_CHOOSE
+    if choice == "manual":
+        push_state(context, DATE_INPUT)
+        await query.message.edit_text(
+            "Введіть дату звернення (ДД.ММ.РРРР):",
+            reply_markup=back_cancel_keyboard,
+        )
+        return DATE_INPUT
+    return DATE_CHOICE
 
 
 async def date_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -191,14 +220,11 @@ async def date_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if result is not None:
         return result
     text = update.message.text.strip()
-    if text == "-":
-        date_val = datetime.utcnow().date()
-    else:
-        try:
-            date_val = datetime.strptime(text, "%d.%m.%Y").date()
-        except ValueError:
-            await update.message.reply_text("Формат дати ДД.ММ.РРРР або '-':")
-            return DATE_INPUT
+    try:
+        date_val = datetime.strptime(text, "%d.%m.%Y").date()
+    except ValueError:
+        await update.message.reply_text("Формат дати ДД.ММ.РРРР:")
+        return DATE_INPUT
     context.user_data["date_submitted"] = date_val
     push_state(context, STATUS_CHOOSE)
     keyboard = [
@@ -331,6 +357,7 @@ add_request_conv = ConversationHandler(
         CHOOSE_TYPE: [CallbackQueryHandler(type_cb, pattern=r"^rtype:\w+$")],
         CUSTOM_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, custom_type_input)],
         DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, description_input)],
+        DATE_CHOICE: [CallbackQueryHandler(date_choice_cb, pattern=r"^(today|manual)$")],
         DATE_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, date_input)],
         STATUS_CHOOSE: [CallbackQueryHandler(status_cb, pattern=r"^status:\w+$")],
         DOCUMENT: [MessageHandler(filters.Document.ALL | filters.PHOTO, document_input)],
