@@ -31,7 +31,9 @@ from crm.event_utils import format_event
 
 
 # conversation states for date filtering
-FILTER_DATE_MODE, FILTER_DATES_LIST, FILTER_ALL_EVENTS = range(3)
+# These values must match the states defined in ``crm.events`` since
+# ``events.py`` delegates part of its conversation flow to this module.
+FILTER_DATE_MODE, FILTER_DATES_LIST, FILTER_ALL_EVENTS = range(101, 104)
 PAGE_SIZE = 5
 
 
