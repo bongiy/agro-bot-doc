@@ -262,7 +262,11 @@ async def cancel_event_filter(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Cancel viewing events after empty result."""
     query = update.callback_query
     await query.answer()
-    await query.message.edit_text("❌ Перегляд подій завершено.")
+    context.user_data.clear()
+    await query.edit_message_text(
+        "❌ Перегляд подій завершено.",
+        reply_markup=None,
+    )
     return ConversationHandler.END
 
 
