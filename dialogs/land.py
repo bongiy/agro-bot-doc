@@ -2,7 +2,12 @@ import os
 import unicodedata
 import re
 from telegram import (
-    Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove, InputFile
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+    InputFile,
 )
 from telegram.ext import (
     ContextTypes, ConversationHandler, MessageHandler, CallbackQueryHandler, filters
@@ -113,6 +118,11 @@ async def council_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["council"] = council
     await query.answer()
     await query.message.edit_text(f"Обрано: {council}")
+    preset = context.user_data.get("preset_payer")
+    if preset:
+        context.user_data["owner_count"] = 1
+        context.user_data["owners"] = [preset]
+        return await finalize_land(update, context)
     await query.message.reply_text("Скільки власників має ділянка?")
     return ASK_OWNER_COUNT
 
@@ -136,6 +146,11 @@ async def set_district(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def set_council(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["council"] = update.message.text.strip()
+    preset = context.user_data.get("preset_payer")
+    if preset:
+        context.user_data["owner_count"] = 1
+        context.user_data["owners"] = [preset]
+        return await finalize_land(update, context)
     await update.message.reply_text("Скільки власників має ділянка?")
     return ASK_OWNER_COUNT
 
@@ -256,8 +271,24 @@ async def finalize_land(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 
+
+async def start_land_for_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    payer_id = int(query.data.split(":")[1])
+    await query.answer()
+    context.user_data.clear()
+    context.user_data["preset_payer"] = payer_id
+    await query.message.reply_text(
+        "Введіть кадастровий номер ділянки (19 цифр):",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    return ASK_CADASTER
+
 add_land_conv = ConversationHandler(
-    entry_points=[MessageHandler(filters.Regex("^➕ Додати ділянку$"), add_land_start)],
+    entry_points=[
+        MessageHandler(filters.Regex("^➕ Додати ділянку$"), add_land_start),
+        CallbackQueryHandler(start_land_for_payer, pattern=r"^start_land:\d+$"),
+    ],
     states={
         ASK_CADASTER: [MessageHandler(filters.TEXT & ~filters.COMMAND, land_cadaster)],
         ASK_AREA: [MessageHandler(filters.TEXT & ~filters.COMMAND, land_area)],
