@@ -259,14 +259,19 @@ async def retry_event_filter(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def cancel_event_filter(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Cancel viewing events after empty result."""
-    query = update.callback_query
-    await query.answer()
+    """Fully terminate the FSM when cancelling event viewing."""
     context.user_data.clear()
-    await query.edit_message_text(
-        "❌ Перегляд подій завершено.",
-        reply_markup=None,
-    )
+
+    if update.callback_query:
+        query = update.callback_query
+        await query.answer()
+        await query.edit_message_text(
+            "❌ Перегляд подій завершено.",
+            reply_markup=None,  # обовʼязкове очищення кнопок
+        )
+    else:
+        await update.message.reply_text("❌ Перегляд подій завершено.")
+
     return ConversationHandler.END
 
 
