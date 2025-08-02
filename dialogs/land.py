@@ -171,9 +171,12 @@ async def set_owner_count(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Спочатку додайте хоча б одного пайовика!", reply_markup=lands_menu)
         return ConversationHandler.END
     kb = ReplyKeyboardMarkup(
-        [[f"{p['id']}: {p['name']}"] for p in payers] + [["🔍 Пошук за ПІБ"]], resize_keyboard=True
+        [[f"{p['id']}: {'⚰️ ' if p['is_deceased'] else ''}{p['name']}"] for p in payers] + [["🔍 Пошук за ПІБ"]],
+        resize_keyboard=True,
     )
-    context.user_data["payers"] = {f"{p['id']}: {p['name']}": p["id"] for p in payers}
+    context.user_data["payers"] = {
+        f"{p['id']}: {'⚰️ ' if p['is_deceased'] else ''}{p['name']}": p["id"] for p in payers
+    }
     await update.message.reply_text(
         f"Оберіть власника 1 з {count}:", reply_markup=kb
     )
@@ -205,10 +208,12 @@ async def search_owner(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Нічого не знайдено. Спробуйте ще:")
         return SEARCH_OWNER
     kb = ReplyKeyboardMarkup(
-        [[f"{r['id']}: {r['name']}"] for r in rows] + [["◀️ Назад"]],
+        [[f"{r['id']}: {'⚰️ ' if r['is_deceased'] else ''}{r['name']}"] for r in rows] + [["◀️ Назад"]],
         resize_keyboard=True,
     )
-    context.user_data["search_results"] = {f"{r['id']}: {r['name']}": r["id"] for r in rows}
+    context.user_data["search_results"] = {
+        f"{r['id']}: {'⚰️ ' if r['is_deceased'] else ''}{r['name']}": r["id"] for r in rows
+    }
     await update.message.reply_text("Оберіть пайовика:", reply_markup=kb)
     return CHOOSE_OWNER
 

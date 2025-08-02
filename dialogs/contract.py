@@ -393,12 +393,12 @@ async def set_valid_from(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sqlalchemy.select(Payer).order_by(Payer.c.id.desc()).limit(3)
     )
     kb = ReplyKeyboardMarkup(
-        [[f"{p['id']}: {p['name']}"] for p in payers]
+        [[f"{p['id']}: {'⚰️ ' if p['is_deceased'] else ''}{p['name']}"] for p in payers]
         + [["🔍 Пошук пайовика"], ["➕ Створити пайовика"], [BACK_BTN, CANCEL_BTN]],
         resize_keyboard=True,
     )
     context.user_data["recent_payers"] = {
-        f"{p['id']}: {p['name']}": p["id"] for p in payers
+        f"{p['id']}: {'⚰️ ' if p['is_deceased'] else ''}{p['name']}": p["id"] for p in payers
     }
     await update.message.reply_text("Оберіть пайовика:", reply_markup=kb)
     await update.message.reply_text("⬇️ Навігація", reply_markup=back_cancel_kb)
@@ -414,6 +414,14 @@ async def choose_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     payer_id = context.user_data.get("recent_payers", {}).get(text)
     if payer_id:
+        row = await database.fetch_one(
+            sqlalchemy.select(Payer.c.is_deceased).where(Payer.c.id == payer_id)
+        )
+        if row and row["is_deceased"]:
+            await update.message.reply_text(
+                "❌ Неможливо додати договір чи виплату. Пайовик позначений як померлий."
+            )
+            return CHOOSE_PAYER
         context.user_data["payer_id"] = payer_id
     elif text in ("🔍 Пошук пайовика", "➕ Створити пайовика"):
         await update.message.reply_text("🔜 Функція в розробці")
