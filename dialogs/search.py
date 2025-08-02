@@ -1,9 +1,26 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ConversationHandler, MessageHandler, CommandHandler, filters, ContextTypes
+from telegram.ext import (
+    ConversationHandler,
+    MessageHandler,
+    CommandHandler,
+    filters,
+    ContextTypes,
+)
 from dialogs.payer import to_menu
-from db import database, Payer, LandPlot
+from db import (
+    database,
+    Payer,
+    LandPlot,
+    Contract,
+    Company,
+    PayerContract,
+)
+from keyboards.menu import search_menu, contracts_menu
+from utils.payers import get_payers_for_contract
+from utils.names import format_payers_line
 import sqlalchemy
 import re
+import html
 
 
 def format_cadaster(text: str) -> str | None:
@@ -14,6 +31,7 @@ def format_cadaster(text: str) -> str | None:
 
 SEARCH_INPUT = 1001  # Унікальний стан пошуку
 SEARCH_LAND_INPUT = 1002
+SEARCH_CONTRACT_INPUT = 1003
 
 async def payer_search_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Введіть ID, ІПН, телефон або фрагмент ПІБ для пошуку пайовика:")
@@ -93,6 +111,72 @@ search_land_conv = ConversationHandler(
     entry_points=[MessageHandler(filters.Regex("^🔍 Пошук ділянки$"), land_search_start)],
     states={
         SEARCH_LAND_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, land_search_do)],
+    },
+    fallbacks=[CommandHandler("start", to_menu)],
+)
+
+
+async def contract_search_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Введіть номер договору або ПІБ пайовика:")
+    return SEARCH_CONTRACT_INPUT
+
+
+async def contract_search_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.message.text.strip()
+    payer_direct = sqlalchemy.alias(Payer, name="payer_direct")
+    query = (
+        sqlalchemy.select(
+            Contract.c.id,
+            Contract.c.number,
+            Company.c.short_name,
+            Company.c.full_name,
+        )
+        .select_from(Contract)
+        .join(Company, Company.c.id == Contract.c.company_id)
+        .outerjoin(PayerContract, PayerContract.c.contract_id == Contract.c.id)
+        .outerjoin(Payer, Payer.c.id == PayerContract.c.payer_id)
+        .outerjoin(payer_direct, payer_direct.c.id == Contract.c.payer_id)
+        .where(
+            (Contract.c.number.ilike(f"%{q}%"))
+            | (Payer.c.name.ilike(f"%{q}%"))
+            | (payer_direct.c.name.ilike(f"%{q}%"))
+        )
+        .distinct()
+    )
+    rows = await database.fetch_all(query)
+    if not rows:
+        await update.message.reply_text("❗ Договір не знайдено.")
+    else:
+        for r in rows:
+            cname = html.escape(r["short_name"] or r["full_name"] or "—")
+            payers = await get_payers_for_contract(r["id"])
+            text = (
+                f"📄 Договір №{html.escape(r['number'])}\n"
+                f"{format_payers_line(payers)}\n"
+                f"🏢 Орендар: {cname}"
+            )
+            btn = InlineKeyboardButton(
+                "Картка", callback_data=f"agreement_card:{r['id']}"
+            )
+            await update.message.reply_text(
+                text, reply_markup=InlineKeyboardMarkup([[btn]]), parse_mode="HTML"
+            )
+
+    if context.user_data.get("last_menu") == "contracts":
+        await update.message.reply_text(
+            "Меню «Договори»", reply_markup=contracts_menu
+        )
+    else:
+        await update.message.reply_text(
+            "Меню «Пошук»", reply_markup=search_menu
+        )
+    return ConversationHandler.END
+
+
+search_contract_conv = ConversationHandler(
+    entry_points=[MessageHandler(filters.Regex("^🔍 Пошук договору$"), contract_search_start)],
+    states={
+        SEARCH_CONTRACT_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, contract_search_do)],
     },
     fallbacks=[CommandHandler("start", to_menu)],
 )

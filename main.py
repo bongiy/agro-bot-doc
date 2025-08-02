@@ -24,7 +24,7 @@ from dialogs.payer import (
     to_menu
 )
 from dialogs.edit_payer import edit_payer_conv
-from dialogs.search import search_payer_conv, search_land_conv
+from dialogs.search import search_payer_conv, search_land_conv, search_contract_conv
 from dialogs.field import add_field_conv, show_fields, delete_field, delete_field_prompt, to_fields_list, field_card, edit_field
 from dialogs.land import (
     add_land_conv,
@@ -146,6 +146,7 @@ application.add_handler(add_payer_conv)
 application.add_handler(MessageHandler(filters.Regex("^📋 Список пайовиків$"), show_payers))
 application.add_handler(search_payer_conv)
 application.add_handler(search_land_conv)
+application.add_handler(search_contract_conv)
 application.add_handler(edit_payer_conv)
 application.add_handler(global_add_payment_conv)
 application.add_handler(MessageHandler(filters.Regex("^📋 Перелік виплат$"), show_payments))

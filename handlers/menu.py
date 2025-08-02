@@ -87,6 +87,7 @@ async def fields_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text("Меню «Поля»", reply_markup=fields_menu)
 
 async def contracts_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["last_menu"] = "contracts"
     await update.message.reply_text("Меню «Договори»", reply_markup=contracts_menu)
 
 async def payments_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -96,6 +97,7 @@ async def reports_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text("Меню «Звіти»", reply_markup=reports_menu)
 
 async def search_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["last_menu"] = "search"
     await update.message.reply_text("Меню «Пошук»", reply_markup=search_menu)
 
 async def crm_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
