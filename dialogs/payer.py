@@ -19,7 +19,15 @@ from telegram.ext import (
     filters,
 )
 from telegram.constants import ParseMode
-from db import database, Payer, UploadedDocs, Heir
+from db import (
+    database,
+    Payer,
+    UploadedDocs,
+    Heir,
+    InheritanceTransfer,
+    LandPlot,
+    Contract,
+)
 from dialogs.post_creation import prompt_add_docs
 from keyboards.menu import payers_menu, main_menu
 from ftp_utils import download_file_ftp, delete_file_ftp
@@ -592,6 +600,29 @@ async def payer_card(update, context):
         if heir_lines:
             text += "\n\n<b>Спадкоємці:</b>\n" + "\n".join(heir_lines)
 
+    if payer["is_deceased"]:
+        transfers = await database.fetch_all(
+            InheritanceTransfer.select().where(
+                InheritanceTransfer.c.deceased_payer_id == payer_id
+            )
+        )
+        land_ids = [t["asset_id"] for t in transfers if t["asset_type"] == "land"]
+        contract_ids = [t["asset_id"] for t in transfers if t["asset_type"] == "contract"]
+        if land_ids:
+            lands = await database.fetch_all(
+                sqlalchemy.select(LandPlot.c.cadaster).where(LandPlot.c.id.in_(land_ids))
+            )
+            text += "\n\n<b>Успадковані ділянки:</b>\n" + "\n".join(
+                l["cadaster"] for l in lands
+            )
+        if contract_ids:
+            contracts = await database.fetch_all(
+                sqlalchemy.select(Contract.c.number).where(Contract.c.id.in_(contract_ids))
+            )
+            text += "\n<b>Успадковані договори:</b>\n" + "\n".join(
+                c["number"] for c in contracts
+            )
+
     as_heir = await database.fetch_one(
         Heir.select().where(Heir.c.heir_payer_id == payer_id)
     )
@@ -603,6 +634,30 @@ async def payer_card(update, context):
             text += (
                 f"\n\n<b>Спадкоємець від:</b> {deceased['name']} "
                 f"(ID: {deceased['id']})"
+            )
+        docs = ", ".join(os.path.basename(d) for d in as_heir["documents"] or [])
+        if docs:
+            text += f"\nДокументи: {docs}"
+        transfers = await database.fetch_all(
+            InheritanceTransfer.select().where(
+                InheritanceTransfer.c.heir_payer_id == payer_id
+            )
+        )
+        land_ids = [t["asset_id"] for t in transfers if t["asset_type"] == "land"]
+        contract_ids = [t["asset_id"] for t in transfers if t["asset_type"] == "contract"]
+        if land_ids:
+            lands = await database.fetch_all(
+                sqlalchemy.select(LandPlot.c.cadaster).where(LandPlot.c.id.in_(land_ids))
+            )
+            text += "\n\n<b>Отримані ділянки:</b>\n" + "\n".join(
+                l["cadaster"] for l in lands
+            )
+        if contract_ids:
+            contracts = await database.fetch_all(
+                sqlalchemy.select(Contract.c.number).where(Contract.c.id.in_(contract_ids))
+            )
+            text += "\n<b>Отримані договори:</b>\n" + "\n".join(
+                c["number"] for c in contracts
             )
 
     from crm.events_integration import get_events_text, events_button

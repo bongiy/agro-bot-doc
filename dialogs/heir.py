@@ -14,11 +14,11 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
-from db import database, Payer, add_heir as db_add_heir
+from db import database, Payer, add_heir as db_add_heir, transfer_assets_to_heir
 from ftp_utils import upload_file_ftp
 
 # FSM states
-CONFIRM, HEIR_ID, COLLECT_DOCS, TRANSFER, PAYMENT = range(5)
+CONFIRM, HEIR_ID, COLLECT_DOCS, PAYMENT = range(4)
 
 BACK_BTN = "⬅️ Назад"
 CANCEL_BTN = "❌ Скасувати"
@@ -166,26 +166,17 @@ async def finish_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     deceased_id = context.user_data.get("deceased_id")
     heir_id = context.user_data.get("heir_id")
     await db_add_heir(deceased_id, heir_id, documents=docs)
+    land_cnt, contract_cnt = await transfer_assets_to_heir(deceased_id, heir_id)
     await update.message.reply_text(
         "Спадкоємця додано.", reply_markup=ReplyKeyboardRemove()
     )
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Перенести ділянки", callback_data="transfer_land")],
-        [InlineKeyboardButton("Перенести договори", callback_data="transfer_contract")],
-        [InlineKeyboardButton("Пропустити", callback_data="transfer_skip")],
-    ])
-    await update.message.reply_text(
-        "Бажаєте перенести ділянки чи договори?", reply_markup=keyboard
-    )
-    return TRANSFER
-
-async def transfer_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("Так", callback_data="pay_yes"), InlineKeyboardButton("Ні", callback_data="pay_no")]
     ])
-    await query.message.edit_text(
-        "Пропозиція виплатити спадкоємцю зараз?", reply_markup=keyboard
+    await update.message.reply_text(
+        f"Передано {land_cnt} ділянок та {contract_cnt} договорів.\n"
+        "Пропозиція виплатити спадкоємцю зараз?",
+        reply_markup=keyboard,
     )
     return PAYMENT
 
@@ -205,7 +196,6 @@ add_heir_conv = ConversationHandler(
         HEIR_ID: [CallbackQueryHandler(choose_heir, pattern=r"^heir_(existing|new|cancel)$"),
                   MessageHandler(filters.TEXT & ~filters.COMMAND, receive_heir_id)],
         COLLECT_DOCS: [MessageHandler(filters.Document.ALL | filters.PHOTO | filters.TEXT, collect_docs)],
-        TRANSFER: [CallbackQueryHandler(transfer_step, pattern=r"^transfer_(land|contract|skip)$")],
         PAYMENT: [CallbackQueryHandler(payment_step, pattern=r"^pay_(yes|no)$")],
     },
     fallbacks=[],
