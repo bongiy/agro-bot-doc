@@ -59,6 +59,7 @@ from dialogs.payment import (
     select_payer_cb,
     select_contract_cb,
     show_payments,
+    list_inheritance_debts,
     payment_reports_start,
     payment_report_cb,
     payment_report_csv_cb,
@@ -152,6 +153,7 @@ application.add_handler(search_contract_conv)
 application.add_handler(edit_payer_conv)
 application.add_handler(global_add_payment_conv)
 application.add_handler(MessageHandler(filters.Regex("^📋 Перелік виплат$"), show_payments))
+application.add_handler(MessageHandler(filters.Regex("^🔍 Борг перед спадкоємцем$"), list_inheritance_debts))
 application.add_handler(MessageHandler(filters.Regex("^💳 Звіти по виплатах$"), payment_reports_start))
 
 # --- Потенційні пайовики ---

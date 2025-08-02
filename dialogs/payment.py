@@ -22,6 +22,8 @@ from db import (
     Payer,
     ContractLandPlot,
     LandPlot,
+    InheritanceDebt,
+    settle_inheritance_debt,
 )
 from contract_generation_v2 import format_money
 
@@ -155,16 +157,23 @@ async def payment_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     cid = context.user_data.get("payment_contract_id")
-    await database.execute(
+    amount = context.user_data.get("payment_amount")
+    notes = context.user_data.get("payment_notes")
+    payment_id = await database.execute(
         Payment.insert().values(
             agreement_id=cid,
-            amount=context.user_data.get("payment_amount"),
+            amount=amount,
             payment_date=context.user_data.get("payment_date"),
             payment_type=context.user_data.get("payment_type"),
-            notes=context.user_data.get("payment_notes"),
+            notes=notes,
             created_at=datetime.utcnow(),
         )
     )
+    new_notes = await settle_inheritance_debt(cid, payment_id, amount, notes)
+    if new_notes != (notes or ""):
+        await database.execute(
+            Payment.update().where(Payment.c.id == payment_id).values(notes=new_notes)
+        )
     context.user_data.clear()
     await query.message.edit_text(
         "✅ Виплату збережено",
@@ -302,6 +311,36 @@ async def show_payments(update: Update, context: ContextTypes.DEFAULT_TYPE):
             callback_data=f"agreement_card:{r['agreement_id']}",
         )
         await msg.reply_text(text, reply_markup=InlineKeyboardMarkup([[btn]]))
+
+
+async def list_inheritance_debts(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message if update.message else update.callback_query.message
+    rows = await database.fetch_all(
+        sqlalchemy.select(
+            Contract.c.number,
+            Payer.c.name,
+            InheritanceDebt.c.amount,
+        )
+        .select_from(InheritanceDebt)
+        .join(Contract, Contract.c.id == InheritanceDebt.c.contract_id)
+        .join(Payer, Payer.c.id == InheritanceDebt.c.heir_id)
+        .where(InheritanceDebt.c.paid == False)
+        .where(InheritanceDebt.c.heir_id.isnot(None))
+    )
+    if not rows:
+        await msg.reply_text("Боргів не знайдено.")
+        return
+    total = 0.0
+    lines = ["Список боргів перед спадкоємцями:", ""]
+    for r in rows:
+        amt = float(r["amount"] or 0)
+        total += amt
+        lines.append(
+            f"\U0001F4C4 №{r['number']} — {format_money(amt)} — {short_fio(r['name'])}"
+        )
+    lines.append("")
+    lines.append(f"Всього боргу: {format_money(total)}")
+    await msg.reply_text("\n".join(lines))
 
 
 # ==== ЗВІТИ ПО ВИПЛАТАХ ====
