@@ -47,6 +47,7 @@ from contract_generation_v2 import (
 )
 from template_utils import analyze_template, build_unresolved_message
 import sqlalchemy
+from utils.names import short_name
 
 logger = logging.getLogger(__name__)
 
@@ -538,17 +539,20 @@ async def show_contracts(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for r in rows:
         cname = r["short_name"] or r["full_name"] or "—"
         payers = [p for p in (r["payer_names"] or []) if p]
-        if not payers:
+        payer_names = [short_name(p) for p in payers]
+        if not payer_names:
             payer_line = "👤 Пайовик: —"
-        elif len(payers) == 1:
-            payer_line = f"👤 Пайовик: {html.escape(payers[0])}"
+        elif len(payer_names) == 1:
+            payer_line = f"👤 Пайовик: {html.escape(payer_names[0])}"
         else:
-            payer_line = f"👤 Пайовик: {html.escape(payers[0])} +{len(payers) - 1} ще"
+            shown = ", ".join(html.escape(n) for n in payer_names[:2])
+            if len(payer_names) > 2:
+                shown += f" +{len(payer_names) - 2} ще..."
+            payer_line = f"🧑‍🤝‍🧑 Пайовики: {shown}"
         btn = InlineKeyboardButton("Картка", callback_data=f"agreement_card:{r['id']}")
         number_part = html.escape(r["number"])
-        year_part = f"/{int(r['year'])}" if r["year"] else ""
         text = (
-            f"📄 Договір №{number_part}{year_part}\n"
+            f"📄 Договір №{number_part}\n"
             f"{payer_line}\n"
             f"🏢 Орендар: {html.escape(cname)}"
         )
