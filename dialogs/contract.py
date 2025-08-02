@@ -48,6 +48,7 @@ from contract_generation_v2 import (
 from template_utils import analyze_template, build_unresolved_message
 import sqlalchemy
 from utils.names import format_payers_line
+from utils.payers import get_payers_for_contract
 
 logger = logging.getLogger(__name__)
 
@@ -510,8 +511,6 @@ add_contract_conv = ConversationHandler(
 async def show_contracts(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message if update.message else update.callback_query.message
 
-    payer_name_col = getattr(Payer.c, "full_name", Payer.c.name)
-
     rows = await database.fetch_all(
         sqlalchemy.select(
             Contract.c.id,
@@ -519,26 +518,16 @@ async def show_contracts(update: Update, context: ContextTypes.DEFAULT_TYPE):
             sqlalchemy.extract("year", Contract.c.date_signed).label("year"),
             Company.c.short_name,
             Company.c.full_name,
-            sqlalchemy.func.array_agg(payer_name_col).label("payer_names"),
         )
         .select_from(Contract)
         .join(Company, Company.c.id == Contract.c.company_id)
-        .outerjoin(PayerContract, PayerContract.c.contract_id == Contract.c.id)
-        .outerjoin(Payer, Payer.c.id == PayerContract.c.payer_id)
-        .group_by(
-            Contract.c.id,
-            Contract.c.number,
-            Contract.c.date_signed,
-            Company.c.short_name,
-            Company.c.full_name,
-        )
     )
     if not rows:
         await msg.reply_text("Договори ще не створені.", reply_markup=contracts_menu)
         return
     for r in rows:
         cname = r["short_name"] or r["full_name"] or "—"
-        payers = [p for p in (r["payer_names"] or []) if p]
+        payers = await get_payers_for_contract(r["id"])
         payer_line = format_payers_line(payers)
         btn = InlineKeyboardButton("Картка", callback_data=f"agreement_card:{r['id']}")
         number_part = html.escape(r["number"])
