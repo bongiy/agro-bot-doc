@@ -23,6 +23,7 @@ from dialogs.payer import (
     add_payer_conv, show_payers, payer_card, delete_payer, delete_payer_prompt,
     to_menu
 )
+from dialogs.heir import add_heir_conv
 from dialogs.edit_payer import edit_payer_conv
 from dialogs.search import search_payer_conv, search_land_conv, search_contract_conv
 from dialogs.field import add_field_conv, show_fields, delete_field, delete_field_prompt, to_fields_list, field_card, edit_field
@@ -143,6 +144,7 @@ application.add_handler(MessageHandler(filters.Regex("^🛡️ Адмінпан�
 
 # --- ПАЙОВИКИ: Підключаємо діалоги до підменю пайовиків
 application.add_handler(add_payer_conv)
+application.add_handler(add_heir_conv)
 application.add_handler(MessageHandler(filters.Regex("^📋 Список пайовиків$"), show_payers))
 application.add_handler(search_payer_conv)
 application.add_handler(search_land_conv)
