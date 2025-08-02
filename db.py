@@ -130,6 +130,26 @@ Heir = sqlalchemy.Table(
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
 )
 
+# === Таблиця передач спадщини ===
+InheritanceTransfer = sqlalchemy.Table(
+    "inheritance_transfer",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column(
+        "deceased_payer_id",
+        sqlalchemy.Integer,
+        sqlalchemy.ForeignKey("payer.id"),
+    ),
+    sqlalchemy.Column(
+        "heir_payer_id",
+        sqlalchemy.Integer,
+        sqlalchemy.ForeignKey("payer.id"),
+    ),
+    sqlalchemy.Column("asset_type", sqlalchemy.String(32)),  # 'land' or 'contract'
+    sqlalchemy.Column("asset_id", sqlalchemy.Integer),
+    sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
+)
+
 # === FTP FILES ===
 UploadedDocs = sqlalchemy.Table(
     "uploaded_docs",
@@ -198,6 +218,89 @@ async def get_heirs(deceased_payer_id: int):
     """Return heirs for a deceased payer."""
     query = Heir.select().where(Heir.c.deceased_payer_id == deceased_payer_id)
     return await database.fetch_all(query)
+
+
+async def transfer_assets_to_heir(deceased_payer_id: int, heir_payer_id: int) -> tuple[int, int]:
+    """Transfer land plots, contracts and payments from deceased to heir."""
+    transferred_land_ids: list[int] = []
+    transferred_contract_ids: list[int] = []
+
+    # Transfer land plots ownership
+    land_rows = await database.fetch_all(
+        sqlalchemy.select(LandPlotOwner.c.land_plot_id).where(
+            LandPlotOwner.c.payer_id == deceased_payer_id
+        )
+    )
+    if land_rows:
+        transferred_land_ids = [r["land_plot_id"] for r in land_rows]
+        await database.execute(
+            LandPlotOwner.update()
+            .where(LandPlotOwner.c.payer_id == deceased_payer_id)
+            .values(payer_id=heir_payer_id)
+        )
+        await database.execute(
+            LandPlot.update()
+            .where(
+                LandPlot.c.id.in_(transferred_land_ids)
+                & (LandPlot.c.payer_id == deceased_payer_id)
+            )
+            .values(payer_id=heir_payer_id)
+        )
+        for lid in transferred_land_ids:
+            await database.execute(
+                InheritanceTransfer.insert().values(
+                    deceased_payer_id=deceased_payer_id,
+                    heir_payer_id=heir_payer_id,
+                    asset_type="land",
+                    asset_id=lid,
+                    created_at=datetime.utcnow(),
+                )
+            )
+
+    # Transfer contracts
+    contract_rows = await database.fetch_all(
+        sqlalchemy.select(PayerContract.c.contract_id)
+        .select_from(
+            PayerContract.join(
+                Contract, PayerContract.c.contract_id == Contract.c.id
+            )
+        )
+        .where(PayerContract.c.payer_id == deceased_payer_id)
+        .where(Contract.c.status != "terminated")
+    )
+    if contract_rows:
+        transferred_contract_ids = [r["contract_id"] for r in contract_rows]
+        await database.execute(
+            PayerContract.update()
+            .where(PayerContract.c.payer_id == deceased_payer_id)
+            .values(payer_id=heir_payer_id)
+        )
+        await database.execute(
+            Contract.update()
+            .where(
+                Contract.c.id.in_(transferred_contract_ids)
+                & (Contract.c.payer_id == deceased_payer_id)
+            )
+            .values(payer_id=heir_payer_id)
+        )
+        for cid in transferred_contract_ids:
+            await database.execute(
+                InheritanceTransfer.insert().values(
+                    deceased_payer_id=deceased_payer_id,
+                    heir_payer_id=heir_payer_id,
+                    asset_type="contract",
+                    asset_id=cid,
+                    created_at=datetime.utcnow(),
+                )
+            )
+        # Mark payments
+        await database.execute(
+            Payment.update()
+            .where(Payment.c.agreement_id.in_(transferred_contract_ids))
+            .values(notes="Виплата за спадщину")
+        )
+
+    return len(transferred_land_ids), len(transferred_contract_ids)
 
 # === Таблиця користувачів ===
 User = sqlalchemy.Table(
