@@ -19,7 +19,7 @@ from telegram.ext import (
     filters,
 )
 from telegram.constants import ParseMode
-from db import database, Payer, UploadedDocs
+from db import database, Payer, UploadedDocs, Heir
 from dialogs.post_creation import prompt_add_docs
 from keyboards.menu import payers_menu, main_menu
 from ftp_utils import download_file_ftp, delete_file_ftp
@@ -536,7 +536,7 @@ async def show_payers(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Список порожній!")
         return
     for p in payers:
-        status = " ⚰️" if getattr(p, "is_deceased", False) else ""
+        status = " 🕯" if getattr(p, "is_deceased", False) else ""
         button = InlineKeyboardButton("Картка", callback_data=f"payer_card:{p.id}")
         await update.message.reply_text(
             f"{p.id}. {p.name}{status} (ІПН: {p.ipn})",
@@ -547,7 +547,7 @@ from telegram.constants import ParseMode
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ConversationHandler
 import sqlalchemy
-from db import database, Payer, UploadedDocs
+from db import database, Payer, UploadedDocs, Heir
 
 async def payer_card(update, context):
     query = update.callback_query
@@ -558,7 +558,7 @@ async def payer_card(update, context):
         await query.answer("Пайовик не знайдений!")
         return ConversationHandler.END
 
-    deceased_note = " <i>Помер</i>" if payer["is_deceased"] else ""
+    deceased_note = " <i>🕯 Помер</i>" if payer["is_deceased"] else ""
     text = (
         f"<b>{payer.name}</b>{deceased_note}\n"
         f"🆔 ID: {payer.id}\n"
@@ -573,6 +573,20 @@ async def payer_card(update, context):
         f"🏦 Картка для виплат:\n{payer.bank_card or '-'}\n"
         f"🏠 Адреса: {payer.oblast} обл., {payer.rayon} р-н, с. {payer.selo}, вул. {payer.vul}, буд. {payer.bud}, кв. {payer.kv}"
     )
+
+    heirs = await database.fetch_all(
+        Heir.select().where(Heir.c.deceased_payer_id == payer_id)
+    )
+    if heirs:
+        heir_lines = []
+        for h in heirs:
+            hp = await database.fetch_one(
+                Payer.select().where(Payer.c.id == h["heir_payer_id"])
+            )
+            if hp:
+                heir_lines.append(f"{hp['name']} (ID: {hp['id']})")
+        if heir_lines:
+            text += "\n\n<b>Спадкоємці:</b>\n" + "\n".join(heir_lines)
 
     from crm.events_integration import get_events_text, events_button
     events_block = await get_events_text("payer", payer.id)

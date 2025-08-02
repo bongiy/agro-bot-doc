@@ -44,7 +44,7 @@ async def edit_payer_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sqlalchemy.select(Payer.c.is_deceased).where(Payer.c.id == payer_id)
     )
     status_btn = (
-        "↩️ Зняти статус 'Помер'" if row and row["is_deceased"] else "⚰️ Позначити як померлого"
+        "↩️ Зняти статус 'Помер'" if row and row["is_deceased"] else "🕯 Позначити як померлого"
     )
     keyboard = [
         [InlineKeyboardButton(status_btn, callback_data=f"toggle_deceased:{payer_id}")]

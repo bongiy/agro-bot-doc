@@ -393,12 +393,12 @@ async def set_valid_from(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sqlalchemy.select(Payer).order_by(Payer.c.id.desc()).limit(3)
     )
     kb = ReplyKeyboardMarkup(
-        [[f"{p['id']}: {'⚰️ ' if p['is_deceased'] else ''}{p['name']}"] for p in payers]
+        [[f"{p['id']}: {'🕯 ' if p['is_deceased'] else ''}{p['name']}"] for p in payers]
         + [["🔍 Пошук пайовика"], ["➕ Створити пайовика"], [BACK_BTN, CANCEL_BTN]],
         resize_keyboard=True,
     )
     context.user_data["recent_payers"] = {
-        f"{p['id']}: {'⚰️ ' if p['is_deceased'] else ''}{p['name']}": p["id"] for p in payers
+        f"{p['id']}: {'🕯 ' if p['is_deceased'] else ''}{p['name']}": p["id"] for p in payers
     }
     await update.message.reply_text("Оберіть пайовика:", reply_markup=kb)
     await update.message.reply_text("⬇️ Навігація", reply_markup=back_cancel_kb)

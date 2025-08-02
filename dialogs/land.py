@@ -171,11 +171,11 @@ async def set_owner_count(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Спочатку додайте хоча б одного пайовика!", reply_markup=lands_menu)
         return ConversationHandler.END
     kb = ReplyKeyboardMarkup(
-        [[f"{p['id']}: {'⚰️ ' if p['is_deceased'] else ''}{p['name']}"] for p in payers] + [["🔍 Пошук за ПІБ"]],
+        [[f"{p['id']}: {'🕯 ' if p['is_deceased'] else ''}{p['name']}"] for p in payers] + [["🔍 Пошук за ПІБ"]],
         resize_keyboard=True,
     )
     context.user_data["payers"] = {
-        f"{p['id']}: {'⚰️ ' if p['is_deceased'] else ''}{p['name']}": p["id"] for p in payers
+        f"{p['id']}: {'🕯 ' if p['is_deceased'] else ''}{p['name']}": p["id"] for p in payers
     }
     await update.message.reply_text(
         f"Оберіть власника 1 з {count}:", reply_markup=kb
@@ -190,6 +190,14 @@ async def select_owner(update: Update, context: ContextTypes.DEFAULT_TYPE):
     payer_id = context.user_data["payers"].get(text)
     if not payer_id:
         await update.message.reply_text("Оберіть пайовика зі списку (натисніть кнопку):")
+        return ASK_OWNER
+    row = await database.fetch_one(
+        sqlalchemy.select(Payer.c.is_deceased).where(Payer.c.id == payer_id)
+    )
+    if row and row["is_deceased"]:
+        await update.message.reply_text(
+            "❌ Пайовик позначений як померлий. Оберіть іншого."
+        )
         return ASK_OWNER
     context.user_data["owners"].append(payer_id)
     if len(context.user_data["owners"]) < context.user_data["owner_count"]:
@@ -208,11 +216,11 @@ async def search_owner(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Нічого не знайдено. Спробуйте ще:")
         return SEARCH_OWNER
     kb = ReplyKeyboardMarkup(
-        [[f"{r['id']}: {'⚰️ ' if r['is_deceased'] else ''}{r['name']}"] for r in rows] + [["◀️ Назад"]],
+        [[f"{r['id']}: {'🕯 ' if r['is_deceased'] else ''}{r['name']}"] for r in rows] + [["◀️ Назад"]],
         resize_keyboard=True,
     )
     context.user_data["search_results"] = {
-        f"{r['id']}: {'⚰️ ' if r['is_deceased'] else ''}{r['name']}": r["id"] for r in rows
+        f"{r['id']}: {'🕯 ' if r['is_deceased'] else ''}{r['name']}": r["id"] for r in rows
     }
     await update.message.reply_text("Оберіть пайовика:", reply_markup=kb)
     return CHOOSE_OWNER
@@ -232,6 +240,14 @@ async def choose_owner(update: Update, context: ContextTypes.DEFAULT_TYPE):
     payer_id = context.user_data.get("search_results", {}).get(text)
     if not payer_id:
         await update.message.reply_text("Оберіть зі списку або натисніть '◀️ Назад':")
+        return CHOOSE_OWNER
+    row = await database.fetch_one(
+        sqlalchemy.select(Payer.c.is_deceased).where(Payer.c.id == payer_id)
+    )
+    if row and row["is_deceased"]:
+        await update.message.reply_text(
+            "❌ Пайовик позначений як померлий. Оберіть іншого."
+        )
         return CHOOSE_OWNER
     context.user_data["owners"].append(payer_id)
     if len(context.user_data["owners"]) < context.user_data["owner_count"]:

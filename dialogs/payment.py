@@ -211,7 +211,7 @@ async def global_add_payment_search(update: Update, context: ContextTypes.DEFAUL
     keyboard = [
         [
             InlineKeyboardButton(
-                f"\U0001F464 {'⚰️ ' if r['is_deceased'] else ''}{r['name']}",
+                f"\U0001F464 {'🕯 ' if r['is_deceased'] else ''}{r['name']}",
                 callback_data=f"pay_select:{r['id']}"
             )
         ]

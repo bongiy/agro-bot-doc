@@ -80,7 +80,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     keyboard = [
         [
             InlineKeyboardButton(
-                f"{p['id']}: {'⚰️ ' if p['is_deceased'] else ''}{p['name']}",
+                f"{p['id']}: {'🕯 ' if p['is_deceased'] else ''}{p['name']}",
                 callback_data=f"payer:{p['id']}"
             )
         ]
@@ -121,7 +121,7 @@ async def search_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     keyboard = [
         [
             InlineKeyboardButton(
-                f"{ '⚰️ ' if r['is_deceased'] else ''}{r['name']} (ID:{r['id']})",
+                f"{ '🕯 ' if r['is_deceased'] else ''}{r['name']} (ID:{r['id']})",
                 callback_data=f"payer:{r['id']}"
             )
         ]
