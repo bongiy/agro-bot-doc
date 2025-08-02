@@ -4,6 +4,7 @@ import re
 from datetime import datetime, timedelta
 from typing import Any
 import logging
+import html
 
 from telegram import (
     Update,
@@ -33,6 +34,7 @@ from db import (
     Payer,
     UploadedDocs,
     Payment,
+    PayerContract,
 )
 from keyboards.menu import contracts_menu
 from dialogs.post_creation import prompt_add_docs
@@ -506,22 +508,55 @@ add_contract_conv = ConversationHandler(
 # ==== СПИСОК ТА КАРТКА ====
 async def show_contracts(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message if update.message else update.callback_query.message
-    rows = await database.fetch_all(sqlalchemy.select(Contract))
+
+    def short_name(full_name: str) -> str:
+        parts = full_name.split()
+        if len(parts) >= 2:
+            initials = " ".join(f"{p[0]}." for p in parts[1:3] if p)
+            return f"{parts[0]} {initials}"
+        return full_name
+
+    rows = await database.fetch_all(
+        sqlalchemy.select(
+            Contract.c.id,
+            Contract.c.number,
+            Company.c.short_name,
+            Company.c.full_name,
+            sqlalchemy.func.array_agg(Payer.c.name).label("payers"),
+        )
+        .select_from(Contract)
+        .join(Company, Company.c.id == Contract.c.company_id)
+        .outerjoin(PayerContract, PayerContract.c.contract_id == Contract.c.id)
+        .outerjoin(Payer, Payer.c.id == PayerContract.c.payer_id)
+        .group_by(Contract.c.id, Company.c.short_name, Company.c.full_name)
+    )
     if not rows:
         await msg.reply_text("Договори ще не створені.", reply_markup=contracts_menu)
         return
-    companies = {}
-    comp_ids = {r["company_id"] for r in rows}
-    if comp_ids:
-        comps = await database.fetch_all(sqlalchemy.select(Company).where(Company.c.id.in_(comp_ids)))
-        companies = {c["id"]: c for c in comps}
     for r in rows:
-        comp = companies.get(r["company_id"])
-        cname = comp["short_name"] or comp["full_name"] if comp else "—"
+        cname = r["short_name"] or r["full_name"] or "—"
+        payers = [p for p in (r["payers"] or []) if p]
+        if not payers:
+            payer_line = "👤 Пайовик: —"
+        elif len(payers) == 1:
+            payer_line = f"👤 Пайовик: {html.escape(payers[0])}"
+        else:
+            short_names = [html.escape(short_name(p)) for p in payers]
+            if len(short_names) <= 2:
+                names_part = ", ".join(short_names)
+            else:
+                names_part = ", ".join(short_names[:2]) + f" + {len(short_names) - 2} ще..."
+            payer_line = f"👥 Пайовики: {names_part}"
         btn = InlineKeyboardButton("Картка", callback_data=f"agreement_card:{r['id']}")
+        text = (
+            f"📄 Договір №{html.escape(r['number'])}\n"
+            f"{payer_line}\n"
+            f"🏢 Орендар: {html.escape(cname)}"
+        )
         await msg.reply_text(
-            f"{r['id']}. {r['number']} — {cname}",
+            text,
             reply_markup=InlineKeyboardMarkup([[btn]]),
+            parse_mode="HTML",
         )
 
 

@@ -101,6 +101,15 @@ ContractLandPlot = sqlalchemy.Table(
     sqlalchemy.Column("land_plot_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("land_plot.id")),
 )
 
+# === Звʼязок договір-пайовик (M2M) ===
+PayerContract = sqlalchemy.Table(
+    "payer_contract",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("contract_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("contract.id")),
+    sqlalchemy.Column("payer_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("payer.id")),
+)
+
 # === FTP FILES ===
 UploadedDocs = sqlalchemy.Table(
     "uploaded_docs",
