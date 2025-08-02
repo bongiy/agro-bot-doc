@@ -584,9 +584,26 @@ async def payer_card(update, context):
                 Payer.select().where(Payer.c.id == h["heir_payer_id"])
             )
             if hp:
-                heir_lines.append(f"{hp['name']} (ID: {hp['id']})")
+                docs = ", ".join(os.path.basename(d) for d in h["documents"] or [])
+                line = f"{hp['name']} (ID: {hp['id']})"
+                if docs:
+                    line += f" — {docs}"
+                heir_lines.append(line)
         if heir_lines:
             text += "\n\n<b>Спадкоємці:</b>\n" + "\n".join(heir_lines)
+
+    as_heir = await database.fetch_one(
+        Heir.select().where(Heir.c.heir_payer_id == payer_id)
+    )
+    if as_heir:
+        deceased = await database.fetch_one(
+            Payer.select().where(Payer.c.id == as_heir["deceased_payer_id"])
+        )
+        if deceased:
+            text += (
+                f"\n\n<b>Спадкоємець від:</b> {deceased['name']} "
+                f"(ID: {deceased['id']})"
+            )
 
     from crm.events_integration import get_events_text, events_button
     events_block = await get_events_text("payer", payer.id)
@@ -617,13 +634,20 @@ async def payer_card(update, context):
         ])
 
     # --- Інші функціональні кнопки ---
-    keyboard.extend([
+    other_buttons = [
         [InlineKeyboardButton("Редагувати", callback_data=f"edit_payer:{payer.id}")],
         [InlineKeyboardButton("Видалити", callback_data=f"delete_payer:{payer.id}")],
+    ]
+    if payer["is_deceased"]:
+        other_buttons.append(
+            [InlineKeyboardButton("Додати спадкоємця", callback_data=f"add_heir:{payer.id}")]
+        )
+    other_buttons.extend([
         [InlineKeyboardButton("Створити договір оренди", callback_data=f"create_contract:{payer.id}")],
         [events_button("payer", payer.id)],
-        [InlineKeyboardButton("До меню", callback_data="to_menu")]
+        [InlineKeyboardButton("До меню", callback_data="to_menu")],
     ])
+    keyboard.extend(other_buttons)
 
     await query.message.edit_text(
         text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML
