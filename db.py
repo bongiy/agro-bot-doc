@@ -111,6 +111,25 @@ PayerContract = sqlalchemy.Table(
     sqlalchemy.Column("payer_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("payer.id")),
 )
 
+# === Таблиця спадкоємців ===
+Heir = sqlalchemy.Table(
+    "heir",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column(
+        "deceased_payer_id",
+        sqlalchemy.Integer,
+        sqlalchemy.ForeignKey("payer.id"),
+    ),
+    sqlalchemy.Column(
+        "heir_payer_id",
+        sqlalchemy.Integer,
+        sqlalchemy.ForeignKey("payer.id"),
+    ),
+    sqlalchemy.Column("documents", JSONB, default=list),
+    sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
+)
+
 # === FTP FILES ===
 UploadedDocs = sqlalchemy.Table(
     "uploaded_docs",
@@ -160,6 +179,25 @@ async def update_company(company_id: int, data: dict):
 async def delete_company(company_id: int):
     query = Company.delete().where(Company.c.id == company_id)
     await database.execute(query)
+
+
+# === Heir helpers ===
+async def add_heir(deceased_payer_id: int, heir_payer_id: int, documents=None):
+    """Create heir record linking deceased and heir payers."""
+    data = {
+        "deceased_payer_id": deceased_payer_id,
+        "heir_payer_id": heir_payer_id,
+        "documents": documents or [],
+        "created_at": datetime.utcnow(),
+    }
+    query = Heir.insert().values(**data)
+    return await database.execute(query)
+
+
+async def get_heirs(deceased_payer_id: int):
+    """Return heirs for a deceased payer."""
+    query = Heir.select().where(Heir.c.deceased_payer_id == deceased_payer_id)
+    return await database.fetch_all(query)
 
 # === Таблиця користувачів ===
 User = sqlalchemy.Table(
