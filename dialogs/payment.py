@@ -50,6 +50,15 @@ async def _show_add_payment(query: CallbackQuery, context: ContextTypes.DEFAULT_
     if not contract:
         await query.answer("Договір не знайдено!", show_alert=True)
         return ConversationHandler.END
+    payer = await database.fetch_one(
+        sqlalchemy.select(Payer.c.is_deceased).where(Payer.c.id == contract["payer_id"])
+    )
+    if payer and payer["is_deceased"]:
+        await query.answer(
+            "❌ Неможливо додати договір чи виплату. Пайовик позначений як померлий.",
+            show_alert=True,
+        )
+        return ConversationHandler.END
 
     context.user_data["payment_contract_id"] = contract_id
     rent = float(contract["rent_amount"] or 0)
@@ -192,7 +201,7 @@ async def global_add_payment_start(update: Update, context: ContextTypes.DEFAULT
 async def global_add_payment_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     term = update.message.text.strip()
     rows = await database.fetch_all(
-        sqlalchemy.select(Payer.c.id, Payer.c.name)
+        sqlalchemy.select(Payer.c.id, Payer.c.name, Payer.c.is_deceased)
         .where(Payer.c.name.ilike(f"%{term}%"))
         .limit(10)
     )
@@ -200,7 +209,12 @@ async def global_add_payment_search(update: Update, context: ContextTypes.DEFAUL
         await update.message.reply_text("Нічого не знайдено. Спробуйте ще:")
         return SEARCH_PAYER
     keyboard = [
-        [InlineKeyboardButton(f"\U0001F464 {r['name']}", callback_data=f"pay_select:{r['id']}")]
+        [
+            InlineKeyboardButton(
+                f"\U0001F464 {'⚰️ ' if r['is_deceased'] else ''}{r['name']}",
+                callback_data=f"pay_select:{r['id']}"
+            )
+        ]
         for r in rows
     ]
     keyboard.append([InlineKeyboardButton("❌ Скасувати", callback_data="to_menu")])
@@ -213,6 +227,15 @@ async def global_add_payment_search(update: Update, context: ContextTypes.DEFAUL
 async def select_payer_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     payer_id = int(query.data.split(":")[1])
+    row = await database.fetch_one(
+        sqlalchemy.select(Payer.c.is_deceased).where(Payer.c.id == payer_id)
+    )
+    if row and row["is_deceased"]:
+        await query.answer(
+            "❌ Неможливо додати договір чи виплату. Пайовик позначений як померлий.",
+            show_alert=True,
+        )
+        return
     contracts = await database.fetch_all(
         sqlalchemy.select(
             Contract.c.id,

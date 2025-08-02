@@ -536,9 +536,10 @@ async def show_payers(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Список порожній!")
         return
     for p in payers:
-        button = InlineKeyboardButton(f"Картка", callback_data=f"payer_card:{p.id}")
+        status = " ⚰️" if getattr(p, "is_deceased", False) else ""
+        button = InlineKeyboardButton("Картка", callback_data=f"payer_card:{p.id}")
         await update.message.reply_text(
-            f"{p.id}. {p.name} (ІПН: {p.ipn})",
+            f"{p.id}. {p.name}{status} (ІПН: {p.ipn})",
             reply_markup=InlineKeyboardMarkup([[button]])
         )
 
@@ -557,8 +558,9 @@ async def payer_card(update, context):
         await query.answer("Пайовик не знайдений!")
         return ConversationHandler.END
 
+    deceased_note = " <i>Помер</i>" if payer["is_deceased"] else ""
     text = (
-        f"<b>{payer.name}</b>\n"
+        f"<b>{payer.name}</b>{deceased_note}\n"
         f"🆔 ID: {payer.id}\n"
         f"📇 ІПН: {payer.ipn}\n"
         f"🎂 Дата народження: {payer.birth_date}\n"
@@ -698,8 +700,19 @@ async def delete_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def create_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     payer_id = int(query.data.split(":")[1])
+    payer = await database.fetch_one(
+        sqlalchemy.select(Payer.c.is_deceased).where(Payer.c.id == payer_id)
+    )
+    if payer and payer["is_deceased"]:
+        await query.answer()
+        await query.message.reply_text(
+            "❌ Неможливо додати договір чи виплату. Пайовик позначений як померлий."
+        )
+        return
     await query.answer()
-    await query.message.reply_text(f"🔜 Функція створення договору в розробці!\nПайовик #{payer_id}")
+    await query.message.reply_text(
+        f"🔜 Функція створення договору в розробці!\nПайовик #{payer_id}"
+    )
 
 async def to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query

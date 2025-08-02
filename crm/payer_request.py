@@ -78,7 +78,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         sqlalchemy.select(Payer).order_by(Payer.c.id.desc()).limit(3)
     )
     keyboard = [
-        [InlineKeyboardButton(f"{p['id']}: {p['name']}", callback_data=f"payer:{p['id']}")]
+        [
+            InlineKeyboardButton(
+                f"{p['id']}: {'⚰️ ' if p['is_deceased'] else ''}{p['name']}",
+                callback_data=f"payer:{p['id']}"
+            )
+        ]
         for p in recent
     ]
     keyboard.append([InlineKeyboardButton("🔍 Пошук пайовика", callback_data="search")])
@@ -114,7 +119,12 @@ async def search_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         await update.message.reply_text("Не знайдено. Спробуйте ще:")
         return SEARCH_INPUT
     keyboard = [
-        [InlineKeyboardButton(f"{r['name']} (ID:{r['id']})", callback_data=f"payer:{r['id']}")]
+        [
+            InlineKeyboardButton(
+                f"{ '⚰️ ' if r['is_deceased'] else ''}{r['name']} (ID:{r['id']})",
+                callback_data=f"payer:{r['id']}"
+            )
+        ]
         for r in rows
     ]
     keyboard.append([InlineKeyboardButton(BACK_BTN, callback_data="back")])

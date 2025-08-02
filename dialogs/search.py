@@ -68,9 +68,10 @@ async def payer_search_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Пайовика не знайдено.")
         return ConversationHandler.END
     for p in results:
-        btn = InlineKeyboardButton(f"Картка", callback_data=f"payer_card:{p.id}")
+        status = " ⚰️" if getattr(p, "is_deceased", False) else ""
+        btn = InlineKeyboardButton("Картка", callback_data=f"payer_card:{p.id}")
         await update.message.reply_text(
-            f"{p.id}. {p.name} (ІПН: {p.ipn})",
+            f"{p.id}. {p.name}{status} (ІПН: {p.ipn})",
             reply_markup=InlineKeyboardMarkup([[btn]])
         )
     return ConversationHandler.END

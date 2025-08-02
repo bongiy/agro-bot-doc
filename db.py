@@ -34,6 +34,7 @@ Payer = sqlalchemy.Table(
     sqlalchemy.Column("idcard_issuer", sqlalchemy.String),
     sqlalchemy.Column("idcard_date", sqlalchemy.String),
     sqlalchemy.Column("birth_date", sqlalchemy.String),
+    sqlalchemy.Column("is_deceased", sqlalchemy.Boolean, default=False),
 )
 
 # === Таблиця Поле ===
@@ -392,6 +393,9 @@ with engine.begin() as conn:
     ))
     conn.execute(sqlalchemy.text(
         'ALTER TABLE "payer" ADD COLUMN IF NOT EXISTS bank_card VARCHAR'
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "payer" ADD COLUMN IF NOT EXISTS is_deceased BOOLEAN DEFAULT FALSE'
     ))
     conn.execute(sqlalchemy.text(
         'ALTER TABLE "contract" ADD COLUMN IF NOT EXISTS rent_amount NUMERIC(12,2)'
