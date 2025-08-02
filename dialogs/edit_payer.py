@@ -8,7 +8,7 @@ from telegram.ext import (
     ContextTypes,
 )
 import sqlalchemy
-from db import database, Payer
+from db import database, Payer, record_inheritance_debt
 from dialogs.payer import normalize_bank_card
 
 EDIT_SELECT, EDIT_VALUE = range(2)
@@ -106,6 +106,8 @@ async def toggle_deceased(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await database.execute(
         Payer.update().where(Payer.c.id == payer_id).values(is_deceased=new_val)
     )
+    if new_val:
+        await record_inheritance_debt(payer_id)
     await query.answer("Статус оновлено")
     # Show updated menu
     query.data = f"edit_payer:{payer_id}"

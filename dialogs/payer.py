@@ -27,10 +27,12 @@ from db import (
     InheritanceTransfer,
     LandPlot,
     Contract,
+    InheritanceDebt,
 )
 from dialogs.post_creation import prompt_add_docs
 from keyboards.menu import payers_menu, main_menu
 from ftp_utils import download_file_ftp, delete_file_ftp
+from contract_generation_v2 import format_money
 
 import re
 import sqlalchemy
@@ -581,6 +583,15 @@ async def payer_card(update, context):
         f"🏦 Картка для виплат:\n{payer.bank_card or '-'}\n"
         f"🏠 Адреса: {payer.oblast} обл., {payer.rayon} р-н, с. {payer.selo}, вул. {payer.vul}, буд. {payer.bud}, кв. {payer.kv}"
     )
+    if payer["is_deceased"]:
+        debt_rows = await database.fetch_all(
+            sqlalchemy.select(InheritanceDebt.c.amount)
+            .where(InheritanceDebt.c.payer_id == payer_id)
+            .where(InheritanceDebt.c.paid == False)
+        )
+        if debt_rows:
+            total_debt = sum(float(r["amount"]) for r in debt_rows)
+            text += f"\n⚠️ Є заборгованість перед спадкоємцем: {format_money(total_debt)}"
 
     heirs = await database.fetch_all(
         Heir.select().where(Heir.c.deceased_payer_id == payer_id)
@@ -659,6 +670,18 @@ async def payer_card(update, context):
             text += "\n<b>Отримані договори:</b>\n" + "\n".join(
                 c["number"] for c in contracts
             )
+        debt_rows = await database.fetch_all(
+            sqlalchemy.select(InheritanceDebt.c.amount, Contract.c.number)
+            .join(Contract, Contract.c.id == InheritanceDebt.c.contract_id)
+            .where(InheritanceDebt.c.heir_id == payer_id)
+            .where(InheritanceDebt.c.paid == False)
+        )
+        if debt_rows:
+            text += "\n\n<b>Борги за договорами:</b>\n" + "\n".join(
+                f"№{r['number']} — {format_money(float(r['amount']))}" for r in debt_rows
+            )
+            total_debt = sum(float(r['amount']) for r in debt_rows)
+            text += f"\nВсього борг: {format_money(total_debt)}"
 
     from crm.events_integration import get_events_text, events_button
     events_block = await get_events_text("payer", payer.id)

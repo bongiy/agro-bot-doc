@@ -299,8 +299,69 @@ async def transfer_assets_to_heir(deceased_payer_id: int, heir_payer_id: int) ->
             .where(Payment.c.agreement_id.in_(transferred_contract_ids))
             .values(notes="Виплата за спадщину")
         )
+        if transferred_contract_ids:
+            await database.execute(
+                InheritanceDebt.update()
+                .where(
+                    (InheritanceDebt.c.payer_id == deceased_payer_id)
+                    & (InheritanceDebt.c.contract_id.in_(transferred_contract_ids))
+                    & (InheritanceDebt.c.heir_id.is_(None))
+                )
+                .values(heir_id=heir_payer_id)
+            )
 
     return len(transferred_land_ids), len(transferred_contract_ids)
+
+
+async def record_inheritance_debt(payer_id: int):
+    """Calculate unpaid rent for active contracts of deceased payer."""
+    contracts = await database.fetch_all(
+        sqlalchemy.select(Contract.c.id, Contract.c.rent_amount)
+        .where(Contract.c.payer_id == payer_id)
+        .where(Contract.c.status != "terminated")
+    )
+    for c in contracts:
+        existing = await database.fetch_one(
+            sqlalchemy.select(InheritanceDebt)
+            .where(InheritanceDebt.c.payer_id == payer_id)
+            .where(InheritanceDebt.c.contract_id == c["id"])
+        )
+        if existing:
+            continue
+        paid_row = await database.fetch_one(
+            sqlalchemy.select(sqlalchemy.func.coalesce(sqlalchemy.func.sum(Payment.c.amount), 0)).where(
+                Payment.c.agreement_id == c["id"]
+            )
+        )
+        paid = float(paid_row[0] if isinstance(paid_row, tuple) else paid_row[0])
+        rent = float(c["rent_amount"] or 0)
+        if rent > paid:
+            await database.execute(
+                InheritanceDebt.insert().values(
+                    payer_id=payer_id,
+                    contract_id=c["id"],
+                    amount=rent - paid,
+                    date_recorded=datetime.utcnow().date(),
+                )
+            )
+
+
+async def settle_inheritance_debt(contract_id: int, payment_id: int, amount: float, notes: str | None = "") -> str:
+    """Mark debt as paid if payment covers it and return updated notes."""
+    debt = await database.fetch_one(
+        sqlalchemy.select(InheritanceDebt)
+        .where(InheritanceDebt.c.contract_id == contract_id)
+        .where(InheritanceDebt.c.paid == False)
+    )
+    if debt and amount >= float(debt["amount"]):
+        await database.execute(
+            InheritanceDebt.update()
+            .where(InheritanceDebt.c.id == debt["id"])
+            .values(paid=True, payment_id=payment_id)
+        )
+        prefix = f"{notes}; " if notes else ""
+        return prefix + "Виплата боргу"
+    return notes or ""
 
 # === Таблиця користувачів ===
 User = sqlalchemy.Table(
@@ -362,6 +423,20 @@ Payment = sqlalchemy.Table(
     sqlalchemy.Column("payment_type", sqlalchemy.String),
     sqlalchemy.Column("notes", sqlalchemy.String),
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
+)
+
+# === Таблиця боргів перед спадкоємцями ===
+InheritanceDebt = sqlalchemy.Table(
+    "inheritance_debt",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("payer_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("payer.id")),
+    sqlalchemy.Column("heir_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("payer.id"), nullable=True),
+    sqlalchemy.Column("contract_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("contract.id")),
+    sqlalchemy.Column("amount", sqlalchemy.Numeric(12, 2), nullable=False),
+    sqlalchemy.Column("date_recorded", sqlalchemy.Date, default=datetime.utcnow),
+    sqlalchemy.Column("paid", sqlalchemy.Boolean, default=False),
+    sqlalchemy.Column("payment_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("payment.id"), nullable=True),
 )
 
 # === Таблиця потенційних пайовиків ===
