@@ -11,3 +11,23 @@ def short_name(full_name: str) -> str:
         surname_initial = parts[0][0].upper() + "."
         return f"{first_name} {surname_initial}"
     return full_name
+
+
+def format_payers_line(payers: list[str]) -> str:
+    """Return formatted line with payer names for contract lists.
+
+    Uses :func:`short_name` to abbreviate each payer and applies the
+    "Pайовик"/"Пайовики" prefix depending on the number of participants.
+    The result matches the formatting used in contract cards.
+    """
+    import html
+
+    names = [short_name(p) for p in payers if p]
+    if not names:
+        return "👤 Пайовик: —"
+    if len(names) == 1:
+        return f"👤 Пайовик: {html.escape(names[0])}"
+    shown = ", ".join(html.escape(n) for n in names[:2])
+    if len(names) > 2:
+        shown += f" +{len(names) - 2} ще..."
+    return f"🧑‍🤝‍🧑 Пайовики: {shown}"
