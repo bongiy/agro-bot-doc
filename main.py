@@ -60,9 +60,7 @@ from dialogs.payment import (
     select_contract_cb,
     show_payments,
     list_inheritance_debts,
-    payment_reports_start,
-    payment_report_cb,
-    payment_report_csv_cb,
+    payment_report_conv,
 )
 from dialogs.edit_field import edit_field_conv
 from dialogs.edit_land import edit_land_conv
@@ -154,8 +152,7 @@ application.add_handler(edit_payer_conv)
 application.add_handler(global_add_payment_conv)
 application.add_handler(MessageHandler(filters.Regex("^📋 Перелік виплат$"), show_payments))
 application.add_handler(MessageHandler(filters.Regex("^🔍 Борг перед спадкоємцем$"), list_inheritance_debts))
-application.add_handler(MessageHandler(filters.Regex("^💳 Звіти по виплатах$"), payment_reports_start))
-application.add_handler(MessageHandler(filters.Regex("^💸 Звіт по виплатах$"), payment_reports_start))
+application.add_handler(payment_report_conv)
 
 # --- Потенційні пайовики ---
 application.add_handler(add_potential_conv)
@@ -213,8 +210,6 @@ application.add_handler(change_status_conv)
 application.add_handler(add_payment_conv)
 application.add_handler(CallbackQueryHandler(select_payer_cb, pattern=r"^pay_select:\d+$"))
 application.add_handler(CallbackQueryHandler(select_contract_cb, pattern=r"^pay_contract:\d+$"))
-application.add_handler(CallbackQueryHandler(payment_report_cb, pattern=r"^pay_report:\d+$"))
-application.add_handler(CallbackQueryHandler(payment_report_csv_cb, pattern=r"^pay_csv:\d+$"))
 application.add_handler(CallbackQueryHandler(payment_summary_cb, pattern=r"^payment_summary:\d+$"))
 application.add_handler(CallbackQueryHandler(payment_history_cb, pattern=r"^payment_history:\d+$"))
 application.add_handler(CallbackQueryHandler(generate_contract_pdf_cb, pattern=r"^generate_contract_pdf:\d+$"))
