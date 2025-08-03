@@ -101,7 +101,6 @@ reports_menu_admin = ReplyKeyboardMarkup(
 
 reports_menu_user = ReplyKeyboardMarkup(
     [
-        ["📊 Зведення по орендній платі"],
         ["📈 Статистика по полях"],
         ["◀️ Назад"],
     ],

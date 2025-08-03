@@ -446,6 +446,112 @@ async def get_payment_report_rows(
     rows = await database.fetch_all(query)
     return rows
 
+
+async def get_rent_summary(
+    year: int,
+    company_query: str | None = None,
+    status: str | None = None,
+    limit: int | None = None,
+    offset: int = 0,
+):
+    """Return aggregated rent payment info per company."""
+    payments_sub = (
+        sqlalchemy.select(
+            Payment.c.agreement_id.label("cid"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(Payment.c.amount), 0).label("paid"),
+        )
+        .where(sqlalchemy.extract("year", Payment.c.payment_date) == year)
+        .group_by(Payment.c.agreement_id)
+        .subquery()
+    )
+
+    contract_active = sqlalchemy.and_(
+        sqlalchemy.extract("year", Contract.c.date_valid_from) <= year,
+        sqlalchemy.or_(
+            Contract.c.date_valid_to.is_(None),
+            sqlalchemy.extract("year", Contract.c.date_valid_to) >= year,
+        ),
+    )
+
+    status_expr = sqlalchemy.case(
+        (sqlalchemy.func.coalesce(payments_sub.c.paid, 0) >= Contract.c.rent_amount, "paid"),
+        (sqlalchemy.func.coalesce(payments_sub.c.paid, 0) > 0, "partial"),
+        else_="pending",
+    )
+    contract_base = (
+        sqlalchemy.select(
+            Contract.c.id,
+            Contract.c.company_id,
+            Contract.c.payer_id,
+            Contract.c.rent_amount,
+            sqlalchemy.func.coalesce(payments_sub.c.paid, 0).label("paid"),
+            status_expr.label("status"),
+        )
+        .select_from(Contract)
+        .outerjoin(payments_sub, payments_sub.c.cid == Contract.c.id)
+        .where(contract_active)
+    )
+
+    if company_query:
+        contract_base = contract_base.join(Company, Company.c.id == Contract.c.company_id)
+        contract_base = contract_base.where(
+            (Company.c.name.ilike(f"%{company_query}%"))
+            | (Company.c.short_name.ilike(f"%{company_query}%"))
+        )
+    if status in {"pending", "partial", "paid"}:
+        contract_base = contract_base.where(status_expr == status)
+
+    contract_base = contract_base.subquery()
+
+    query = (
+        sqlalchemy.select(
+            Company.c.name,
+            sqlalchemy.func.count(sqlalchemy.distinct(contract_base.c.id)).label("contracts"),
+            sqlalchemy.func.count(sqlalchemy.distinct(contract_base.c.payer_id)).label("payers"),
+            sqlalchemy.func.count(sqlalchemy.distinct(ContractLandPlot.c.land_plot_id)).label("plots"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(contract_base.c.rent_amount), 0).label("rent_total"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(contract_base.c.paid), 0).label("paid_total"),
+            sqlalchemy.func.coalesce(
+                sqlalchemy.func.sum(
+                    sqlalchemy.case(
+                        (contract_base.c.status == "pending", contract_base.c.rent_amount),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("pending_amount"),
+            sqlalchemy.func.coalesce(
+                sqlalchemy.func.sum(
+                    sqlalchemy.case(
+                        (contract_base.c.status == "partial", contract_base.c.rent_amount),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("partial_amount"),
+            sqlalchemy.func.coalesce(
+                sqlalchemy.func.sum(
+                    sqlalchemy.case(
+                        (contract_base.c.status == "paid", contract_base.c.rent_amount),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("paid_amount"),
+        )
+        .select_from(contract_base)
+        .join(Company, Company.c.id == contract_base.c.company_id)
+        .outerjoin(ContractLandPlot, ContractLandPlot.c.contract_id == contract_base.c.id)
+        .group_by(Company.c.id)
+        .order_by(Company.c.name)
+    )
+
+    if limit is not None:
+        query = query.limit(limit).offset(offset)
+
+    rows = await database.fetch_all(query)
+    return rows
+
 # === Таблиця користувачів ===
 User = sqlalchemy.Table(
     "user",
