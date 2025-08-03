@@ -650,6 +650,80 @@ async def get_land_overview():
     return summary, fields, companies, statuses, contracts
 
 
+# === Статистика по полях ===
+async def get_fields_report():
+    """Return statistics for each field including physical area and coverage."""
+
+    plots_sub = (
+        sqlalchemy.select(
+            LandPlot.c.field_id.label("field_id"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(LandPlot.c.area), 0).label("plots_area"),
+            sqlalchemy.func.count(
+                sqlalchemy.distinct(LandPlotOwner.c.payer_id)
+            ).label("payers"),
+        )
+        .select_from(LandPlot)
+        .outerjoin(LandPlotOwner, LandPlotOwner.c.land_plot_id == LandPlot.c.id)
+        .group_by(LandPlot.c.field_id)
+        .subquery()
+    )
+
+    contract_sub = (
+        sqlalchemy.select(
+            LandPlot.c.field_id.label("field_id"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(LandPlot.c.area), 0).label(
+                "contract_area"
+            ),
+            sqlalchemy.func.coalesce(
+                sqlalchemy.func.sum(Contract.c.rent_amount), 0
+            ).label("rent_sum"),
+        )
+        .select_from(LandPlot)
+        .join(ContractLandPlot, ContractLandPlot.c.land_plot_id == LandPlot.c.id)
+        .join(
+            Contract,
+            sqlalchemy.and_(
+                Contract.c.id == ContractLandPlot.c.contract_id,
+                Contract.c.status != "terminated",
+            ),
+        )
+        .group_by(LandPlot.c.field_id)
+        .subquery()
+    )
+
+    rows = await database.fetch_all(
+        sqlalchemy.select(
+            Field.c.name.label("name"),
+            Field.c.area_actual.label("physical_area"),
+            sqlalchemy.func.coalesce(plots_sub.c.plots_area, 0).label("plots_area"),
+            sqlalchemy.func.coalesce(contract_sub.c.contract_area, 0).label(
+                "contract_area"
+            ),
+            (
+                sqlalchemy.func.coalesce(plots_sub.c.plots_area, 0)
+                - sqlalchemy.func.coalesce(contract_sub.c.contract_area, 0)
+            ).label("without_contract"),
+            sqlalchemy.case(
+                (
+                    Field.c.area_actual != 0,
+                    sqlalchemy.func.coalesce(contract_sub.c.contract_area, 0)
+                    / Field.c.area_actual
+                    * 100,
+                ),
+                else_=0,
+            ).label("coverage"),
+            sqlalchemy.func.coalesce(plots_sub.c.payers, 0).label("payers"),
+            sqlalchemy.func.coalesce(contract_sub.c.rent_sum, 0).label("rent_sum"),
+        )
+        .select_from(Field)
+        .outerjoin(plots_sub, plots_sub.c.field_id == Field.c.id)
+        .outerjoin(contract_sub, contract_sub.c.field_id == Field.c.id)
+        .order_by(Field.c.name)
+    )
+
+    return rows
+
+
 async def get_contract_overview():
     """Return aggregated contract statistics and detailed rows."""
     contract_base = (
