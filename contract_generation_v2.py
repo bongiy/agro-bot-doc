@@ -143,11 +143,9 @@ def read_template_vars(template_path: str) -> set[str]:
 def build_context(template_vars: Iterable[str], values: Mapping[str, Any]) -> dict[str, Any]:
     context: dict[str, Any] = {}
     for var in template_vars:
-        if var in SUPPORTED_VARS:
+        if var in SUPPORTED_VARS or var in values:
             value = values.get(var)
             context[var] = value if value not in (None, "") else EMPTY_VALUE
-        else:
-            context[var] = EMPTY_VALUE
     return context
 
 
@@ -206,15 +204,29 @@ def generate_contract(
     contract_number: str,
     year: int,
     *,
+    template_type: str | None = None,
     dev: bool = False,
 ) -> tuple[str, str]:
     template_local = load_template(template_remote_path)
     template_vars = read_template_vars(template_local)
     context = build_context(template_vars, values)
 
-    filled = [v for v in template_vars if context[v] != EMPTY_VALUE]
-    missing = [f"{{{{{v}}}}}" for v in template_vars if context[v] == EMPTY_VALUE and v in SUPPORTED_VARS and values.get(v) in (None, "")]
-    unsupported = [f"{{{{{v}}}}}" for v in template_vars if v not in SUPPORTED_VARS]
+    filled = [v for v in template_vars if context.get(v) != EMPTY_VALUE]
+    allowed_extra = set()
+    if template_type == "multi":
+        allowed_extra.update({"payers", "payer.full_name", "payer.tax_id", "payer.share", "loop.index"})
+    missing = [
+        f"{{{{{v}}}}}"
+        for v in template_vars
+        if context.get(v) == EMPTY_VALUE
+        and (v in SUPPORTED_VARS or v in allowed_extra)
+        and values.get(v) in (None, "")
+    ]
+    unsupported = [
+        f"{{{{{v}}}}}"
+        for v in template_vars
+        if v not in SUPPORTED_VARS and v not in allowed_extra
+    ]
 
     log = generate_log(os.path.basename(template_remote_path), len(template_vars), filled, missing, unsupported)
 
@@ -315,6 +327,7 @@ async def generate_contract_v2(contract_id: int) -> tuple[str, str]:
             LandPlotOwner.c.payer_id,
             LandPlotOwner.c.share,
             Payer.c.name,
+            Payer.c.ipn,
         )
         .join(Payer, Payer.c.id == LandPlotOwner.c.payer_id)
         .where(LandPlotOwner.c.land_plot_id.in_(land_ids))
@@ -325,7 +338,7 @@ async def generate_contract_v2(contract_id: int) -> tuple[str, str]:
     for r in owners_rows:
         land_owner_map.setdefault(r["land_plot_id"], {})[r["payer_id"]] = r["share"]
         info = payer_shares.setdefault(
-            r["payer_id"], {"name": r["name"], "share": 0.0}
+            r["payer_id"], {"name": r["name"], "share": 0.0, "tax_id": r["ipn"]}
         )
         info["share"] += float(r["share"])
 
@@ -333,15 +346,31 @@ async def generate_contract_v2(contract_id: int) -> tuple[str, str]:
     payers_list = "\n".join(
         f"{info['name']} — {format_share(info['share'])}" for info in payer_shares.values()
     )
+    payers_data = [
+        {
+            "full_name": info["name"],
+            "tax_id": info["tax_id"],
+            "share": format_share(info["share"]),
+        }
+        for info in payer_shares.values()
+    ]
     plots_table = "\n".join(
         f"{l['cadaster']} — {format_area(l['area'])}" for l in lands
     )
     first_land = lands[0]
     first_land_share = land_owner_map.get(first_land["id"], {}).get(contract["payer_id"])
 
-    templates = await get_agreement_templates(True)
+    from utils.payers import get_payers_for_contract
+
+    payers_for_contract = await get_payers_for_contract(contract_id)
+    tmpl_scope = "single" if len(payers_for_contract) == 1 else "multi"
+    templates = await get_agreement_templates(True, tmpl_scope)
     if not templates:
-        raise RuntimeError("No active agreement template")
+        raise RuntimeError(
+            "Немає активного шаблону для договору з "
+            + ("одним" if tmpl_scope == "single" else "кількома")
+            + " пайовиками. Завантажте відповідний шаблон."
+        )
     template = templates[0]
 
     tmp_doc = f"temp_docs/template_{contract_id}.docx"
@@ -377,6 +406,7 @@ async def generate_contract_v2(contract_id: int) -> tuple[str, str]:
         "payer_phone": payer["phone"],
         "payer_bank_card": payer["bank_card"],
         "payers_list": payers_list,
+        "payers": payers_data,
         "plot_cadastre": first_land["cadaster"],
         "plot_area": format_area(first_land["area"]),
         "plot_share": format_share(first_land_share),
@@ -390,7 +420,7 @@ async def generate_contract_v2(contract_id: int) -> tuple[str, str]:
     }
 
     # Analyze template for unresolved placeholders (result not used yet)
-    analyze_template(tmp_doc, variables)
+    analyze_template(tmp_doc, variables, template.get("template_type"))
     if os.path.exists(tmp_doc):
         os.remove(tmp_doc)
 
@@ -400,6 +430,7 @@ async def generate_contract_v2(contract_id: int) -> tuple[str, str]:
         payer_name=payer["name"],
         contract_number=contract["number"],
         year=datetime.utcnow().year,
+        template_type=template.get("template_type"),
     )
 
     await database.execute(

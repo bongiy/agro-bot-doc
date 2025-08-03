@@ -20,11 +20,22 @@ VAR_DESCRIPTIONS = {
 ALLOWED_VARS = set(VAR_DESCRIPTIONS.keys())
 
 
-def find_unsupported_vars(template_path: str) -> list[str]:
+def find_unsupported_vars(template_path: str, template_type: str | None = None) -> list[str]:
     """Return list of placeholders not supported by the system."""
     doc = DocxTemplate(template_path)
     found = {f"{{{{{v}}}}}" for v in doc.get_undeclared_template_variables()}
-    return sorted(found - ALLOWED_VARS)
+    allowed = set(ALLOWED_VARS)
+    if template_type == "multi":
+        allowed.update(
+            {
+                "{{payers}}",
+                "{{payer.full_name}}",
+                "{{payer.tax_id}}",
+                "{{payer.share}}",
+                "{{loop.index}}",
+            }
+        )
+    return sorted(found - allowed)
 
 
 def extract_variables(path: str) -> Dict[str, int]:
@@ -42,7 +53,7 @@ def extract_variables(path: str) -> Dict[str, int]:
 
     counter: Counter[str] = Counter()
     for var in raw_vars:
-        inner = re.sub(r"[^\w]", "", var[2:-2])
+        inner = re.sub(r"[^\w\.]", "", var[2:-2])
         if inner:
             counter[inner] += 1
 
@@ -50,7 +61,7 @@ def extract_variables(path: str) -> Dict[str, int]:
 
 
 def analyze_template(
-    template_path: str, context: Mapping[str, Any]
+    template_path: str, context: Mapping[str, Any], template_type: str | None = None
 ) -> tuple[list[str], list[str], int, int, Dict[str, int]]:
     """Return missing and unsupported placeholders for a template.
 
@@ -74,9 +85,15 @@ def analyze_template(
     missing: list[str] = []
     unsupported: list[str] = []
     filled = 0
+    allowed_extra = set()
+    if template_type == "multi":
+        allowed_extra.update({"payers", "payer.full_name", "payer.tax_id", "payer.share", "loop.index"})
     for var, cnt in counts.items():
-        if var not in SUPPORTED_VARS:
+        if var not in SUPPORTED_VARS and var not in allowed_extra:
             unsupported.append(f"{{{{{var}}}}}")
+            continue
+        if var in allowed_extra:
+            filled += cnt
             continue
         value = context.get(var)
         if value is None or (isinstance(value, str) and not str(value).strip()):

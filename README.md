@@ -60,6 +60,16 @@ manually.
 - `{{payer_bank_card}}` — Банківська картка пайовика
 - `{{payers_list}}` — Таблиця пайовиків з частками
 
+For agreements with several payers, the template may include a Jinja2 loop:
+
+```
+{% for payer in payers %}
+{{ loop.index }}. {{ payer.full_name }}, ІПН: {{ payer.tax_id }}, частка: {{ payer.share }}%
+{% endfor %}
+```
+
+The bot will substitute the list of payers into the `payers` variable.
+
 ### Land plot
 - `{{plot_cadastre}}` — Кадастровий номер ділянки
 - `{{plot_area}}` — Площа ділянки (в га)

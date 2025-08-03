@@ -897,7 +897,9 @@ async def generate_contract_pdf_cb(update: Update, context: ContextTypes.DEFAULT
     doc_id = row["id"] if row else None
 
     from db import get_agreement_templates
-    templates = await get_agreement_templates(True)
+    payers = await get_payers_for_contract(contract_id)
+    tmpl_scope = "single" if len(payers) == 1 else "multi"
+    templates = await get_agreement_templates(True, tmpl_scope)
     template_name = os.path.basename(templates[0]["file_path"]) if templates else ""
 
     is_pdf = str(remote_path).lower().endswith(".pdf")

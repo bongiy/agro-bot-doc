@@ -35,6 +35,11 @@ TEMPLATE_TYPES = {
     "additional": "Додаткова угода",
 }
 
+PAYER_TEMPLATE_TYPES = {
+    "single": "Один пайовик",
+    "multi": "Кілька пайовиків",
+}
+
 ALLOWED_VARS = [
     f"{var} — {desc}"
     for cat in TEMPLATE_VARIABLES.values()
@@ -52,7 +57,7 @@ def to_latin_filename(text: str, default: str = "template.docx") -> str:
     return name
 
 
-ADD_TYPE, ADD_NAME, ADD_FILE, REPLACE_FILE = range(4)
+ADD_TYPE, ADD_NAME, ADD_FILE, ADD_SCOPE, REPLACE_FILE = range(5)
 
 async def show_templates(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message if update.message else update.callback_query.message
@@ -64,9 +69,10 @@ async def show_templates(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for t in templates:
         status = "✅" if t["is_active"] else "❌"
         t_type = TEMPLATE_TYPES.get(t["type"], t["type"])
+        p_type = PAYER_TEMPLATE_TYPES.get(t.get("template_type", "single"), t.get("template_type", "single"))
         keyboard.append([
             InlineKeyboardButton(
-                f"{status} {t['name']} ({t_type})",
+                f"{status} {t['name']} ({t_type}, {p_type})",
                 callback_data=f"template_card:{t['id']}"
             )
         ])
@@ -101,9 +107,11 @@ async def template_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     status = "Так" if tmpl["is_active"] else "Ні"
     t_type = TEMPLATE_TYPES.get(tmpl["type"], tmpl["type"])
+    p_type = PAYER_TEMPLATE_TYPES.get(tmpl.get("template_type", "single"), tmpl.get("template_type", "single"))
     text = (
         f"<b>{tmpl['name']}</b>\n"
         f"Тип: <code>{t_type}</code>\n"
+        f"Пайовики: <code>{p_type}</code>\n"
         f"Активний: <code>{status}</code>"
     )
     kb = [
@@ -177,34 +185,55 @@ async def add_template_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if doc.file_size and doc.file_size > 2 * 1024 * 1024:
         await update.message.reply_text("Файл перевищує 2MB. Надішліть менший файл")
         return ADD_FILE
-    tmpl_data = {
-        "name": context.user_data["tmpl_name"],
-        "type": context.user_data["tmpl_type"],
-        "file_path": "",
-        "created_at": datetime.utcnow(),
-    }
-    template_id = await add_agreement_template(tmpl_data)
     remote_name = to_latin_filename(doc.file_name)
-    remote_path = f"templates/agreements/{template_id}_{remote_name}"
     tmp_dir = "temp_docs"
     os.makedirs(tmp_dir, exist_ok=True)
     local_path = os.path.join(tmp_dir, remote_name)
     tg_file = await doc.get_file()
     await tg_file.download_to_drive(local_path)
+    context.user_data["tmpl_local_path"] = local_path
+    context.user_data["tmpl_remote_name"] = remote_name
+    keyboard = [
+        [InlineKeyboardButton("Договору з одним пайовиком", callback_data="tmpl_scope:single")],
+        [InlineKeyboardButton("Договору з кількома пайовиками", callback_data="tmpl_scope:multi")],
+    ]
+    await update.message.reply_text(
+        "Цей шаблон призначений для:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+    return ADD_SCOPE
+
+
+async def add_template_scope(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    tmpl_scope = query.data.split(":")[1]
+    local_path = context.user_data.pop("tmpl_local_path", None)
+    remote_name = context.user_data.pop("tmpl_remote_name", "template.docx")
+    tmpl_data = {
+        "name": context.user_data.get("tmpl_name"),
+        "type": context.user_data.get("tmpl_type"),
+        "template_type": tmpl_scope,
+        "file_path": "",
+        "created_at": datetime.utcnow(),
+    }
+    template_id = await add_agreement_template(tmpl_data)
+    remote_path = f"templates/agreements/{template_id}_{remote_name}"
     var_counts = extract_variables(local_path)
     vars_found = {f"{{{{{v}}}}}" for v in var_counts}
-    unsupported = find_unsupported_vars(local_path)
+    unsupported = find_unsupported_vars(local_path, tmpl_scope)
     upload_file_ftp(local_path, remote_path)
     os.remove(local_path)
     await update_agreement_template(template_id, {"file_path": remote_path})
     allowed = {v for cat in TEMPLATE_VARIABLES.values() for v, _ in cat["items"]}
     used = len([v for v in vars_found if v in allowed])
-    await update.message.reply_text(
-        f"✅ Шаблон успішно додано\nНазва: {doc.file_name}\nЗмінні: {used}/{len(allowed)}"
+    await query.message.reply_text(
+        f"✅ Шаблон успішно додано\nНазва: {remote_name}\nЗмінні: {used}/{len(allowed)}"
     )
     msg = build_unresolved_message([], unsupported, len(vars_found))
     if msg:
-        await update.message.reply_text(msg)
+        await query.message.reply_text(msg)
+    if tmpl_scope == "multi" and not ({"{{payer.full_name}}", "{{payer.tax_id}}", "{{payer.share}}", "{{loop.index}}"} & vars_found):
+        await query.message.reply_text("⚠️ У шаблоні не знайдено циклу для кількох пайовиків")
     context.user_data.pop("tmpl_name", None)
     context.user_data.pop("tmpl_type", None)
     await show_templates(update, context)
@@ -238,7 +267,8 @@ async def replace_template_file(update: Update, context: ContextTypes.DEFAULT_TY
     await tg_file.download_to_drive(local_path)
     var_counts = extract_variables(local_path)
     vars_found = {f"{{{{{v}}}}}" for v in var_counts}
-    unsupported = find_unsupported_vars(local_path)
+    tmpl = await get_agreement_template(template_id)
+    unsupported = find_unsupported_vars(local_path, tmpl["template_type"] if tmpl else None)
     upload_file_ftp(local_path, remote_path)
     os.remove(local_path)
     await update_agreement_template(template_id, {"file_path": remote_path})
@@ -262,6 +292,7 @@ add_template_conv = ConversationHandler(
         ADD_TYPE: [CallbackQueryHandler(add_template_type, pattern=r"^tmpl_type:\w+$")],
         ADD_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_template_name)],
         ADD_FILE: [MessageHandler(filters.Document.ALL, add_template_file)],
+        ADD_SCOPE: [CallbackQueryHandler(add_template_scope, pattern=r"^tmpl_scope:(single|multi)$")],
     },
     fallbacks=[CallbackQueryHandler(show_templates_cb, pattern=r"^template_list$")]
 )
