@@ -552,6 +552,84 @@ async def get_rent_summary(
     rows = await database.fetch_all(query)
     return rows
 
+# === Звіт по ділянках ===
+async def get_land_report_rows(
+    payer_query: str | None = None,
+    company_query: str | None = None,
+    contract_query: str | None = None,
+    cadaster: str | None = None,
+    field_query: str | None = None,
+    area_from: float | None = None,
+    area_to: float | None = None,
+    ngo_from: float | None = None,
+    ngo_to: float | None = None,
+    end_date: date | None = None,
+    limit: int | None = None,
+    offset: int = 0,
+):
+    owners_sub = (
+        sqlalchemy.select(
+            LandPlotOwner.c.land_plot_id.label("lp_id"),
+            sqlalchemy.func.string_agg(Payer.c.name, ", ").label("owners"),
+        )
+        .join(Payer, Payer.c.id == LandPlotOwner.c.payer_id)
+        .group_by(LandPlotOwner.c.land_plot_id)
+        .subquery()
+    )
+
+    query = (
+        sqlalchemy.select(
+            LandPlot.c.cadaster,
+            LandPlot.c.area,
+            LandPlot.c.ngo,
+            owners_sub.c.owners.label("payer_name"),
+            Contract.c.number.label("contract_number"),
+            Company.c.name.label("company_name"),
+            Contract.c.date_valid_to,
+            Field.c.name.label("field_name"),
+            Contract.c.rent_amount,
+        )
+        .select_from(LandPlot)
+        .outerjoin(owners_sub, owners_sub.c.lp_id == LandPlot.c.id)
+        .outerjoin(ContractLandPlot, ContractLandPlot.c.land_plot_id == LandPlot.c.id)
+        .outerjoin(Contract, Contract.c.id == ContractLandPlot.c.contract_id)
+        .outerjoin(Company, Company.c.id == Contract.c.company_id)
+        .outerjoin(Field, Field.c.id == LandPlot.c.field_id)
+    )
+
+    filters = []
+    if payer_query:
+        filters.append(owners_sub.c.owners.ilike(f"%{payer_query}%"))
+    if company_query:
+        filters.append(
+            (Company.c.name.ilike(f"%{company_query}%"))
+            | (Company.c.short_name.ilike(f"%{company_query}%"))
+        )
+    if contract_query:
+        filters.append(Contract.c.number.ilike(f"%{contract_query}%"))
+    if cadaster:
+        filters.append(LandPlot.c.cadaster.ilike(f"%{cadaster}%"))
+    if field_query:
+        filters.append(Field.c.name.ilike(f"%{field_query}%"))
+    if area_from is not None:
+        filters.append(LandPlot.c.area >= area_from)
+    if area_to is not None:
+        filters.append(LandPlot.c.area <= area_to)
+    if ngo_from is not None:
+        filters.append(LandPlot.c.ngo >= ngo_from)
+    if ngo_to is not None:
+        filters.append(LandPlot.c.ngo <= ngo_to)
+    if end_date is not None:
+        filters.append(Contract.c.date_valid_to <= end_date)
+    if filters:
+        query = query.where(sqlalchemy.and_(*filters))
+
+    query = query.order_by(LandPlot.c.cadaster)
+    if limit is not None:
+        query = query.limit(limit).offset(offset)
+    rows = await database.fetch_all(query)
+    return rows
+
 # === Таблиця користувачів ===
 User = sqlalchemy.Table(
     "user",
