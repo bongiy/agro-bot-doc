@@ -532,6 +532,7 @@ async def get_payment_report_rows(
         filters.append(Payment.c.status == status)
     if heirs_only:
         filters.append(heir_condition)
+    filters.append(Contract.c.date_valid_from <= datetime.utcnow())
     if filters:
         query = query.where(sqlalchemy.and_(*filters))
 
@@ -561,6 +562,7 @@ async def get_rent_summary(
     )
 
     contract_active = sqlalchemy.and_(
+        Contract.c.date_valid_from <= datetime.utcnow(),
         sqlalchemy.extract("year", Contract.c.date_valid_from) <= year,
         sqlalchemy.or_(
             Contract.c.date_valid_to.is_(None),
@@ -951,6 +953,7 @@ async def get_company_report(year: int):
     )
 
     contract_active = sqlalchemy.and_(
+        Contract.c.date_valid_from <= datetime.utcnow(),
         sqlalchemy.extract("year", Contract.c.date_valid_from) <= year,
         sqlalchemy.or_(
             Contract.c.date_valid_to.is_(None),
@@ -1107,6 +1110,7 @@ async def get_company_sublease():
 
 async def get_company_payments_by_year():
     """Return payment accrual and paid amounts per company per year."""
+    today = date.today()
     contracts = await database.fetch_all(
         sqlalchemy.select(
             Contract.c.id,
@@ -1115,10 +1119,13 @@ async def get_company_payments_by_year():
             Contract.c.date_valid_to,
             Contract.c.rent_amount,
         )
+        .where(Contract.c.date_valid_from <= datetime.utcnow())
     )
     accruals: dict[tuple[int, int], float] = {}
     for c in contracts:
         if not c["date_valid_from"]:
+            continue
+        if c["date_valid_from"].date() > today:
             continue
         start_year = c["date_valid_from"].year
         end_year = c["date_valid_to"].year if c["date_valid_to"] else start_year
@@ -1134,6 +1141,7 @@ async def get_company_payments_by_year():
         )
         .select_from(Payment)
         .join(Contract, Contract.c.id == Payment.c.agreement_id)
+        .where(Contract.c.date_valid_from <= datetime.utcnow())
         .group_by(Contract.c.company_id, sqlalchemy.extract("year", Payment.c.payment_date))
     )
     paid = {(int(r["company_id"]), int(r["year"])): float(r["paid"] or 0) for r in pay_rows}

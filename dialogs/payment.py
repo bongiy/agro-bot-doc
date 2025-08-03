@@ -66,6 +66,14 @@ async def _show_add_payment(query: CallbackQuery, context: ContextTypes.DEFAULT_
         )
         return ConversationHandler.END
 
+    today = date.today()
+    if contract["date_valid_from"] and contract["date_valid_from"].date() > today:
+        await query.answer(
+            f"⚠️ Договір ще не набрав чинності. Нарахування можливе з {contract['date_valid_from'].date()}",
+            show_alert=True,
+        )
+        return ConversationHandler.END
+
     context.user_data["payment_contract_id"] = contract_id
     rent = float(contract["rent_amount"] or 0)
     context.user_data["payment_default_amount"] = rent

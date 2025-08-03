@@ -197,10 +197,13 @@ async def contract_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if state == CHOOSE_PAYER:
         # Back to valid_from
         kb = ReplyKeyboardMarkup(
-            [["Від сьогодні"], ["З 1 січня наступного року"], [BACK_BTN, CANCEL_BTN]],
+            [["сьогодні"], ["1 січня наступного року"], [BACK_BTN, CANCEL_BTN]],
             resize_keyboard=True,
         )
-        await query.message.reply_text("Дата набрання чинності:", reply_markup=kb)
+        await query.message.reply_text(
+            "Дата набрання чинності (ДД.ММ.РРРР) — оберіть варіант або введіть вручну:",
+            reply_markup=kb,
+        )
         await query.message.reply_text("⬇️ Навігація", reply_markup=back_cancel_kb)
         context.user_data["current_state"] = SET_VALID_FROM
         return SET_VALID_FROM
@@ -366,10 +369,13 @@ async def set_duration(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return SET_DURATION
     context.user_data["duration"] = years
     kb = ReplyKeyboardMarkup(
-        [["Від сьогодні"], ["З 1 січня наступного року"], [BACK_BTN, CANCEL_BTN]],
+        [["сьогодні"], ["1 січня наступного року"], [BACK_BTN, CANCEL_BTN]],
         resize_keyboard=True,
     )
-    await update.message.reply_text("Дата набрання чинності:", reply_markup=kb)
+    await update.message.reply_text(
+        "Дата набрання чинності (ДД.ММ.РРРР) — оберіть варіант або введіть вручну:",
+        reply_markup=kb,
+    )
     await update.message.reply_text("⬇️ Навігація", reply_markup=back_cancel_kb)
     context.user_data["current_state"] = SET_VALID_FROM
     return SET_VALID_FROM
@@ -379,12 +385,20 @@ async def set_valid_from(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = await back_or_cancel(update, context, SET_DURATION)
     if result is not None:
         return result
-    text = update.message.text
+    text = update.message.text.strip()
     today = datetime.utcnow().date()
-    if text == "Від сьогодні":
+    if text.lower() == "сьогодні":
         valid_from = today
-    else:
+    elif text.lower() == "1 січня наступного року":
         valid_from = datetime(today.year + 1, 1, 1).date()
+    else:
+        try:
+            valid_from = datetime.strptime(text, "%d.%m.%Y").date()
+        except ValueError:
+            await update.message.reply_text(
+                "Введіть дату у форматі ДД.ММ.РРРР, 'сьогодні' або '1 січня наступного року':"
+            )
+            return SET_VALID_FROM
     duration = context.user_data["duration"]
     valid_to = valid_from + timedelta(days=365 * duration)
     context.user_data["valid_from"] = datetime.combine(valid_from, datetime.min.time())
@@ -596,7 +610,9 @@ async def agreement_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         f"📄 <b>Договір оренди №{contract['number']}</b>\n"
         f"Підписано: {contract['date_signed'].date()}\n"
-        f"Строк дії: {contract['duration_years']} років (до {contract['date_valid_to'].date()})\n\n"
+        f"Строк дії: {contract['duration_years']} років (до {contract['date_valid_to'].date()})\n"
+        f"📅 Початок дії: {contract['date_valid_from'].date()}\n"
+        "🟡 Нарахування активні з цієї дати\n\n"
         f"📌 Статус: {status_text}{registration_block}\n\n"
         f"🏢 <b>Орендар (ТОВ)</b>:\n"
         f"{company['short_name'] or company['full_name']}\n"
@@ -627,38 +643,45 @@ async def agreement_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for p in payments:
         payments_by_year.setdefault(p["payment_date"].year, []).append(p)
     totals = {y: sum(float(r["amount"]) for r in rows) for y, rows in payments_by_year.items()}
-    current_year = datetime.utcnow().year
-    curr_total = totals.get(current_year, 0)
     rent = float(contract["rent_amount"] or 0)
-    debt = max(0, rent - curr_total)
-    paid_full = curr_total >= rent
-    history_lines = []
-    for p in payments_by_year.get(current_year, []):
-        typ = payment_type_short.get(p["payment_type"], "")
-        history_lines.append(f"— {p['payment_date'].strftime('%d.%m.%Y')} — {typ} {format_money(p['amount'])}")
-    prev_years = ""
-    for y in sorted(totals):
-        if y == current_year:
-            continue
-        total = totals[y]
-        if total >= rent:
-            status = "✅ Виплачено повністю"
-        else:
-            status = f"❌ Не виплачено (борг: {format_money(rent - total)})"
-        prev_years += f"{y} — {status}\n"
+    start_year = contract["date_valid_from"].year
+    current_year = datetime.utcnow().year
+    if current_year < start_year:
+        text += (
+            f"\n\n📆 <b>Орендна плата</b>: {format_money(rent)}/рік\n"
+            f"🟡 Нарахування активні з {start_year} року"
+        )
+    else:
+        curr_total = totals.get(current_year, 0)
+        debt = max(0, rent - curr_total)
+        paid_full = curr_total >= rent
+        history_lines = []
+        for p in payments_by_year.get(current_year, []):
+            typ = payment_type_short.get(p["payment_type"], "")
+            history_lines.append(f"— {p['payment_date'].strftime('%d.%m.%Y')} — {typ} {format_money(p['amount'])}")
+        prev_years = ""
+        for y in sorted(totals):
+            if y == current_year:
+                continue
+            total = totals[y]
+            if total >= rent:
+                status = "✅ Виплачено повністю"
+            else:
+                status = f"❌ Не виплачено (борг: {format_money(rent - total)})"
+            prev_years += f"{y} — {status}\n"
 
-    text += (
-        f"\n\n📆 <b>Орендна плата</b>: {format_money(rent)}/рік\n\n"
-        f"🗓 Поточний рік: {current_year}\n"
-        f"✅ Виплачено: {format_money(curr_total)}\n"
-        f"🔴 Борг: {format_money(debt)}\n"
-        f"📌 Виплачено повністю: {'✅ Так' if paid_full else '❌ Ні'}"
-    )
-    if history_lines:
-        text += "\n\n📅 Історія {year}:\n".format(year=current_year)
-        text += "\n".join(history_lines)
-    if prev_years:
-        text += "\n\n📂 Попередні роки:\n" + prev_years.strip()
+        text += (
+            f"\n\n📆 <b>Орендна плата</b>: {format_money(rent)}/рік\n\n"
+            f"🗓 Поточний рік: {current_year}\n"
+            f"✅ Виплачено: {format_money(curr_total)}\n"
+            f"🔴 Борг: {format_money(debt)}\n"
+            f"📌 Виплачено повністю: {'✅ Так' if paid_full else '❌ Ні'}"
+        )
+        if history_lines:
+            text += "\n\n📅 Історія {year}:\n".format(year=current_year)
+            text += "\n".join(history_lines)
+        if prev_years:
+            text += "\n\n📂 Попередні роки:\n" + prev_years.strip()
 
     buttons = [
         [InlineKeyboardButton("➕ Додати виплату", callback_data=f"add_payment:{contract_id}")],
@@ -1142,9 +1165,11 @@ async def payment_summary_cb(update: Update, context: ContextTypes.DEFAULT_TYPE)
         y = p["payment_date"].year
         by_year[y] = by_year.get(y, 0) + float(p["amount"])
     rent = float(contract["rent_amount"] or 0)
+    start_year = contract["date_valid_from"].year if contract["date_valid_from"] else datetime.utcnow().year
+    end_year = contract["date_valid_to"].year if contract["date_valid_to"] else datetime.utcnow().year
     lines = []
-    for y in sorted(by_year):
-        total = by_year[y]
+    for y in range(start_year, end_year + 1):
+        total = by_year.get(y, 0.0)
         if total >= rent:
             status = "✅ Виплачено повністю"
         else:
