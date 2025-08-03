@@ -18,6 +18,20 @@ def status_filter_kb() -> InlineKeyboardMarkup:
     )
 
 
+def rent_status_filter_kb() -> InlineKeyboardMarkup:
+    """Keyboard for selecting rent payment summary status filter."""
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("Очікує", callback_data="rent_status:pending"),
+                InlineKeyboardButton("Частково", callback_data="rent_status:partial"),
+            ],
+            [InlineKeyboardButton("Оплачено", callback_data="rent_status:paid")],
+            [InlineKeyboardButton("Пропустити", callback_data="rent_status:any")],
+        ]
+    )
+
+
 def heirs_filter_kb() -> InlineKeyboardMarkup:
     """Keyboard to choose whether to show only heir payments."""
     return InlineKeyboardMarkup(
