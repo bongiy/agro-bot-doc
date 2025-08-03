@@ -111,6 +111,18 @@ PayerContract = sqlalchemy.Table(
     sqlalchemy.Column("payer_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("payer.id")),
 )
 
+# === Таблиця суборенди ===
+Sublease = sqlalchemy.Table(
+    "sublease",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("land_plot_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("land_plot.id")),
+    sqlalchemy.Column("from_company_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("company.id")),
+    sqlalchemy.Column("to_company_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("company.id")),
+    sqlalchemy.Column("date_from", sqlalchemy.Date),
+    sqlalchemy.Column("date_to", sqlalchemy.Date),
+)
+
 # === Таблиця спадкоємців ===
 Heir = sqlalchemy.Table(
     "heir",
@@ -841,6 +853,243 @@ async def get_contract_overview():
     }
 
     return summary, companies, statuses, years, rows
+
+# === Звіт по ТОВ ===
+async def get_company_report(year: int):
+    """Return aggregated info per company for a specific year."""
+    payments_sub = (
+        sqlalchemy.select(
+            Payment.c.agreement_id.label("cid"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(Payment.c.amount), 0).label("paid"),
+        )
+        .where(sqlalchemy.extract("year", Payment.c.payment_date) == year)
+        .group_by(Payment.c.agreement_id)
+        .subquery()
+    )
+
+    contract_active = sqlalchemy.and_(
+        sqlalchemy.extract("year", Contract.c.date_valid_from) <= year,
+        sqlalchemy.or_(
+            Contract.c.date_valid_to.is_(None),
+            sqlalchemy.extract("year", Contract.c.date_valid_to) >= year,
+        ),
+    )
+
+    contract_base = (
+        sqlalchemy.select(
+            Contract.c.id,
+            Contract.c.company_id,
+            Contract.c.rent_amount,
+            sqlalchemy.func.coalesce(payments_sub.c.paid, 0).label("paid"),
+        )
+        .select_from(Contract)
+        .outerjoin(payments_sub, payments_sub.c.cid == Contract.c.id)
+        .where(contract_active)
+        .subquery()
+    )
+
+    info_sub = (
+        sqlalchemy.select(
+            contract_base.c.company_id,
+            sqlalchemy.func.count(contract_base.c.id).label("contracts"),
+            sqlalchemy.func.count(sqlalchemy.distinct(ContractLandPlot.c.land_plot_id)).label("plots"),
+            sqlalchemy.func.count(sqlalchemy.distinct(PayerContract.c.payer_id)).label("payers"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(LandPlot.c.area), 0).label("contract_area"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(contract_base.c.rent_amount), 0).label("rent_total"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(contract_base.c.paid), 0).label("paid_total"),
+        )
+        .select_from(contract_base)
+        .outerjoin(ContractLandPlot, ContractLandPlot.c.contract_id == contract_base.c.id)
+        .outerjoin(LandPlot, LandPlot.c.id == ContractLandPlot.c.land_plot_id)
+        .outerjoin(PayerContract, PayerContract.c.contract_id == contract_base.c.id)
+        .group_by(contract_base.c.company_id)
+        .subquery()
+    )
+
+    fields_base = (
+        sqlalchemy.select(
+            Contract.c.company_id.label("company_id"),
+            Field.c.id.label("field_id"),
+            Field.c.area_actual.label("area_actual"),
+        )
+        .select_from(Contract)
+        .join(ContractLandPlot, ContractLandPlot.c.contract_id == Contract.c.id)
+        .join(LandPlot, LandPlot.c.id == ContractLandPlot.c.land_plot_id)
+        .join(Field, Field.c.id == LandPlot.c.field_id)
+        .where(contract_active)
+        .group_by(Contract.c.company_id, Field.c.id, Field.c.area_actual)
+        .subquery()
+    )
+
+    physical_sub = (
+        sqlalchemy.select(
+            fields_base.c.company_id,
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(fields_base.c.area_actual), 0).label("physical_area"),
+        )
+        .select_from(fields_base)
+        .group_by(fields_base.c.company_id)
+        .subquery()
+    )
+
+    query = (
+        sqlalchemy.select(
+            Company.c.name,
+            info_sub.c.contracts,
+            info_sub.c.plots,
+            sqlalchemy.func.coalesce(physical_sub.c.physical_area, 0).label("physical_area"),
+            info_sub.c.contract_area,
+            info_sub.c.payers,
+            info_sub.c.rent_total,
+            info_sub.c.paid_total,
+        )
+        .select_from(info_sub)
+        .join(Company, Company.c.id == info_sub.c.company_id)
+        .outerjoin(physical_sub, physical_sub.c.company_id == info_sub.c.company_id)
+        .order_by(Company.c.name)
+    )
+    rows = await database.fetch_all(query)
+    return rows
+
+
+async def get_company_contract_types(year: int):
+    """Return contract type stats per company for a given year."""
+    contract_active = sqlalchemy.and_(
+        sqlalchemy.extract("year", Contract.c.date_valid_from) <= year,
+        sqlalchemy.or_(
+            Contract.c.date_valid_to.is_(None),
+            sqlalchemy.extract("year", Contract.c.date_valid_to) >= year,
+        ),
+    )
+
+    query = (
+        sqlalchemy.select(
+            Company.c.name.label("company_name"),
+            AgreementTemplate.c.type.label("contract_type"),
+            sqlalchemy.func.count(sqlalchemy.distinct(Contract.c.id)).label("count"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(LandPlot.c.area), 0).label("area"),
+        )
+        .select_from(Contract)
+        .join(Company, Company.c.id == Contract.c.company_id)
+        .join(AgreementTemplate, AgreementTemplate.c.id == Contract.c.template_id)
+        .outerjoin(ContractLandPlot, ContractLandPlot.c.contract_id == Contract.c.id)
+        .outerjoin(LandPlot, LandPlot.c.id == ContractLandPlot.c.land_plot_id)
+        .where(contract_active)
+        .group_by(Company.c.id, AgreementTemplate.c.type)
+        .order_by(Company.c.name, AgreementTemplate.c.type)
+    )
+    rows = await database.fetch_all(query)
+    return rows
+
+
+async def get_company_sublease():
+    """Return sublease stats per company."""
+    received = (
+        sqlalchemy.select(
+            Sublease.c.to_company_id.label("company_id"),
+            sqlalchemy.func.count(Sublease.c.id).label("plots"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(LandPlot.c.area), 0).label("area"),
+        )
+        .join(LandPlot, LandPlot.c.id == Sublease.c.land_plot_id)
+        .group_by(Sublease.c.to_company_id)
+        .subquery()
+    )
+
+    transferred = (
+        sqlalchemy.select(
+            Sublease.c.from_company_id.label("company_id"),
+            sqlalchemy.func.count(Sublease.c.id).label("plots"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(LandPlot.c.area), 0).label("area"),
+        )
+        .join(LandPlot, LandPlot.c.id == Sublease.c.land_plot_id)
+        .group_by(Sublease.c.from_company_id)
+        .subquery()
+    )
+
+    query = (
+        sqlalchemy.select(
+            Company.c.name.label("company_name"),
+            sqlalchemy.func.coalesce(received.c.plots, 0).label("received_plots"),
+            sqlalchemy.func.coalesce(received.c.area, 0).label("received_area"),
+            sqlalchemy.func.coalesce(transferred.c.plots, 0).label("transferred_plots"),
+            sqlalchemy.func.coalesce(transferred.c.area, 0).label("transferred_area"),
+        )
+        .select_from(Company)
+        .outerjoin(received, received.c.company_id == Company.c.id)
+        .outerjoin(transferred, transferred.c.company_id == Company.c.id)
+        .order_by(Company.c.name)
+    )
+    rows = await database.fetch_all(query)
+    return rows
+
+
+async def get_company_payments_by_year():
+    """Return payment accrual and paid amounts per company per year."""
+    contracts = await database.fetch_all(
+        sqlalchemy.select(
+            Contract.c.id,
+            Contract.c.company_id,
+            Contract.c.date_valid_from,
+            Contract.c.date_valid_to,
+            Contract.c.rent_amount,
+        )
+    )
+    accruals: dict[tuple[int, int], float] = {}
+    for c in contracts:
+        if not c["date_valid_from"]:
+            continue
+        start_year = c["date_valid_from"].year
+        end_year = c["date_valid_to"].year if c["date_valid_to"] else start_year
+        for y in range(start_year, end_year + 1):
+            key = (c["company_id"], y)
+            accruals[key] = accruals.get(key, 0) + float(c["rent_amount"] or 0)
+
+    pay_rows = await database.fetch_all(
+        sqlalchemy.select(
+            Contract.c.company_id,
+            sqlalchemy.extract("year", Payment.c.payment_date).label("year"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(Payment.c.amount), 0).label("paid"),
+        )
+        .select_from(Payment)
+        .join(Contract, Contract.c.id == Payment.c.agreement_id)
+        .group_by(Contract.c.company_id, sqlalchemy.extract("year", Payment.c.payment_date))
+    )
+    paid = {(int(r["company_id"]), int(r["year"])): float(r["paid"] or 0) for r in pay_rows}
+
+    rows: list[dict] = []
+    keys_seen: set[tuple[int, int]] = set()
+    for (cid, year), accrued in accruals.items():
+        paid_amount = paid.get((cid, year), 0.0)
+        rows.append(
+            {
+                "company_id": cid,
+                "year": year,
+                "accrued": accrued,
+                "paid": paid_amount,
+                "debt": accrued - paid_amount,
+            }
+        )
+        keys_seen.add((cid, year))
+    for (cid, year), paid_amount in paid.items():
+        if (cid, year) not in keys_seen:
+            rows.append(
+                {
+                    "company_id": cid,
+                    "year": year,
+                    "accrued": 0.0,
+                    "paid": paid_amount,
+                    "debt": -paid_amount,
+                }
+            )
+
+    companies = await database.fetch_all(
+        sqlalchemy.select(Company.c.id, Company.c.name)
+    )
+    names = {c["id"]: c["name"] for c in companies}
+    for r in rows:
+        r["company"] = names.get(r["company_id"])
+
+    rows.sort(key=lambda x: (x["company"], x["year"]))
+    return rows
 
 # === Звіт по ділянках ===
 async def get_land_report_rows(
