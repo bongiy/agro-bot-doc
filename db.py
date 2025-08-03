@@ -1533,7 +1533,7 @@ with engine.begin() as conn:
         'ALTER TABLE "contract" ADD COLUMN IF NOT EXISTS template_id INTEGER REFERENCES agreement_template(id)'
     ))
     conn.execute(sqlalchemy.text(
-        'ALTER TABLE "agreement_template" ADD COLUMN IF NOT EXISTS template_type VARCHAR(32) DEFAULT \''single\''' 
+        "ALTER TABLE \"agreement_template\" ADD COLUMN IF NOT EXISTS template_type VARCHAR(32) DEFAULT 'single'"
     ))
     conn.execute(sqlalchemy.text(
         'ALTER TABLE "crm_events" ADD COLUMN IF NOT EXISTS event_datetime TIMESTAMP'
