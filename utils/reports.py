@@ -40,6 +40,65 @@ async def payments_to_excel(rows: Iterable[dict]) -> BytesIO:
     return bio
 
 
+async def land_report_to_excel(rows: Iterable[dict]) -> BytesIO:
+    """Generate Excel file for land plots report."""
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(
+        [
+            "Кадастровий",
+            "Площа",
+            "НГО",
+            "Пайовик",
+            "Договір",
+            "Орендар",
+            "Дата закінчення",
+            "Поле",
+            "Річна орендна плата",
+        ]
+    )
+    total_area = 0.0
+    total_rent = 0.0
+    for r in rows:
+        area = float(r.get("area") or 0)
+        ngo = float(r.get("ngo") or 0)
+        rent = float(r.get("rent_amount") or 0)
+        total_area += area
+        total_rent += rent
+        date_val = (
+            r.get("date_valid_to").strftime("%d.%m.%Y")
+            if r.get("date_valid_to")
+            else ""
+        )
+        ws.append(
+            [
+                r.get("cadaster") or "",
+                area,
+                ngo,
+                r.get("payer_name") or "",
+                r.get("contract_number") or "",
+                r.get("company_name") or "",
+                date_val,
+                r.get("field_name") or "",
+                rent,
+            ]
+        )
+        row = ws.max_row
+        ws.cell(row=row, column=2).number_format = "0.0000"
+        ws.cell(row=row, column=3).number_format = "0.00"
+        ws.cell(row=row, column=9).number_format = "0.00"
+    ws.append(["Разом", total_area, "", "", "", "", "", "", total_rent])
+    last_row = ws.max_row
+    ws.cell(row=last_row, column=2).number_format = "0.0000"
+    ws.cell(row=last_row, column=9).number_format = "0.00"
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    return bio
+
+
 async def rent_summary_to_excel(rows: Iterable[dict]) -> BytesIO:
     """Generate Excel file for rent summary report."""
     from openpyxl import Workbook
