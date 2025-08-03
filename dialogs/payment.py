@@ -170,6 +170,7 @@ async def payment_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
             payment_date=context.user_data.get("payment_date"),
             payment_type=context.user_data.get("payment_type"),
             notes=notes,
+            status="paid",
             created_at=datetime.utcnow(),
         )
     )
@@ -589,6 +590,10 @@ async def report_export_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bio = await payments_to_excel(rows)
     await query.message.reply_document(
         document=InputFile(bio, filename="payments_report.xlsx")
+    )
+    total = sum(float(r.get("amount") or 0) for r in rows)
+    await query.message.reply_text(
+        f"Усього записів: {len(rows)}\nСума виплат: {format_money(total)}"
     )
     await query.answer()
     return REPORT_SHOW

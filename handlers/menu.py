@@ -8,10 +8,22 @@ from telegram.ext import (
     filters,
 )
 from keyboards.menu import (
-    main_menu, main_menu_admin,
-    payers_menu, lands_menu, fields_menu, contracts_menu,
-    payments_menu, reports_menu, search_menu, admin_panel_menu, admin_tov_menu,
-    admin_templates_menu, crm_menu, crm_events_menu
+    main_menu,
+    main_menu_admin,
+    payers_menu,
+    lands_menu,
+    fields_menu,
+    contracts_menu,
+    payments_menu_admin,
+    payments_menu_user,
+    reports_menu_admin,
+    reports_menu_user,
+    search_menu,
+    admin_panel_menu,
+    admin_tov_menu,
+    admin_templates_menu,
+    crm_menu,
+    crm_events_menu,
 )
 from db import (
     get_companies,
@@ -91,10 +103,14 @@ async def contracts_menu_handler(update: Update, context: ContextTypes.DEFAULT_T
     await update.message.reply_text("Меню «Договори»", reply_markup=contracts_menu)
 
 async def payments_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Меню «Виплати»", reply_markup=payments_menu)
+    user = await get_user_by_tg_id(update.effective_user.id)
+    kb = payments_menu_admin if user and user["role"] == "admin" else payments_menu_user
+    await update.message.reply_text("Меню «Виплати»", reply_markup=kb)
 
 async def reports_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Меню «Звіти»", reply_markup=reports_menu)
+    user = await get_user_by_tg_id(update.effective_user.id)
+    kb = reports_menu_admin if user and user["role"] == "admin" else reports_menu_user
+    await update.message.reply_text("Меню «Звіти»", reply_markup=kb)
 
 async def search_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["last_menu"] = "search"

@@ -67,26 +67,45 @@ contracts_menu = ReplyKeyboardMarkup(
 )
 
 # --- Меню виплат ---
-payments_menu = ReplyKeyboardMarkup(
+payments_menu_admin = ReplyKeyboardMarkup(
     [
         ["➕ Додати виплату"],
         ["📋 Перелік виплат"],
         ["🔍 Борг перед спадкоємцем"],
         ["💳 Звіти по виплатах"],
-        ["◀️ Назад"]
+        ["◀️ Назад"],
     ],
-    resize_keyboard=True
+    resize_keyboard=True,
+)
+
+payments_menu_user = ReplyKeyboardMarkup(
+    [
+        ["➕ Додати виплату"],
+        ["📋 Перелік виплат"],
+        ["🔍 Борг перед спадкоємцем"],
+        ["◀️ Назад"],
+    ],
+    resize_keyboard=True,
 )
 
 # --- Меню звітів ---
-reports_menu = ReplyKeyboardMarkup(
+reports_menu_admin = ReplyKeyboardMarkup(
     [
         ["📊 Зведення по орендній платі"],
         ["📈 Статистика по полях"],
         ["💸 Звіт по виплатах"],
-        ["◀️ Назад"]
+        ["◀️ Назад"],
     ],
-    resize_keyboard=True
+    resize_keyboard=True,
+)
+
+reports_menu_user = ReplyKeyboardMarkup(
+    [
+        ["📊 Зведення по орендній платі"],
+        ["📈 Статистика по полях"],
+        ["◀️ Назад"],
+    ],
+    resize_keyboard=True,
 )
 
 # --- Меню пошуку ---
