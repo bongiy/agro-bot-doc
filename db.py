@@ -649,6 +649,125 @@ async def get_land_overview():
 
     return summary, fields, companies, statuses, contracts
 
+
+async def get_contract_overview():
+    """Return aggregated contract statistics and detailed rows."""
+    contract_base = (
+        sqlalchemy.select(
+            Contract.c.id.label("id"),
+            Contract.c.company_id,
+            Contract.c.status,
+            sqlalchemy.extract("year", Contract.c.date_valid_to).label("end_year"),
+            sqlalchemy.func.coalesce(Contract.c.rent_amount, 0).label("rent_amount"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(LandPlot.c.area), 0).label("area"),
+        )
+        .select_from(Contract)
+        .outerjoin(ContractLandPlot, ContractLandPlot.c.contract_id == Contract.c.id)
+        .outerjoin(LandPlot, LandPlot.c.id == ContractLandPlot.c.land_plot_id)
+        .where(Contract.c.status != "terminated")
+        .group_by(
+            Contract.c.id,
+            Contract.c.company_id,
+            Contract.c.status,
+            Contract.c.date_valid_to,
+            Contract.c.rent_amount,
+        )
+        .subquery()
+    )
+
+    total = await database.fetch_one(
+        sqlalchemy.select(
+            sqlalchemy.func.count(contract_base.c.id).label("contracts"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(contract_base.c.area), 0).label("area"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(contract_base.c.rent_amount), 0).label("rent"),
+            sqlalchemy.func.count(sqlalchemy.distinct(contract_base.c.company_id)).label("companies"),
+        )
+    )
+
+    payer_count = await database.fetch_val(
+        sqlalchemy.select(
+            sqlalchemy.func.count(sqlalchemy.distinct(PayerContract.c.payer_id))
+        )
+        .join(Contract, Contract.c.id == PayerContract.c.contract_id)
+        .where(Contract.c.status != "terminated")
+    )
+
+    companies = await database.fetch_all(
+        sqlalchemy.select(
+            Company.c.name.label("name"),
+            sqlalchemy.func.count(contract_base.c.id).label("contracts"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(contract_base.c.area), 0).label("area"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(contract_base.c.rent_amount), 0).label("rent"),
+        )
+        .join(Company, Company.c.id == contract_base.c.company_id)
+        .group_by(Company.c.id)
+        .order_by(Company.c.name)
+    )
+
+    statuses = await database.fetch_all(
+        sqlalchemy.select(
+            contract_base.c.status.label("status"),
+            sqlalchemy.func.count(contract_base.c.id).label("contracts"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(contract_base.c.area), 0).label("area"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(contract_base.c.rent_amount), 0).label("rent"),
+        )
+        .select_from(contract_base)
+        .group_by(contract_base.c.status)
+        .order_by(contract_base.c.status)
+    )
+
+    years = await database.fetch_all(
+        sqlalchemy.select(
+            contract_base.c.end_year.label("year"),
+            sqlalchemy.func.count(contract_base.c.id).label("contracts"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(contract_base.c.area), 0).label("area"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(contract_base.c.rent_amount), 0).label("rent"),
+        )
+        .select_from(contract_base)
+        .group_by(contract_base.c.end_year)
+        .order_by(contract_base.c.end_year)
+    )
+
+    rows = await database.fetch_all(
+        sqlalchemy.select(
+            Contract.c.number.label("number"),
+            Company.c.name.label("company_name"),
+            sqlalchemy.func.string_agg(
+                sqlalchemy.distinct(Payer.c.name), ", "
+            ).label("payer_name"),
+            Contract.c.status,
+            contract_base.c.area,
+            sqlalchemy.extract("year", Contract.c.date_valid_from).label("year_from"),
+            contract_base.c.end_year.label("year_to"),
+            contract_base.c.rent_amount.label("rent_amount"),
+        )
+        .join(contract_base, contract_base.c.id == Contract.c.id)
+        .join(Company, Company.c.id == Contract.c.company_id)
+        .outerjoin(PayerContract, PayerContract.c.contract_id == Contract.c.id)
+        .outerjoin(Payer, Payer.c.id == PayerContract.c.payer_id)
+        .group_by(
+            Contract.c.id,
+            Contract.c.number,
+            Contract.c.status,
+            Contract.c.date_valid_from,
+            Company.c.name,
+            contract_base.c.area,
+            contract_base.c.end_year,
+            contract_base.c.rent_amount,
+        )
+        .order_by(Contract.c.number)
+    )
+
+    summary = {
+        "contracts": total["contracts"] or 0,
+        "payers": payer_count or 0,
+        "area": float(total["area"] or 0),
+        "rent": float(total["rent"] or 0),
+        "companies": total["companies"] or 0,
+    }
+
+    return summary, companies, statuses, years, rows
+
 # === Звіт по ділянках ===
 async def get_land_report_rows(
     payer_query: str | None = None,

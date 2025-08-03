@@ -1,6 +1,13 @@
 from io import BytesIO
 from typing import Iterable
 
+CONTRACT_STATUS_LABELS = {
+    "signed": "Підписано",
+    "sent_for_registration": "Відправлено на реєстрацію",
+    "returned_for_correction": "Повернуто на доопрацювання",
+    "registered": "Зареєстровано в ДРРП",
+}
+
 
 async def payments_to_excel(rows: Iterable[dict]) -> BytesIO:
     """Generate Excel file from payment rows and return as BytesIO."""
@@ -206,6 +213,108 @@ async def land_overview_to_excel(
         label = "З договором" if s["status"] == "with_contract" else "Без договору"
         ws.append([label, s["plots"], float(s["area"] or 0)])
         ws.cell(row=ws.max_row, column=3).number_format = "0.00"
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    return bio
+
+
+async def contracts_overview_to_excel(
+    rows: Iterable[dict],
+    companies: Iterable[dict],
+    statuses: Iterable[dict],
+    years: Iterable[dict],
+    summary: dict,
+) -> BytesIO:
+    """Generate Excel file for contracts overview."""
+    from openpyxl import Workbook
+
+    wb = Workbook()
+
+    # Main sheet with contract rows
+    ws = wb.active
+    ws.title = "Договори"
+    ws.append(
+        [
+            "Номер договору",
+            "Компанія",
+            "ПІБ пайовика",
+            "Статус",
+            "Площа",
+            "Рік початку",
+            "Рік закінчення",
+            "Сума",
+        ]
+    )
+    for r in rows:
+        ws.append(
+            [
+                r.get("number") or "",
+                r.get("company_name") or "",
+                r.get("payer_name") or "",
+                CONTRACT_STATUS_LABELS.get(r.get("status"), r.get("status") or ""),
+                float(r.get("area") or 0),
+                int(r.get("year_from")) if r.get("year_from") is not None else "",
+                int(r.get("year_to")) if r.get("year_to") is not None else "",
+                float(r.get("rent_amount") or 0),
+            ]
+        )
+        row = ws.max_row
+        ws.cell(row=row, column=5).number_format = "0.0000"
+        ws.cell(row=row, column=8).number_format = "0.00"
+
+    # Companies sheet
+    ws = wb.create_sheet("По компаніях")
+    ws.append(["Компанія", "Договорів", "Площа (га)", "Сума"])
+    for c in companies:
+        ws.append([c["name"], c["contracts"], float(c["area"] or 0), float(c["rent"] or 0)])
+        row = ws.max_row
+        ws.cell(row=row, column=3).number_format = "0.0000"
+        ws.cell(row=row, column=4).number_format = "0.00"
+
+    # Statuses sheet
+    ws = wb.create_sheet("По статусах")
+    ws.append(["Статус", "Договорів", "Площа (га)", "Сума"])
+    for s in statuses:
+        ws.append(
+            [
+                CONTRACT_STATUS_LABELS.get(s["status"], s["status"]),
+                s["contracts"],
+                float(s["area"] or 0),
+                float(s["rent"] or 0),
+            ]
+        )
+        row = ws.max_row
+        ws.cell(row=row, column=3).number_format = "0.0000"
+        ws.cell(row=row, column=4).number_format = "0.00"
+
+    # Years sheet
+    ws = wb.create_sheet("По роках завершення")
+    ws.append(["Рік", "Договорів", "Площа (га)", "Сума"])
+    for y in years:
+        ws.append(
+            [
+                int(y["year"]) if y.get("year") is not None else "",
+                y["contracts"],
+                float(y["area"] or 0),
+                float(y["rent"] or 0),
+            ]
+        )
+        row = ws.max_row
+        ws.cell(row=row, column=3).number_format = "0.0000"
+        ws.cell(row=row, column=4).number_format = "0.00"
+
+    # Summary sheet
+    ws = wb.create_sheet("Сумарна")
+    ws.append(["Показник", "Значення"])
+    ws.append(["Договорів", summary["contracts"]])
+    ws.append(["Унікальних пайовиків", summary["payers"]])
+    ws.append(["Площа (га)", summary["area"]])
+    ws.append(["Річна орендна плата", summary["rent"]])
+    ws.append(["Компаній", summary["companies"]])
+    ws.cell(row=3, column=2).number_format = "0.0000"
+    ws.cell(row=4, column=2).number_format = "0.00"
 
     bio = BytesIO()
     wb.save(bio)
