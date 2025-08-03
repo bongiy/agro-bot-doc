@@ -120,6 +120,12 @@ Sublease = sqlalchemy.Table(
     sqlalchemy.Column("land_plot_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("land_plot.id")),
     sqlalchemy.Column("from_company_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("company.id")),
     sqlalchemy.Column("to_company_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("company.id")),
+    sqlalchemy.Column(
+        "counterparty_id",
+        sqlalchemy.Integer,
+        sqlalchemy.ForeignKey("counterparty.id"),
+        nullable=True,
+    ),
     sqlalchemy.Column("date_from", sqlalchemy.Date),
     sqlalchemy.Column("date_to", sqlalchemy.Date),
 )
@@ -281,6 +287,13 @@ async def update_counterparty(counterparty_id: int, data: dict):
 async def delete_counterparty(counterparty_id: int):
     query = Counterparty.delete().where(Counterparty.c.id == counterparty_id)
     await database.execute(query)
+
+
+# === Sublease helpers ===
+async def add_sublease(data: dict):
+    """Create a sublease record."""
+    query = Sublease.insert().values(**data)
+    return await database.execute(query)
 
 
 # === Heir helpers ===
