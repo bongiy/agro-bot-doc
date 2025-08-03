@@ -64,6 +64,7 @@ from dialogs.payment import (
 )
 from dialogs.rent_summary import rent_summary_conv
 from dialogs.land_report import land_report_conv
+from dialogs.land_overview import land_overview_conv
 from dialogs.edit_field import edit_field_conv
 from dialogs.edit_land import edit_land_conv
 from dialogs.edit_land_owner import edit_land_owner_conv
@@ -157,6 +158,7 @@ application.add_handler(MessageHandler(filters.Regex("^🔍 Борг перед 
 application.add_handler(payment_report_conv)
 application.add_handler(rent_summary_conv)
 application.add_handler(land_report_conv)
+application.add_handler(land_overview_conv)
 
 # --- Потенційні пайовики ---
 application.add_handler(add_potential_conv)
