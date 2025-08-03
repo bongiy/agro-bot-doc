@@ -26,6 +26,7 @@ from db import (
     settle_inheritance_debt,
 )
 from contract_generation_v2 import format_money
+from handlers.menu import admin_only
 
 PAY_AMOUNT, PAY_DATE, PAY_TYPE, PAY_NOTES, PAY_CONFIRM = range(5)
 
@@ -344,6 +345,7 @@ async def list_inheritance_debts(update: Update, context: ContextTypes.DEFAULT_T
 
 
 # ==== ЗВІТИ ПО ВИПЛАТАХ ====
+@admin_only
 async def payment_reports_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     year = datetime.utcnow().year
     years = [str(year - i) for i in range(3)]
@@ -353,6 +355,7 @@ async def payment_reports_start(update: Update, context: ContextTypes.DEFAULT_TY
     await update.message.reply_text("\U0001F4C6 Оберіть рік:", reply_markup=kb)
 
 
+@admin_only
 async def payment_report_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     year = int(query.data.split(":")[1])
@@ -398,6 +401,7 @@ async def payment_report_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.message.edit_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(kb))
 
 
+@admin_only
 async def payment_report_csv_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     year = int(query.data.split(":")[1])

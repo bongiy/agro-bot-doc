@@ -155,6 +155,7 @@ application.add_handler(global_add_payment_conv)
 application.add_handler(MessageHandler(filters.Regex("^📋 Перелік виплат$"), show_payments))
 application.add_handler(MessageHandler(filters.Regex("^🔍 Борг перед спадкоємцем$"), list_inheritance_debts))
 application.add_handler(MessageHandler(filters.Regex("^💳 Звіти по виплатах$"), payment_reports_start))
+application.add_handler(MessageHandler(filters.Regex("^💸 Звіт по виплатах$"), payment_reports_start))
 
 # --- Потенційні пайовики ---
 application.add_handler(add_potential_conv)
