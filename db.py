@@ -1304,6 +1304,7 @@ AgreementTemplate = sqlalchemy.Table(
     sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
     sqlalchemy.Column("name", sqlalchemy.String(255)),
     sqlalchemy.Column("type", sqlalchemy.String(32)),
+    sqlalchemy.Column("template_type", sqlalchemy.String(32), default="single"),
     sqlalchemy.Column("file_path", sqlalchemy.String(255)),
     sqlalchemy.Column("is_active", sqlalchemy.Boolean, default=True),
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
@@ -1455,10 +1456,12 @@ async def add_agreement_template(data: dict):
     query = AgreementTemplate.insert().values(**data)
     return await database.execute(query)
 
-async def get_agreement_templates(active_only: bool | None = None):
+async def get_agreement_templates(active_only: bool | None = None, template_type: str | None = None):
     query = AgreementTemplate.select()
     if active_only is not None:
         query = query.where(AgreementTemplate.c.is_active == active_only)
+    if template_type:
+        query = query.where(AgreementTemplate.c.template_type == template_type)
     query = query.order_by(AgreementTemplate.c.id)
     return await database.fetch_all(query)
 
@@ -1528,6 +1531,9 @@ with engine.begin() as conn:
     ))
     conn.execute(sqlalchemy.text(
         'ALTER TABLE "contract" ADD COLUMN IF NOT EXISTS template_id INTEGER REFERENCES agreement_template(id)'
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "agreement_template" ADD COLUMN IF NOT EXISTS template_type VARCHAR(32) DEFAULT \''single\''' 
     ))
     conn.execute(sqlalchemy.text(
         'ALTER TABLE "crm_events" ADD COLUMN IF NOT EXISTS event_datetime TIMESTAMP'
