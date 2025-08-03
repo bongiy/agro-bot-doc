@@ -3,6 +3,7 @@ from databases import Database
 from sqlalchemy.dialects.postgresql import JSONB
 import os
 from datetime import datetime, date
+from utils.contacts import normalize_phone, normalize_edrpou
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 database = Database(DATABASE_URL)
@@ -192,6 +193,21 @@ Company = sqlalchemy.Table(
     sqlalchemy.Column("created_at", sqlalchemy.DateTime),
 )
 
+# === Таблиця контрагентів ===
+Counterparty = sqlalchemy.Table(
+    "counterparty",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("name", sqlalchemy.String(255), nullable=False),
+    sqlalchemy.Column("edrpou", sqlalchemy.String(8), nullable=False, unique=True),
+    sqlalchemy.Column("director", sqlalchemy.String(255)),
+    sqlalchemy.Column("legal_address", sqlalchemy.String(255)),
+    sqlalchemy.Column("phone", sqlalchemy.String(13)),
+    sqlalchemy.Column("email", sqlalchemy.String(255)),
+    sqlalchemy.Column("note", sqlalchemy.Text),
+    sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
+)
+
 async def add_company(data: dict):
     query = Company.insert().values(**data)
     return await database.execute(query)
@@ -210,6 +226,60 @@ async def update_company(company_id: int, data: dict):
 
 async def delete_company(company_id: int):
     query = Company.delete().where(Company.c.id == company_id)
+    await database.execute(query)
+
+
+# === Counterparty helpers ===
+async def add_counterparty(data: dict):
+    data = data.copy()
+    if "phone" in data:
+        data["phone"] = normalize_phone(data["phone"])
+    if "edrpou" in data:
+        data["edrpou"] = normalize_edrpou(data["edrpou"])
+    query = Counterparty.insert().values(**data)
+    return await database.execute(query)
+
+
+async def get_counterparty(counterparty_id: int):
+    query = Counterparty.select().where(Counterparty.c.id == counterparty_id)
+    return await database.fetch_one(query)
+
+
+async def get_counterparties():
+    query = Counterparty.select().order_by(Counterparty.c.name)
+    return await database.fetch_all(query)
+
+
+async def search_counterparties(query_str: str):
+    like = f"%{query_str}%"
+    query = (
+        Counterparty.select()
+        .where(
+            (Counterparty.c.name.ilike(like))
+            | (Counterparty.c.edrpou == query_str)
+            | (Counterparty.c.director.ilike(like))
+        )
+        .order_by(Counterparty.c.name)
+    )
+    return await database.fetch_all(query)
+
+
+async def update_counterparty(counterparty_id: int, data: dict):
+    data = data.copy()
+    if "phone" in data:
+        data["phone"] = normalize_phone(data["phone"])
+    if "edrpou" in data:
+        data["edrpou"] = normalize_edrpou(data["edrpou"])
+    query = (
+        Counterparty.update()
+        .where(Counterparty.c.id == counterparty_id)
+        .values(**data)
+    )
+    await database.execute(query)
+
+
+async def delete_counterparty(counterparty_id: int):
+    query = Counterparty.delete().where(Counterparty.c.id == counterparty_id)
     await database.execute(query)
 
 
