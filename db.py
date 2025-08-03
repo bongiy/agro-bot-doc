@@ -382,7 +382,10 @@ async def get_payment_report_rows(
     )
 
     status_case = sqlalchemy.case(
-        (heir_condition, "Виплата спадкоємцю"), else_="Виплачено"
+        (Payment.c.status == "pending", "Очікує"),
+        (Payment.c.status == "partial", "Частково"),
+        (heir_condition, "Виплата спадкоємцю"),
+        else_="Виплачено",
     ).label("status")
     heir_flag = sqlalchemy.case((heir_condition, True), else_=False).label("is_heir")
 
@@ -421,7 +424,17 @@ async def get_payment_report_rows(
     if status == "heir":
         filters.append(heir_condition)
     elif status == "paid":
-        filters.append(~heir_condition)
+        filters.append(
+            sqlalchemy.and_(
+                ~heir_condition,
+                sqlalchemy.or_(
+                    Payment.c.status.is_(None),
+                    Payment.c.status == "paid",
+                ),
+            )
+        )
+    elif status in {"pending", "partial"}:
+        filters.append(Payment.c.status == status)
     if heirs_only:
         filters.append(heir_condition)
     if filters:
@@ -492,6 +505,7 @@ Payment = sqlalchemy.Table(
     sqlalchemy.Column("payment_date", sqlalchemy.Date, nullable=False),
     sqlalchemy.Column("payment_type", sqlalchemy.String),
     sqlalchemy.Column("notes", sqlalchemy.String),
+    sqlalchemy.Column("status", sqlalchemy.String, default="paid"),
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
 )
 
@@ -715,5 +729,8 @@ with engine.begin() as conn:
     ))
     conn.execute(sqlalchemy.text(
         'ALTER TABLE "payer_requests" ADD COLUMN IF NOT EXISTS responsible_user_id INTEGER REFERENCES "user"(id)'
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "payment" ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT \'paid\''
     ))
 
