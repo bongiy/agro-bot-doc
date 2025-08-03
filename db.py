@@ -552,6 +552,103 @@ async def get_rent_summary(
     rows = await database.fetch_all(query)
     return rows
 
+# === Узагальнений звіт по ділянках ===
+async def get_land_overview():
+    """Return aggregated land plot statistics."""
+    total = await database.fetch_one(
+        sqlalchemy.select(
+            sqlalchemy.func.count(LandPlot.c.id).label("plots"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(LandPlot.c.area), 0).label("area"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(LandPlot.c.ngo), 0).label("ngo"),
+        )
+    )
+
+    payer_count = await database.fetch_val(
+        sqlalchemy.select(
+            sqlalchemy.func.count(sqlalchemy.distinct(LandPlotOwner.c.payer_id))
+        )
+    )
+    contract_count = await database.fetch_val(
+        sqlalchemy.select(
+            sqlalchemy.func.count(sqlalchemy.distinct(Contract.c.id))
+        ).where(Contract.c.status != "terminated")
+    )
+    company_count = await database.fetch_val(
+        sqlalchemy.select(
+            sqlalchemy.func.count(sqlalchemy.distinct(Contract.c.company_id))
+        ).where(Contract.c.status != "terminated")
+    )
+
+    fields = await database.fetch_all(
+        sqlalchemy.select(
+            Field.c.name.label("name"),
+            sqlalchemy.func.count(LandPlot.c.id).label("plots"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(LandPlot.c.area), 0).label("area"),
+        )
+        .outerjoin(LandPlot, LandPlot.c.field_id == Field.c.id)
+        .group_by(Field.c.id)
+        .order_by(Field.c.name)
+    )
+
+    companies = await database.fetch_all(
+        sqlalchemy.select(
+            Company.c.name.label("name"),
+            sqlalchemy.func.count(sqlalchemy.distinct(LandPlot.c.id)).label("plots"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(LandPlot.c.area), 0).label("area"),
+        )
+        .select_from(Company)
+        .join(Contract, sqlalchemy.and_(Contract.c.company_id == Company.c.id, Contract.c.status != "terminated"))
+        .join(ContractLandPlot, ContractLandPlot.c.contract_id == Contract.c.id)
+        .join(LandPlot, LandPlot.c.id == ContractLandPlot.c.land_plot_id)
+        .group_by(Company.c.id)
+        .order_by(Company.c.name)
+    )
+
+    contracts = await database.fetch_all(
+        sqlalchemy.select(
+            Contract.c.number.label("number"),
+            sqlalchemy.func.count(LandPlot.c.id).label("plots"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(LandPlot.c.area), 0).label("area"),
+        )
+        .select_from(Contract)
+        .join(ContractLandPlot, ContractLandPlot.c.contract_id == Contract.c.id)
+        .join(LandPlot, LandPlot.c.id == ContractLandPlot.c.land_plot_id)
+        .where(Contract.c.status != "terminated")
+        .group_by(Contract.c.id)
+        .order_by(Contract.c.number)
+    )
+
+    with_contract = await database.fetch_one(
+        sqlalchemy.select(
+            sqlalchemy.func.count(sqlalchemy.distinct(LandPlot.c.id)).label("plots"),
+            sqlalchemy.func.coalesce(sqlalchemy.func.sum(LandPlot.c.area), 0).label("area"),
+        )
+        .select_from(LandPlot)
+        .join(ContractLandPlot, ContractLandPlot.c.land_plot_id == LandPlot.c.id)
+        .join(Contract, sqlalchemy.and_(Contract.c.id == ContractLandPlot.c.contract_id, Contract.c.status != "terminated"))
+    )
+    without_plots = total["plots"] - (with_contract["plots"] or 0)
+    without_area = float(total["area"] or 0) - float(with_contract["area"] or 0)
+    statuses = [
+        {
+            "status": "with_contract",
+            "plots": with_contract["plots"] or 0,
+            "area": float(with_contract["area"] or 0),
+        },
+        {"status": "without_contract", "plots": without_plots, "area": without_area},
+    ]
+
+    summary = {
+        "plots": total["plots"] or 0,
+        "area": float(total["area"] or 0),
+        "ngo": float(total["ngo"] or 0),
+        "payers": payer_count or 0,
+        "contracts": contract_count or 0,
+        "companies": company_count or 0,
+    }
+
+    return summary, fields, companies, statuses, contracts
+
 # === Звіт по ділянках ===
 async def get_land_report_rows(
     payer_query: str | None = None,

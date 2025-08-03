@@ -161,3 +161,53 @@ async def rent_summary_to_excel(rows: Iterable[dict]) -> BytesIO:
     wb.save(bio)
     bio.seek(0)
     return bio
+
+
+async def land_overview_to_excel(
+    summary: dict, fields: Iterable[dict], companies: Iterable[dict], statuses: Iterable[dict]
+) -> BytesIO:
+    """Generate Excel file for land overview report."""
+    from openpyxl import Workbook
+
+    wb = Workbook()
+
+    # Summary sheet
+    ws = wb.active
+    ws.title = "Сумарно"
+    ws.append(["Показник", "Значення"])
+    ws.append(["Кількість ділянок", summary["plots"]])
+    ws.append(["Загальна площа (га)", summary["area"]])
+    ws.append(["Загальна НГО", summary["ngo"]])
+    ws.append(["Унікальних пайовиків", summary["payers"]])
+    ws.append(["Активних договорів", summary["contracts"]])
+    ws.append(["ТОВ-орендарів", summary["companies"]])
+    ws.cell(row=2, column=2).number_format = "0"
+    ws.cell(row=3, column=2).number_format = "0.00"
+    ws.cell(row=4, column=2).number_format = "0.00"
+
+    # Fields sheet
+    ws = wb.create_sheet("По полях")
+    ws.append(["Поле", "Ділянок", "Площа (га)"])
+    for f in fields:
+        ws.append([f["name"], f["plots"], float(f["area"] or 0)])
+        ws.cell(row=ws.max_row, column=3).number_format = "0.00"
+
+    # Companies sheet
+    ws = wb.create_sheet("По компаніях")
+    ws.append(["Компанія", "Ділянок", "Площа (га)"])
+    for c in companies:
+        ws.append([c["name"], c["plots"], float(c["area"] or 0)])
+        ws.cell(row=ws.max_row, column=3).number_format = "0.00"
+
+    # Statuses sheet
+    ws = wb.create_sheet("По статусах")
+    ws.append(["Статус", "Ділянок", "Площа (га)"])
+    for s in statuses:
+        label = "З договором" if s["status"] == "with_contract" else "Без договору"
+        ws.append([label, s["plots"], float(s["area"] or 0)])
+        ws.cell(row=ws.max_row, column=3).number_format = "0.00"
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    return bio
