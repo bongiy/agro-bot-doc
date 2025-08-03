@@ -24,9 +24,12 @@ from db import (
     LandPlot,
     InheritanceDebt,
     settle_inheritance_debt,
+    get_payment_report_rows,
 )
 from contract_generation_v2 import format_money
 from handlers.menu import admin_only
+from keyboards.reports import status_filter_kb, heirs_filter_kb, report_nav_kb
+from utils.reports import payments_to_excel
 
 PAY_AMOUNT, PAY_DATE, PAY_TYPE, PAY_NOTES, PAY_CONFIRM = range(5)
 
@@ -201,6 +204,18 @@ add_payment_conv = ConversationHandler(
 
 # ==== ГЛОБАЛЬНИЙ ПОШУК ПАЙОВИКА ====
 SEARCH_PAYER = 2001
+
+(
+    REPORT_START_DATE,
+    REPORT_END_DATE,
+    REPORT_PAYER,
+    REPORT_COMPANY,
+    REPORT_STATUS,
+    REPORT_HEIRS,
+    REPORT_SHOW,
+) = range(2100, 2107)
+
+PAGE_SIZE = 10
 
 
 async def global_add_payment_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -440,6 +455,161 @@ global_add_payment_conv = ConversationHandler(
     entry_points=[MessageHandler(filters.Regex("^➕ Додати виплату$"), global_add_payment_start)],
     states={
         SEARCH_PAYER: [MessageHandler(filters.TEXT & ~filters.COMMAND, global_add_payment_search)],
+    },
+    fallbacks=[CommandHandler("start", to_menu)],
+)
+
+
+# === РОЗШИРЕНИЙ ЗВІТ ПО ВИПЛАТАХ ===
+@admin_only
+async def payment_report_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Введіть початкову дату (ДД.ММ.РРРР) або '-' для всіх:")
+    return REPORT_START_DATE
+
+
+@admin_only
+async def report_set_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    if text != "-":
+        try:
+            context.user_data["report_start"] = datetime.strptime(text, "%d.%m.%Y").date()
+        except ValueError:
+            await update.message.reply_text("Невірний формат. Спробуйте ще:")
+            return REPORT_START_DATE
+    else:
+        context.user_data["report_start"] = None
+    await update.message.reply_text(
+        "Введіть кінцеву дату (ДД.ММ.РРРР) або '-' для всіх:")
+    return REPORT_END_DATE
+
+
+@admin_only
+async def report_set_end(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    if text != "-":
+        try:
+            context.user_data["report_end"] = datetime.strptime(text, "%d.%m.%Y").date()
+        except ValueError:
+            await update.message.reply_text("Невірний формат. Спробуйте ще:")
+            return REPORT_END_DATE
+    else:
+        context.user_data["report_end"] = None
+    await update.message.reply_text(
+        "Введіть ПІБ або УНЗР пайовика або '-' для всіх:")
+    return REPORT_PAYER
+
+
+@admin_only
+async def report_set_payer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    context.user_data["report_payer"] = None if text == "-" else text
+    await update.message.reply_text(
+        "Введіть назву компанії-орендаря або '-' для всіх:")
+    return REPORT_COMPANY
+
+
+@admin_only
+async def report_set_company(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    context.user_data["report_company"] = None if text == "-" else text
+    await update.message.reply_text("Оберіть статус виплати:", reply_markup=status_filter_kb())
+    return REPORT_STATUS
+
+
+@admin_only
+async def report_set_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    status = query.data.split(":")[1]
+    context.user_data["report_status"] = None if status == "any" else status
+    await query.message.edit_text(
+        "Показувати лише спадкоємців?", reply_markup=heirs_filter_kb()
+    )
+    return REPORT_HEIRS
+
+
+@admin_only
+async def report_set_heirs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    heirs = query.data.split(":")[1] == "yes"
+    context.user_data["report_heirs"] = heirs
+    context.user_data["report_offset"] = 0
+    return await show_report_page(query.message, context)
+
+
+async def show_report_page(msg, context: ContextTypes.DEFAULT_TYPE):
+    offset = context.user_data.get("report_offset", 0)
+    rows = await get_payment_report_rows(
+        context.user_data.get("report_start"),
+        context.user_data.get("report_end"),
+        context.user_data.get("report_payer"),
+        context.user_data.get("report_company"),
+        context.user_data.get("report_status"),
+        context.user_data.get("report_heirs", False),
+        limit=PAGE_SIZE + 1,
+        offset=offset,
+    )
+    has_next = len(rows) > PAGE_SIZE
+    rows = rows[:PAGE_SIZE]
+    lines = ["Дата | Пайовик | Компанія | Сума | Статус | Спадкоємець"]
+    for r in rows:
+        lines.append(
+            f"{r['payment_date'].strftime('%d.%m.%Y')} | {r['payer_name']} | {r['company_name']} | "
+            f"{format_money(r['amount'])} | {r['status']} | {'так' if r['is_heir'] else 'ні'}"
+        )
+    kb = report_nav_kb(offset > 0, has_next)
+    await msg.edit_text("\n".join(lines), reply_markup=kb)
+    return REPORT_SHOW
+
+
+@admin_only
+async def report_page_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    direction = query.data.split("_")[1]
+    offset = context.user_data.get("report_offset", 0)
+    if direction == "next":
+        offset += PAGE_SIZE
+    else:
+        offset = max(0, offset - PAGE_SIZE)
+    context.user_data["report_offset"] = offset
+    return await show_report_page(query.message, context)
+
+
+@admin_only
+async def report_export_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    rows = await get_payment_report_rows(
+        context.user_data.get("report_start"),
+        context.user_data.get("report_end"),
+        context.user_data.get("report_payer"),
+        context.user_data.get("report_company"),
+        context.user_data.get("report_status"),
+        context.user_data.get("report_heirs", False),
+    )
+    bio = await payments_to_excel(rows)
+    await query.message.reply_document(
+        document=InputFile(bio, filename="payments_report.xlsx")
+    )
+    await query.answer()
+    return REPORT_SHOW
+
+
+payment_report_conv = ConversationHandler(
+    entry_points=[
+        MessageHandler(filters.Regex("^💳 Звіти по виплатах$"), payment_report_start),
+        MessageHandler(filters.Regex("^💸 Звіт по виплатах$"), payment_report_start),
+    ],
+    states={
+        REPORT_START_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, report_set_start)],
+        REPORT_END_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, report_set_end)],
+        REPORT_PAYER: [MessageHandler(filters.TEXT & ~filters.COMMAND, report_set_payer)],
+        REPORT_COMPANY: [MessageHandler(filters.TEXT & ~filters.COMMAND, report_set_company)],
+        REPORT_STATUS: [CallbackQueryHandler(report_set_status, pattern=r"^status:")],
+        REPORT_HEIRS: [CallbackQueryHandler(report_set_heirs, pattern=r"^heirs:")],
+        REPORT_SHOW: [
+            CallbackQueryHandler(report_page_cb, pattern=r"^payrep_(next|prev)$"),
+            CallbackQueryHandler(report_export_cb, pattern=r"^payrep_export$"),
+        ],
     },
     fallbacks=[CommandHandler("start", to_menu)],
 )

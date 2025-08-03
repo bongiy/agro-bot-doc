@@ -2,7 +2,7 @@ import sqlalchemy
 from databases import Database
 from sqlalchemy.dialects.postgresql import JSONB
 import os
-from datetime import datetime
+from datetime import datetime, date
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 database = Database(DATABASE_URL)
@@ -362,6 +362,76 @@ async def settle_inheritance_debt(contract_id: int, payment_id: int, amount: flo
         prefix = f"{notes}; " if notes else ""
         return prefix + "Виплата боргу"
     return notes or ""
+
+
+async def get_payment_report_rows(
+    start_date: date | None = None,
+    end_date: date | None = None,
+    payer_query: str | None = None,
+    company_query: str | None = None,
+    status: str | None = None,
+    heirs_only: bool = False,
+    limit: int | None = None,
+    offset: int = 0,
+):
+    """Return payment rows with optional filters for reports."""
+    heir_condition = (
+        (InheritanceDebt.c.payment_id.isnot(None))
+        | Payment.c.notes.ilike("%спад%")
+        | Payment.c.notes.ilike("%борг%")
+    )
+
+    status_case = sqlalchemy.case(
+        (heir_condition, "Виплата спадкоємцю"), else_="Виплачено"
+    ).label("status")
+    heir_flag = sqlalchemy.case((heir_condition, True), else_=False).label("is_heir")
+
+    query = (
+        sqlalchemy.select(
+            Payment.c.id,
+            Payment.c.payment_date,
+            Payment.c.amount,
+            Payer.c.name.label("payer_name"),
+            Company.c.name.label("company_name"),
+            status_case,
+            heir_flag,
+        )
+        .select_from(Payment)
+        .join(Contract, Contract.c.id == Payment.c.agreement_id)
+        .join(Payer, Payer.c.id == Contract.c.payer_id)
+        .join(Company, Company.c.id == Contract.c.company_id)
+        .outerjoin(InheritanceDebt, InheritanceDebt.c.payment_id == Payment.c.id)
+    )
+
+    filters = []
+    if start_date:
+        filters.append(Payment.c.payment_date >= start_date)
+    if end_date:
+        filters.append(Payment.c.payment_date <= end_date)
+    if payer_query:
+        filters.append(
+            (Payer.c.name.ilike(f"%{payer_query}%"))
+            | (Payer.c.unzr == payer_query)
+        )
+    if company_query:
+        filters.append(
+            (Company.c.name.ilike(f"%{company_query}%"))
+            | (Company.c.short_name.ilike(f"%{company_query}%"))
+        )
+    if status == "heir":
+        filters.append(heir_condition)
+    elif status == "paid":
+        filters.append(~heir_condition)
+    if heirs_only:
+        filters.append(heir_condition)
+    if filters:
+        query = query.where(sqlalchemy.and_(*filters))
+
+    query = query.order_by(Payment.c.payment_date.desc())
+    if limit is not None:
+        query = query.limit(limit).offset(offset)
+    rows = await database.fetch_all(query)
+    return rows
 
 # === Таблиця користувачів ===
 User = sqlalchemy.Table(
