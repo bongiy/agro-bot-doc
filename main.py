@@ -65,6 +65,7 @@ from dialogs.payment import (
 from dialogs.rent_summary import rent_summary_conv
 from dialogs.land_report import land_report_conv
 from dialogs.land_overview import land_overview_conv
+from dialogs.fields_report import fields_report_conv
 from dialogs.contract_overview import contract_overview_conv
 from dialogs.edit_field import edit_field_conv
 from dialogs.edit_land import edit_land_conv
@@ -160,6 +161,7 @@ application.add_handler(payment_report_conv)
 application.add_handler(rent_summary_conv)
 application.add_handler(land_report_conv)
 application.add_handler(land_overview_conv)
+application.add_handler(fields_report_conv)
 application.add_handler(contract_overview_conv)
 
 # --- Потенційні пайовики ---

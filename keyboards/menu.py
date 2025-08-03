@@ -103,11 +103,7 @@ reports_menu_admin = ReplyKeyboardMarkup(
 )
 
 reports_menu_user = ReplyKeyboardMarkup(
-    [
-        ["📈 Статистика по полях"],
-        ["◀️ Назад"],
-    ],
-    resize_keyboard=True,
+    [["◀️ Назад"]], resize_keyboard=True
 )
 
 # --- Меню пошуку ---

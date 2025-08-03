@@ -220,6 +220,50 @@ async def land_overview_to_excel(
     return bio
 
 
+async def fields_report_to_excel(rows: Iterable[dict]) -> BytesIO:
+    """Generate Excel file for fields report."""
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Поля"
+    ws.append(
+        [
+            "Назва поля",
+            "Фізична площа",
+            "Площа ділянок",
+            "Площа з договорами",
+            "Без договорів",
+            "% покриття",
+            "Кількість пайовиків",
+            "Сума оренди",
+        ]
+    )
+    for r in rows:
+        ws.append(
+            [
+                r.get("name") or "",
+                float(r.get("physical_area") or 0),
+                float(r.get("plots_area") or 0),
+                float(r.get("contract_area") or 0),
+                float(r.get("without_contract") or 0),
+                float(r.get("coverage") or 0),
+                int(r.get("payers") or 0),
+                float(r.get("rent_sum") or 0),
+            ]
+        )
+        row = ws.max_row
+        for col in range(2, 6):
+            ws.cell(row=row, column=col).number_format = "0.00"
+        ws.cell(row=row, column=6).number_format = "0.00"
+        ws.cell(row=row, column=8).number_format = "0.00"
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    return bio
+
+
 async def contracts_overview_to_excel(
     rows: Iterable[dict],
     companies: Iterable[dict],
