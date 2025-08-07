@@ -28,9 +28,10 @@ from db import (
     LandPlot,
     Contract,
     InheritanceDebt,
+    get_user_by_tg_id,
 )
 from dialogs.post_creation import prompt_add_docs
-from keyboards.menu import payers_menu, main_menu
+from keyboards.menu import payers_menu, main_menu, main_menu_admin
 from ftp_utils import download_file_ftp, delete_file_ftp
 from contract_generation_v2 import format_money
 
@@ -832,7 +833,12 @@ async def create_contract(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.message.reply_text("Головне меню:", reply_markup=main_menu)
+    user = await get_user_by_tg_id(update.effective_user.id)
+    role = user["role"] if user else "user"
+    await query.message.reply_text(
+        "👋 Вітаємо в ОФІСІ ФЕРМЕРА!\nОберіть розділ:",
+        reply_markup=main_menu_admin if role == "admin" else main_menu,
+    )
     return ConversationHandler.END
 
 add_payer_conv = ConversationHandler(
