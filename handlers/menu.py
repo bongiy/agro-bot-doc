@@ -10,6 +10,9 @@ from telegram.ext import (
 from keyboards.menu import (
     main_menu,
     main_menu_admin,
+    ezem_menu,
+    warehouse_menu,
+    logistics_menu,
     payers_menu,
     lands_menu,
     fields_menu,
@@ -77,20 +80,33 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         user_role = user["role"]
     await update.message.reply_text(
-        "Вітаємо! Головне меню:",
-        reply_markup=main_menu_admin if user_role == "admin" else main_menu
+        "👋 Вітаємо в ОФІСІ ФЕРМЕРА!\nОберіть розділ:",
+        reply_markup=main_menu_admin if user_role == "admin" else main_menu,
     )
 
 async def to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = await get_user_by_tg_id(update.effective_user.id)
     role = user["role"] if user else "user"
     await update.message.reply_text(
-        "Головне меню:",
-        reply_markup=main_menu_admin if role == "admin" else main_menu
+        "👋 Вітаємо в ОФІСІ ФЕРМЕРА!\nОберіть розділ:",
+        reply_markup=main_menu_admin if role == "admin" else main_menu,
     )
 
 async def payers_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Меню «Пайовики»", reply_markup=payers_menu)
+
+async def ezem_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Меню «e-Землевпорядник»", reply_markup=ezem_menu)
+
+async def warehouse_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Розділ «Склад» у розробці.", reply_markup=warehouse_menu
+    )
+
+async def logistics_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Розділ «Логістика» у розробці.", reply_markup=logistics_menu
+    )
 
 async def lands_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Меню «Ділянки»", reply_markup=lands_menu)
@@ -116,6 +132,16 @@ async def search_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     context.user_data["last_menu"] = "search"
     await update.message.reply_text("Меню «Пошук»", reply_markup=search_menu)
 
+async def doc_recognition_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Розділ «Розпізнавання документів» у розробці.", reply_markup=ezem_menu
+    )
+
+async def heirs_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Розділ «Спадкоємці» у розробці.", reply_markup=ezem_menu
+    )
+
 async def crm_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Меню «CRM»", reply_markup=crm_menu)
 
@@ -131,7 +157,7 @@ async def crm_current_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 async def crm_planning_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from keyboards.menu import crm_events_menu
-    await update.message.reply_text("Меню «Планування і нагадування»", reply_markup=crm_events_menu)
+    await update.message.reply_text("Меню «Події / Нагадування»", reply_markup=crm_events_menu)
 
 async def crm_inbox_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from keyboards.menu import crm_inbox_menu
@@ -146,7 +172,7 @@ async def crm_inbox_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def admin_panel_handler(update, context):
 
     text = (
-        "🛡️ <b>Адмінпанель</b>:\n\n"
+        "⚙️ <b>Адмін-панель</b>:\n\n"
         "Оберіть розділ для адміністрування:"
     )
 
@@ -220,7 +246,7 @@ async def admin_company_card_callback(update, context):
         [InlineKeyboardButton("✏️ Редагувати", callback_data=f"company_edit:{company_id}")],
         [InlineKeyboardButton("🗑 Видалити", callback_data=f"company_delete:{company_id}")],
         [InlineKeyboardButton("↩️ До списку ТОВ", callback_data="company_list")],
-        [InlineKeyboardButton("↩️ Адмінпанель", callback_data="admin_panel")]
+        [InlineKeyboardButton("↩️ Адмін-панель", callback_data="admin_panel")]
     ]
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
@@ -275,7 +301,7 @@ async def admin_users_handler(update, context):
         [InlineKeyboardButton("\U0001F501 Змінити роль", callback_data="user_role")],
         [InlineKeyboardButton("✏️ Змінити ПІБ", callback_data="user_fullname")],
         [InlineKeyboardButton("\U0001F6AB Блокування", callback_data="user_block")],
-        [InlineKeyboardButton("↩️ Адмінпанель", callback_data="admin_panel")]
+        [InlineKeyboardButton("↩️ Адмін-панель", callback_data="admin_panel")]
     ]
     msg = getattr(update, 'message', None)
     if msg:
@@ -507,7 +533,7 @@ async def admin_tov_delete_handler(update, context):
         )]
         for c in companies
     ] if companies else []
-    keyboard.append([InlineKeyboardButton("↩️ Адмінпанель", callback_data="admin_panel")])
+    keyboard.append([InlineKeyboardButton("↩️ Адмін-панель", callback_data="admin_panel")])
     msg = getattr(update, 'message', None)
     if msg:
         await msg.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
@@ -519,9 +545,9 @@ async def to_admin_panel(update, context):
     from keyboards.menu import admin_panel_menu
     msg = getattr(update, 'message', None)
     if msg:
-        await msg.reply_text("🛡️ Адмінпанель:", reply_markup=admin_panel_menu)
+        await msg.reply_text("⚙️ Адмін-панель:", reply_markup=admin_panel_menu)
     else:
-        await update.callback_query.edit_message_text("🛡️ Адмінпанель:", reply_markup=admin_panel_menu)
+        await update.callback_query.edit_message_text("⚙️ Адмін-панель:", reply_markup=admin_panel_menu)
 
 
 # --- Команди адміністрування користувачів ---

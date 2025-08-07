@@ -78,7 +78,7 @@ async def show_templates(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
     keyboard.append([InlineKeyboardButton("➕ Додати шаблон", callback_data="template_add")])
     keyboard.append([InlineKeyboardButton("📘 Список змінних", callback_data="template_vars")])
-    keyboard.append([InlineKeyboardButton("↩️ Адмінпанель", callback_data="admin_panel")])
+    keyboard.append([InlineKeyboardButton("↩️ Адмін-панель", callback_data="admin_panel")])
     if update.callback_query:
         await update.callback_query.edit_message_text(
             text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML"

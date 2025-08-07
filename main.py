@@ -6,15 +6,36 @@ from telegram.ext import (
     filters, ConversationHandler
 )
 from handlers.menu import (
-    start, to_main_menu, payers_menu_handler, lands_menu_handler, fields_menu_handler,
-    contracts_menu_handler, payments_menu_handler, reports_menu_handler, search_menu_handler,
-    crm_menu_handler, crm_potential_handler, crm_current_handler,
-    crm_planning_handler, crm_inbox_handler,
-    admin_panel_handler, admin_tov_handler, admin_templates_handler,
-    admin_users_handler, admin_tov_list_handler,
-    admin_tov_edit_handler, admin_tov_delete_handler, to_admin_panel, admin_company_card_callback,
-    admin_user_list, add_user_conv, change_role_conv, block_user_conv, change_name_conv,
-    company_delete_prompt, company_delete_confirm
+    start,
+    to_main_menu,
+    payers_menu_handler,
+    lands_menu_handler,
+    contracts_menu_handler,
+    payments_menu_handler,
+    search_menu_handler,
+    ezem_menu_handler,
+    warehouse_menu_handler,
+    logistics_menu_handler,
+    doc_recognition_handler,
+    heirs_menu_handler,
+    crm_planning_handler,
+    crm_inbox_handler,
+    admin_panel_handler,
+    admin_tov_handler,
+    admin_templates_handler,
+    admin_users_handler,
+    admin_tov_list_handler,
+    admin_tov_edit_handler,
+    admin_tov_delete_handler,
+    to_admin_panel,
+    admin_company_card_callback,
+    admin_user_list,
+    add_user_conv,
+    change_role_conv,
+    block_user_conv,
+    change_name_conv,
+    company_delete_prompt,
+    company_delete_confirm,
 )
 from handlers.menu import (
     cmd_list_users, cmd_add_user, cmd_promote, cmd_demote, cmd_block, cmd_unblock
@@ -133,19 +154,19 @@ application.add_handler(CommandHandler("demote", cmd_demote))
 application.add_handler(CommandHandler("block", cmd_block))
 application.add_handler(CommandHandler("unblock", cmd_unblock))
 application.add_handler(MessageHandler(filters.Regex("^◀️ Назад$"), to_main_menu))
-application.add_handler(MessageHandler(filters.Regex("^👤 Пайовики$"), payers_menu_handler))
-application.add_handler(MessageHandler(filters.Regex("^🌿 Ділянки$"), lands_menu_handler))
-application.add_handler(MessageHandler(filters.Regex("^🌾 Поля$"), fields_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^🌐 e-Землевпорядник$"), ezem_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^📦 Склад$"), warehouse_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^🚛 Логістика$"), logistics_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^📁 Пайовики$"), payers_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^🌍 Ділянки$"), lands_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^📄 Договори$"), contracts_menu_handler))
-application.add_handler(MessageHandler(filters.Regex("^💳 Виплати$"), payments_menu_handler))
-application.add_handler(MessageHandler(filters.Regex("^📊 Звіти$"), reports_menu_handler))
-application.add_handler(MessageHandler(filters.Regex("^📒 CRM$"), crm_menu_handler))
-application.add_handler(MessageHandler(filters.Regex("^🧑‍🌾 Потенційні пайовики$"), crm_potential_handler))
-application.add_handler(MessageHandler(filters.Regex("^👤 Поточні пайовики$"), crm_current_handler))
-application.add_handler(MessageHandler(filters.Regex("^📅 Планування і нагадування$"), crm_planning_handler))
-application.add_handler(MessageHandler(filters.Regex("^📨 Звернення та заяви$"), crm_inbox_handler))
-application.add_handler(MessageHandler(filters.Regex("^🔎 Пошук$"), search_menu_handler))
-application.add_handler(MessageHandler(filters.Regex("^🛡️ Адмінпанель$"), admin_panel_handler))
+application.add_handler(MessageHandler(filters.Regex("^🧾 Виплати$"), payments_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^📆 Події / Нагадування$"), crm_planning_handler))
+application.add_handler(MessageHandler(filters.Regex("^📬 Звернення та заяви$"), crm_inbox_handler))
+application.add_handler(MessageHandler(filters.Regex("^🔍 Пошук$"), search_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^🧠 Розпізнавання документів$"), doc_recognition_handler))
+application.add_handler(MessageHandler(filters.Regex("^🧬 Спадкоємці$"), heirs_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^⚙️ Адмін-панель$"), admin_panel_handler))
 
 # --- ПАЙОВИКИ: Підключаємо діалоги до підменю пайовиків
 application.add_handler(add_payer_conv)
@@ -263,7 +284,7 @@ application.add_handler(MessageHandler(filters.Regex("^🏢 ТОВ-оренда�
 application.add_handler(MessageHandler(filters.Regex("^📋 Список ТОВ$"), admin_tov_list_handler))
 application.add_handler(MessageHandler(filters.Regex("^✏️ Редагувати ТОВ$"), admin_tov_edit_handler))
 application.add_handler(MessageHandler(filters.Regex("^🗑️ Видалити ТОВ$"), admin_tov_delete_handler))
-application.add_handler(MessageHandler(filters.Regex("^↩️ Адмінпанель$"), to_admin_panel))
+application.add_handler(MessageHandler(filters.Regex("^↩️ Адмін-панель$"), to_admin_panel))
 application.add_handler(CallbackQueryHandler(admin_company_card_callback, pattern=r"^company_card:\d+$"))
 application.add_handler(CallbackQueryHandler(company_delete_prompt, pattern=r"^company_delete:\d+$"))
 application.add_handler(CallbackQueryHandler(company_delete_confirm, pattern=r"^company_delete_confirm:\d+$"))

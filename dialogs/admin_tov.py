@@ -175,7 +175,7 @@ async def admin_tov_add_director(update, context):
         f"Директор: <code>{tov['director']}</code>\n\n"
         "Підтвердити збереження?"
     )
-    kb = ReplyKeyboardMarkup([["✅ Так", "↩️ Адмінпанель"], [CANCEL_BTN]], resize_keyboard=True)
+    kb = ReplyKeyboardMarkup([["✅ Так", "↩️ Адмін-панель"], [CANCEL_BTN]], resize_keyboard=True)
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=kb)
     return CONFIRM
 
@@ -216,7 +216,7 @@ admin_tov_add_conv = ConversationHandler(
         ADD_ADDRESS_LEGAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_address_legal)],
         ADD_ADDRESS_POSTAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_address_postal)],
         ADD_DIRECTOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_tov_add_director)],
-        CONFIRM: [MessageHandler(filters.Regex("^(✅ Так|↩️ Адмінпанель|❌ Скасувати)$"), admin_tov_add_confirm)],
+        CONFIRM: [MessageHandler(filters.Regex("^(✅ Так|↩️ Адмін-панель|❌ Скасувати)$"), admin_tov_add_confirm)],
     },
     fallbacks=[
         MessageHandler(filters.Regex(f"^{CANCEL_BTN}$"), admin_tov_add_cancel)
@@ -248,7 +248,7 @@ async def admin_company_card_callback(update, context):
     keyboard = [
         [InlineKeyboardButton("✏️ Редагувати", callback_data=f"company_edit:{company_id}")],
         [InlineKeyboardButton("↩️ До списку ТОВ", callback_data="company_list")],
-        [InlineKeyboardButton("↩️ Адмінпанель", callback_data="admin_panel")]
+        [InlineKeyboardButton("↩️ Адмін-панель", callback_data="admin_panel")]
     ]
     await query.edit_message_text(
         text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML"
