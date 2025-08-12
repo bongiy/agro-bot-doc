@@ -85,9 +85,9 @@ The bot will substitute the list of payers into the `payers` variable.
 ## Contract generation
 
 Use `contract_generation_v2.generate_contract_v2(contract_id)` to build a
-contract PDF for a specific record. The function loads the contract, payer,
+contract DOCX for a specific record. The function loads the contract, payer,
 company and land plot information from the database, fills the first active
-agreement template and converts it to PDF. The PDF is uploaded to the configured
+agreement template and produces a DOCX file uploaded to the configured
 FTP server.
 
 **Parameters**
@@ -95,13 +95,8 @@ FTP server.
 - `contract_id` – identifier of the contract to generate.
 
 The call returns `(remote_path, log)` where `remote_path` is the FTP path of the
-uploaded PDF and `log` describes which template placeholders were filled or left
+uploaded DOCX and `log` describes which template placeholders were filled or left
 empty.
-
-LibreOffice (``soffice``) should be installed on the system for DOCX→PDF
-conversion. The helper runs ``libreoffice`` in headless mode and falls back to
-``unoconv`` if LibreOffice is unavailable. On Windows or macOS, the optional
-``docx2pdf`` package can be used if Microsoft Word is installed.
 
 ## Навігація
 

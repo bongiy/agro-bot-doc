@@ -62,13 +62,12 @@ from dialogs.contract import (
     show_contracts,
     agreement_card,
     to_contracts,
-    send_contract_pdf,
     contract_docs,
     delete_contract_prompt,
     delete_contract,
     agreement_delete_prompt,
     agreement_delete_confirm,
-    generate_contract_pdf_cb,
+    generate_contract_docx_cb,
     edit_contract_conv,
     change_status_conv,
     payment_summary_cb,
@@ -224,7 +223,7 @@ application.add_handler(edit_land_conv)
 application.add_handler(edit_land_owner_conv)
 application.add_handler(edit_company_conv)
 
-# --- PDF через FTP ---
+# --- Документи через FTP ---
 application.add_handler(add_docs_conv)
 application.add_handler(CallbackQueryHandler(send_pdf, pattern=r"^send_pdf:\d+$"))
 application.add_handler(CallbackQueryHandler(delete_pdf, pattern=r"^delete_pdf_db:\d+$"))
@@ -245,14 +244,13 @@ application.add_handler(CallbackQueryHandler(select_payer_cb, pattern=r"^pay_sel
 application.add_handler(CallbackQueryHandler(select_contract_cb, pattern=r"^pay_contract:\d+$"))
 application.add_handler(CallbackQueryHandler(payment_summary_cb, pattern=r"^payment_summary:\d+$"))
 application.add_handler(CallbackQueryHandler(payment_history_cb, pattern=r"^payment_history:\d+$"))
-application.add_handler(CallbackQueryHandler(generate_contract_pdf_cb, pattern=r"^generate_contract_pdf:\d+$"))
+application.add_handler(CallbackQueryHandler(generate_contract_docx_cb, pattern=r"^generate_contract_docx:\d+$"))
 application.add_handler(CallbackQueryHandler(contract_docs, pattern=r"^contract_docs:\d+$"))
 application.add_handler(CallbackQueryHandler(delete_contract_prompt, pattern=r"^delete_contract:\d+$"))
 application.add_handler(CallbackQueryHandler(delete_contract, pattern=r"^confirm_delete_contract:\d+$"))
 application.add_handler(CallbackQueryHandler(agreement_delete_prompt, pattern=r"^agreement_delete:\d+$"))
 application.add_handler(CallbackQueryHandler(agreement_delete_confirm, pattern=r"^agreement_delete_confirm$"))
 application.add_handler(CallbackQueryHandler(to_contracts, pattern=r"^to_contracts$"))
-application.add_handler(CallbackQueryHandler(send_contract_pdf, pattern=r"^view_pdf:contract:\d+:.+"))
 for cb in potential_callbacks:
     application.add_handler(cb)
 

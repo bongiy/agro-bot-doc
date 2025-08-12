@@ -1,5 +1,4 @@
 import os
-import unicodedata
 import re
 from datetime import datetime, timedelta
 from typing import Any
@@ -12,7 +11,6 @@ from telegram import (
     InlineKeyboardMarkup,
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
-    InputFile,
 )
 from telegram.error import BadRequest
 from telegram.ext import (
@@ -38,7 +36,7 @@ from db import (
 )
 from keyboards.menu import contracts_menu
 from dialogs.post_creation import prompt_add_docs
-from ftp_utils import download_file_ftp, delete_file_ftp
+from ftp_utils import delete_file_ftp
 from contract_generation_v2 import (
     generate_contract_v2,
     format_area,
@@ -114,17 +112,6 @@ async def show_land_options(msg_obj: Any, context: ContextTypes.DEFAULT_TYPE) ->
         await msg_obj.reply_text(text, reply_markup=markup)
     context.user_data["current_state"] = INPUT_LANDS
     return INPUT_LANDS
-
-
-def to_latin_filename(text: str, default: str = "document.pdf") -> str:
-    name = unicodedata.normalize("NFKD", str(text)).encode("ascii", "ignore").decode("ascii")
-    name = name.replace(" ", "_")
-    name = re.sub(r"[^A-Za-z0-9_.-]", "", name)
-    if not name or name.startswith(".pdf") or name.lower() == ".pdf":
-        return default
-    if not name.lower().endswith(".pdf"):
-        name += ".pdf"
-    return name
 
 
 def format_cadaster(text: str) -> str | None:
@@ -287,21 +274,6 @@ async def finish_plot_selection(update: Update, context: ContextTypes.DEFAULT_TY
     await query.message.reply_text("⬇️ Навігація", reply_markup=back_cancel_kb)
     context.user_data["current_state"] = SET_RENT
     return SET_RENT
-
-
-async def send_contract_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    _, _, contract_id, fname = query.data.split(":", 3)
-    filename = to_latin_filename(fname)
-    remote_path = f"contracts/{contract_id}/{filename}"
-    tmp_path = f"temp_docs/{filename}"
-    try:
-        os.makedirs("temp_docs", exist_ok=True)
-        download_file_ftp(remote_path, tmp_path)
-        await query.message.reply_document(document=InputFile(tmp_path), filename=filename)
-        os.remove(tmp_path)
-    except Exception as e:  # pragma: no cover - just user notification
-        await query.answer(f"Помилка при скачуванні файлу: {e}", show_alert=True)
 
 
 # ==== ДОДАВАННЯ ДОГОВОРУ ====
@@ -687,7 +659,7 @@ async def agreement_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("➕ Додати виплату", callback_data=f"add_payment:{contract_id}")],
         [InlineKeyboardButton("📊 Зведення по роках", callback_data=f"payment_summary:{contract_id}")],
         [InlineKeyboardButton("🗂 Історія виплат за рік", callback_data=f"payment_history:{contract_id}")],
-        [InlineKeyboardButton("📄 Згенерувати договір (docx/pdf)", callback_data=f"generate_contract_pdf:{contract_id}")],
+        [InlineKeyboardButton("📄 Згенерувати договір (docx)", callback_data=f"generate_contract_docx:{contract_id}")],
         [InlineKeyboardButton("📝 Редагувати", callback_data=f"edit_contract:{contract_id}")],
         [InlineKeyboardButton("📌 Змінити статус", callback_data=f"change_status:{contract_id}")],
         [InlineKeyboardButton("📁 Документи", callback_data=f"contract_docs:{contract_id}")],
@@ -811,7 +783,7 @@ async def agreement_delete_prompt(update: Update, context: ContextTypes.DEFAULT_
         "Це призведе до:\n"
         "• Видалення запису про договір\n"
         "• Видалення всіх пов'язаних виплат\n"
-        "• Видалення файлів договору з FTP (PDF, скани)\n\n"
+        "• Видалення файлів договору з FTP (скани)\n\n"
         "❗ Цю дію неможливо скасувати."
     )
     keyboard = InlineKeyboardMarkup([
@@ -863,8 +835,8 @@ async def agreement_delete_confirm(update: Update, context: ContextTypes.DEFAULT
     await query.message.edit_text(f"✅ Договір №{contract['number']} успішно видалено.")
 
 
-# ==== ГЕНЕРАЦІЯ PDF ДОГОВОРУ ====
-async def generate_contract_pdf_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ==== ГЕНЕРАЦІЯ ДОГОВОРУ ====
+async def generate_contract_docx_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
 
     contract_id = int(query.data.split(":")[1])
@@ -874,11 +846,11 @@ async def generate_contract_pdf_cb(update: Update, context: ContextTypes.DEFAULT
         return
 
     try:
-        remote_path, gen_log = await generate_contract_v2(contract_id)
+        _remote_path, gen_log = await generate_contract_v2(contract_id)
     except Exception:
-        logger.exception("Failed to generate contract PDF")
+        logger.exception("Failed to generate contract DOCX")
         await query.message.edit_text(
-            "⚠️ Неможливо згенерувати PDF. Перевірте шаблон або дані договору.",
+            "⚠️ Неможливо згенерувати DOCX. Перевірте шаблон або дані договору.",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("⬅️ Назад", callback_data=f"agreement_card:{contract_id}")]]
             ),
@@ -902,33 +874,18 @@ async def generate_contract_pdf_cb(update: Update, context: ContextTypes.DEFAULT
     templates = await get_agreement_templates(True, tmpl_scope)
     template_name = os.path.basename(templates[0]["file_path"]) if templates else ""
 
-    is_pdf = str(remote_path).lower().endswith(".pdf")
-
     if gen_log:
         await query.message.reply_text(gen_log)
 
-    warn_text = (
-        "⚠️ PDF не згенеровано — на сервері відсутні необхідні компоненти.\n"
-        "📄 Надаємо договір у форматі DOCX.\n\n"
-        if not is_pdf
-        else ""
-    )
-
     keyboard = InlineKeyboardMarkup(
         [
-            [
-                InlineKeyboardButton(
-                    "📎 Завантажити PDF" if is_pdf else "📎 Завантажити DOCX",
-                    callback_data=f"send_pdf:{doc_id}",
-                )
-            ],
+            [InlineKeyboardButton("📎 Завантажити DOCX", callback_data=f"send_pdf:{doc_id}")],
             [InlineKeyboardButton("⬅️ Назад", callback_data=f"agreement_card:{contract_id}")],
         ]
     )
 
     await query.message.edit_text(
-        warn_text
-        + f"✅ Договір згенеровано\n📐 Шаблон: {os.path.basename(template_name)}\n"
+        f"✅ Договір згенеровано\n📐 Шаблон: {os.path.basename(template_name)}\n"
         f"📆 Діє з {contract['date_valid_from'].date()} по {contract['date_valid_to'].date()}",
         reply_markup=keyboard,
     )
