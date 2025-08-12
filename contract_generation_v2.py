@@ -6,10 +6,6 @@ import logging
 from typing import Any, Mapping, Iterable
 
 from docx import Document
-try:
-    from docx2pdf import convert as docx2pdf_convert
-except Exception:  # pragma: no cover - optional dependency
-    docx2pdf_convert = None
 
 from template_vars import SUPPORTED_VARS, EMPTY_VALUE
 from template_utils import extract_variables
@@ -17,86 +13,8 @@ from ftp_utils import download_file_ftp, upload_file_ftp
 
 logger = logging.getLogger(__name__)
 
-import subprocess
 from datetime import datetime
 from decimal import Decimal
-
-
-def docx_to_pdf(docx_path: str, pdf_path: str) -> str | None:
-    """Convert a DOCX document to PDF using command line tools.
-
-    LibreOffice (``libreoffice`` or ``soffice``) is used in headless mode if
-    available. If LibreOffice is not installed, the function tries the
-    ``unoconv`` CLI as a fallback.
-
-    Parameters
-    ----------
-    docx_path:
-        Path to the source DOCX file.
-    pdf_path:
-        Destination path for the generated PDF file.
-    """
-
-    libreoffice = (
-        os.environ.get("SOFFICE_PATH")
-        or os.environ.get("LIBREOFFICE_PATH")
-        or shutil.which("libreoffice")
-        or shutil.which("soffice")
-        or (os.path.exists("/usr/bin/soffice") and "/usr/bin/soffice")
-        or (os.path.exists("/usr/bin/libreoffice") and "/usr/bin/libreoffice")
-    )
-    if libreoffice:
-        subprocess.run(
-            [
-                libreoffice,
-                "--headless",
-                "--convert-to",
-                "pdf",
-                "--outdir",
-                os.path.dirname(pdf_path),
-                docx_path,
-            ],
-            check=True,
-        )
-        generated = os.path.join(
-            os.path.dirname(pdf_path),
-            os.path.splitext(os.path.basename(docx_path))[0] + ".pdf",
-        )
-        os.replace(generated, pdf_path)
-        return pdf_path
-
-    unoconv = (
-        os.environ.get("UNOCONV_PATH")
-        or shutil.which("unoconv")
-        or (os.path.exists("/usr/bin/unoconv") and "/usr/bin/unoconv")
-    )
-    if unoconv:
-        subprocess.run(
-            [
-                unoconv,
-                "-f",
-                "pdf",
-                "-o",
-                pdf_path,
-                docx_path,
-            ],
-            check=True,
-        )
-        return pdf_path
-
-    if docx2pdf_convert:
-        try:
-            docx2pdf_convert(docx_path, pdf_path)
-            return pdf_path
-        except NotImplementedError:
-            pass
-        except Exception:
-            pass
-
-    logger.warning(
-        "No converter found (libreoffice/unoconv/docx2pdf). Skipping PDF generation."
-    )
-    return None
 
 
 def format_area(area: float | int | str | None) -> str:
@@ -233,17 +151,8 @@ def generate_contract(
     os.makedirs("temp_docs", exist_ok=True)
     filled_docx = os.path.join("temp_docs", "filled_contract.docx")
     fill_doc(template_local, context, filled_docx)
-    pdf_local = os.path.join("temp_docs", "contract.pdf")
-    pdf_result = docx_to_pdf(filled_docx, pdf_local)
-    if pdf_result:
-        os.remove(filled_docx)
-        generated_file = pdf_local
-        ext = ".pdf"
-    else:
-        generated_file = filled_docx
-        ext = ".docx"
-
-    filename = f"\u0414\u043e\u0433\u043e\u0432\u0456\u0440_{contract_number}_{payer_name}{ext}"
+    generated_file = filled_docx
+    filename = f"\u0414\u043e\u0433\u043e\u0432\u0456\u0440_{contract_number}_{payer_name}.docx"
     remote_dir = f"contracts/{year}/{payer_name}"
     remote_path = f"{remote_dir}/{filename}"
 
@@ -261,11 +170,11 @@ def generate_contract(
 
 
 async def generate_contract_v2(contract_id: int) -> tuple[str, str]:
-    """Generate a contract PDF for the given contract ID.
+    """Generate a contract DOCX for the given contract ID.
 
     The contract along with its related payer, company and land plots are
     loaded from the database. The first active agreement template is used
-    to produce the PDF. The resulting file is uploaded via FTP and a record
+    to produce the document. The resulting file is uploaded via FTP and a record
     is stored in ``uploaded_docs``.
 
     Parameters
@@ -276,7 +185,7 @@ async def generate_contract_v2(contract_id: int) -> tuple[str, str]:
     Returns
     -------
     tuple[str, str]
-        Remote path to the uploaded PDF and generation log.
+        Remote path to the uploaded DOCX and generation log.
     """
     import sqlalchemy
     from db import (
