@@ -371,7 +371,7 @@ async def generate_contract_v2(contract_id: int) -> tuple[str, str]:
             + ("одним" if tmpl_scope == "single" else "кількома")
             + " пайовиками. Завантажте відповідний шаблон."
         )
-    template = templates[0]
+    template = dict(templates[0])
 
     tmp_doc = f"temp_docs/template_{contract_id}.docx"
     os.makedirs("temp_docs", exist_ok=True)
