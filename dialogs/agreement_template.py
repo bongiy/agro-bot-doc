@@ -69,7 +69,11 @@ async def show_templates(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for t in templates:
         status = "✅" if t["is_active"] else "❌"
         t_type = TEMPLATE_TYPES.get(t["type"], t["type"])
-        p_type = PAYER_TEMPLATE_TYPES.get(t.get("template_type", "single"), t.get("template_type", "single"))
+        try:
+            template_type = t["template_type"]
+        except KeyError:
+            template_type = "single"
+        p_type = PAYER_TEMPLATE_TYPES.get(template_type, template_type)
         keyboard.append([
             InlineKeyboardButton(
                 f"{status} {t['name']} ({t_type}, {p_type})",
@@ -107,7 +111,11 @@ async def template_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     status = "Так" if tmpl["is_active"] else "Ні"
     t_type = TEMPLATE_TYPES.get(tmpl["type"], tmpl["type"])
-    p_type = PAYER_TEMPLATE_TYPES.get(tmpl.get("template_type", "single"), tmpl.get("template_type", "single"))
+    try:
+        template_type = tmpl["template_type"]
+    except KeyError:
+        template_type = "single"
+    p_type = PAYER_TEMPLATE_TYPES.get(template_type, template_type)
     text = (
         f"<b>{tmpl['name']}</b>\n"
         f"Тип: <code>{t_type}</code>\n"
