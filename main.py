@@ -10,6 +10,7 @@ from handlers.menu import (
     to_main_menu,
     payers_menu_handler,
     lands_menu_handler,
+    fields_menu_handler,
     contracts_menu_handler,
     payments_menu_handler,
     search_menu_handler,
@@ -158,6 +159,7 @@ application.add_handler(MessageHandler(filters.Regex("^📦 Склад$"), wareh
 application.add_handler(MessageHandler(filters.Regex("^🚛 Логістика$"), logistics_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^📁 Пайовики$"), payers_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^🌍 Ділянки$"), lands_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^🌾 Поля$"), fields_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^📄 Договори$"), contracts_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^🧾 Виплати$"), payments_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^📆 Події / Нагадування$"), crm_planning_handler))
