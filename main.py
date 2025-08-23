@@ -8,6 +8,7 @@ from telegram.ext import (
 from handlers.menu import (
     start,
     to_main_menu,
+    refresh_menu,
     payers_menu_handler,
     lands_menu_handler,
     fields_menu_handler,
@@ -17,14 +18,28 @@ from handlers.menu import (
     ezem_menu_handler,
     warehouse_menu_handler,
     logistics_menu_handler,
+    reports_menu_handler,
+    logistics_add_trip_handler,
+    logistics_journal_handler,
+    logistics_vehicles_handler,
+    logistics_counterparties_handler,
+    logistics_ttn_handler,
     doc_recognition_handler,
     heirs_menu_handler,
+    ezem_events_handler,
+    crm_menu_handler,
+    crm_potential_handler,
+    crm_current_handler,
     crm_planning_handler,
-    crm_inbox_handler,
+    crm_events_handler,
+    crm_reminders_handler,
+    inbox_menu_handler,
     admin_panel_handler,
     admin_tov_handler,
     admin_templates_handler,
     admin_users_handler,
+    admin_delete_handler,
+    admin_access_handler,
     admin_tov_list_handler,
     admin_tov_edit_handler,
     admin_tov_delete_handler,
@@ -153,21 +168,33 @@ application.add_handler(CommandHandler("promote", cmd_promote))
 application.add_handler(CommandHandler("demote", cmd_demote))
 application.add_handler(CommandHandler("block", cmd_block))
 application.add_handler(CommandHandler("unblock", cmd_unblock))
+application.add_handler(CommandHandler("refresh", refresh_menu))
 application.add_handler(MessageHandler(filters.Regex("^◀️ Назад$"), to_main_menu))
 application.add_handler(MessageHandler(filters.Regex("^🌐 e-Землевпорядник$"), ezem_menu_handler))
-application.add_handler(MessageHandler(filters.Regex("^📦 Склад$"), warehouse_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^🧩 CRM$"), crm_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^📊 Звіти$"), reports_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^🚛 Логістика$"), logistics_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^🤖 Розпізнавання документів$"), doc_recognition_handler))
 application.add_handler(MessageHandler(filters.Regex("^📁 Пайовики$"), payers_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^🌍 Ділянки$"), lands_menu_handler))
-application.add_handler(MessageHandler(filters.Regex("^🌾 Поля$"), fields_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^📄 Договори$"), contracts_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^🧾 Виплати$"), payments_menu_handler))
-application.add_handler(MessageHandler(filters.Regex("^📆 Події / Нагадування$"), crm_planning_handler))
-application.add_handler(MessageHandler(filters.Regex("^📬 Звернення та заяви$"), crm_inbox_handler))
+application.add_handler(MessageHandler(filters.Regex("^📆 Події / Нагадування$"), ezem_events_handler))
+application.add_handler(MessageHandler(filters.Regex("^📬 Звернення та заяви$"), inbox_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^🔍 Пошук$"), search_menu_handler))
-application.add_handler(MessageHandler(filters.Regex("^🧠 Розпізнавання документів$"), doc_recognition_handler))
-application.add_handler(MessageHandler(filters.Regex("^🧬 Спадкоємці$"), heirs_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^👨‍👩‍👧‍👦 Спадкоємці$"), heirs_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^⚙️ Адмін-панель$"), admin_panel_handler))
+application.add_handler(MessageHandler(filters.Regex("^🧑‍🌾 Потенційні пайовики$"), crm_potential_handler))
+application.add_handler(MessageHandler(filters.Regex("^👥 Поточні пайовики$"), crm_current_handler))
+application.add_handler(MessageHandler(filters.Regex("^📅 Планування$"), crm_planning_handler))
+application.add_handler(MessageHandler(filters.Regex("^📬 Звернення$"), inbox_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^📆 Події$"), crm_events_handler))
+application.add_handler(MessageHandler(filters.Regex("^🧠 Нагадування$"), crm_reminders_handler))
+application.add_handler(MessageHandler(filters.Regex("^➕ Додати рейс$"), logistics_add_trip_handler))
+application.add_handler(MessageHandler(filters.Regex("^📋 Журнал рейсів$"), logistics_journal_handler))
+application.add_handler(MessageHandler(filters.Regex("^🛻 Техніка$"), logistics_vehicles_handler))
+application.add_handler(MessageHandler(filters.Regex("^🧾 Контрагенти$"), logistics_counterparties_handler))
+application.add_handler(MessageHandler(filters.Regex("^📄 Шаблони ТТН$"), logistics_ttn_handler))
 
 # --- ПАЙОВИКИ: Підключаємо діалоги до підменю пайовиків
 application.add_handler(add_payer_conv)
@@ -269,9 +296,11 @@ application.add_handler(template_delete_cb)
 application.add_handler(template_list_cb)
 application.add_handler(template_vars_cb)
 application.add_handler(template_vars_categories_cb)
-application.add_handler(MessageHandler(filters.Regex("^📄 Шаблони договорів$"), admin_templates_handler))
+application.add_handler(MessageHandler(filters.Regex("^🧾 Шаблони документів$"), admin_templates_handler))
 application.add_handler(MessageHandler(filters.Regex("^📋 Список шаблонів$"), show_templates_cb))
-application.add_handler(MessageHandler(filters.Regex("^👥 Користувачі$"), admin_users_handler))
+application.add_handler(MessageHandler(filters.Regex("^👤 Менеджмент користувачів$"), admin_users_handler))
+application.add_handler(MessageHandler(filters.Regex("^🗑️ Видалення об'єктів$"), admin_delete_handler))
+application.add_handler(MessageHandler(filters.Regex("^🔐 Права доступу$"), admin_access_handler))
 application.add_handler(MessageHandler(filters.Regex("^↩️ Головне меню$"), to_main_menu))
 application.add_handler(CallbackQueryHandler(admin_user_list, pattern=r"^user_list$"))
 application.add_handler(add_user_conv)

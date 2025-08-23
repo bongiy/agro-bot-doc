@@ -26,7 +26,11 @@ from keyboards.menu import (
     admin_tov_menu,
     admin_templates_menu,
     crm_menu,
+    crm_planning_menu,
     crm_events_menu,
+    crm_reminders_menu,
+    crm_inbox_menu,
+    crm_potential_menu,
 )
 from db import (
     get_companies,
@@ -92,6 +96,11 @@ async def to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=main_menu_admin if role == "admin" else main_menu,
     )
 
+
+@admin_only
+async def refresh_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await to_main_menu(update, context)
+
 async def payers_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Меню «Пайовики»", reply_markup=payers_menu)
 
@@ -104,9 +113,27 @@ async def warehouse_menu_handler(update: Update, context: ContextTypes.DEFAULT_T
     )
 
 async def logistics_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Розділ «Логістика» у розробці.", reply_markup=logistics_menu
-    )
+    await update.message.reply_text("Меню «Логістика»", reply_markup=logistics_menu)
+
+
+async def logistics_add_trip_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Функція додавання рейсу у розробці.", reply_markup=logistics_menu)
+
+
+async def logistics_journal_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Журнал рейсів у розробці.", reply_markup=logistics_menu)
+
+
+async def logistics_vehicles_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Розділ «Техніка» у розробці.", reply_markup=logistics_menu)
+
+
+async def logistics_counterparties_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Розділ «Контрагенти» у розробці.", reply_markup=logistics_menu)
+
+
+async def logistics_ttn_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Розділ «Шаблони ТТН» у розробці.", reply_markup=logistics_menu)
 
 async def lands_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Меню «Ділянки»", reply_markup=lands_menu)
@@ -133,8 +160,10 @@ async def search_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text("Меню «Пошук»", reply_markup=search_menu)
 
 async def doc_recognition_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = await get_user_by_tg_id(update.effective_user.id)
+    kb = main_menu_admin if user and user["role"] == "admin" else main_menu
     await update.message.reply_text(
-        "Розділ «Розпізнавання документів» у розробці.", reply_markup=ezem_menu
+        "Розділ «Розпізнавання документів» у розробці.", reply_markup=kb
     )
 
 async def heirs_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -146,7 +175,6 @@ async def crm_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Меню «CRM»", reply_markup=crm_menu)
 
 async def crm_potential_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from keyboards.menu import crm_potential_menu
     await update.message.reply_text(
         "Меню «Потенційні пайовики»", reply_markup=crm_potential_menu
     )
@@ -155,14 +183,22 @@ async def crm_current_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text(
         "Розділ «Поточні пайовики» в розробці."
     )
-async def crm_planning_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from keyboards.menu import crm_events_menu
+async def ezem_events_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Меню «Події / Нагадування»", reply_markup=crm_events_menu)
 
-async def crm_inbox_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from keyboards.menu import crm_inbox_menu
+async def crm_planning_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Меню «Планування»", reply_markup=crm_planning_menu)
+
+async def crm_events_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Меню «Події»", reply_markup=crm_events_menu)
+
+async def crm_reminders_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Меню «Нагадування»", reply_markup=crm_reminders_menu)
+
+async def inbox_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    title = "Звернення та заяви" if "та заяви" in update.message.text else "Звернення"
     await update.message.reply_text(
-        "Меню «Звернення та заяви»",
+        f"Меню «{title}»",
         reply_markup=crm_inbox_menu,
     )
 
@@ -314,6 +350,20 @@ async def admin_users_handler(update, context):
             "Менеджмент користувачів:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
+
+
+@admin_only
+async def admin_delete_handler(update, context):
+    await update.message.reply_text(
+        "Розділ «Видалення об'єктів» у розробці.", reply_markup=admin_panel_menu
+    )
+
+
+@admin_only
+async def admin_access_handler(update, context):
+    await update.message.reply_text(
+        "Розділ «Права доступу» у розробці.", reply_markup=admin_panel_menu
+    )
 
 @admin_only
 async def admin_user_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -493,14 +543,6 @@ async def change_name_finish(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
     return ConversationHandler.END
 
-
-@admin_only
-async def admin_delete_handler(update, context):
-    msg = getattr(update, 'message', None)
-    if msg:
-        await msg.reply_text("Видалення об’єктів — в розробці.")
-    else:
-        await update.callback_query.edit_message_text("Видалення об’єктів — в розробці.", reply_markup=InlineKeyboardMarkup([]))
 
 @admin_only
 async def admin_tov_edit_handler(update, context):

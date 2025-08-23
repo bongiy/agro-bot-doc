@@ -80,7 +80,7 @@ EVENT_TYPES = [
 async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from keyboards.menu import crm_events_menu
     await update.message.reply_text(
-        "Меню «Планування і нагадування»",
+        "Меню «Події»",
         reply_markup=crm_events_menu,
     )
 
