@@ -610,7 +610,7 @@ async def report_export_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 payment_report_conv = ConversationHandler(
     entry_points=[
         MessageHandler(filters.Regex("^💳 Звіти по виплатах$"), payment_report_start),
-        MessageHandler(filters.Regex("^💸 Звіт по виплатах$"), payment_report_start),
+        MessageHandler(filters.Regex("^🧾 Звіт по виплатах$"), payment_report_start),
     ],
     states={
         REPORT_START_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, report_set_start)],

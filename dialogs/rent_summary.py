@@ -122,7 +122,7 @@ async def rent_export_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 rent_summary_conv = ConversationHandler(
     entry_points=[
-        MessageHandler(filters.Regex("^📊 Зведення по орендній платі$"), rent_summary_start)
+        MessageHandler(filters.Regex("^💰 Зведення по орендній платі$"), rent_summary_start)
     ],
     states={
         RENT_YEAR: [MessageHandler(filters.TEXT & ~filters.COMMAND, rent_set_year)],
