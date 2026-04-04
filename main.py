@@ -270,7 +270,6 @@ application.add_handler(MessageHandler(filters.Regex("^🧾 Мої резуль�
 application.add_handler(MessageHandler(filters.Regex("^ℹ️ Статус заявки$"), payroll_status_handler))
 application.add_handler(MessageHandler(filters.LOCATION, payroll_location_handler))
 application.add_handler(MessageHandler(filters.Regex("^🎯 Мої задачі$"), payroll_tasks_handler))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, payroll_registration_text_handler, block=False))
 application.add_handler(CallbackQueryHandler(payroll_invite_create_handler, pattern=r"^empinvite:new$"))
 application.add_handler(CallbackQueryHandler(payroll_invite_create_role_handler, pattern=r"^empinvite:create:"))
 application.add_handler(CallbackQueryHandler(payroll_employee_approve_handler, pattern=r"^empreg:approve:\\d+$"))
@@ -400,6 +399,8 @@ application.add_handler(CallbackQueryHandler(company_delete_confirm, pattern=r"^
 application.add_handler(CallbackQueryHandler(admin_tov_list_handler, pattern=r"^company_list$"))
 application.add_handler(CallbackQueryHandler(admin_panel_handler, pattern=r"^admin_panel$"))
 application.add_handler(CallbackQueryHandler(admin_unhandled_callback_handler, pattern=r"^(admin_.*|user_.*|company_.*)$"))
+# fallback for payroll self-registration plain text (must be after menu handlers)
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, payroll_registration_text_handler, block=False))
 
 
 @app.post(WEBHOOK_PATH)
