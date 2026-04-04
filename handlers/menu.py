@@ -1,3 +1,5 @@
+import logging
+
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
     CallbackQueryHandler,
@@ -60,6 +62,13 @@ from dialogs.payroll import payroll_registration_start
     CHANGE_NAME_ID,
     CHANGE_NAME_NAME,
 ) = range(7)
+
+logger = logging.getLogger(__name__)
+
+
+def _admin_callback_data(update: Update) -> str:
+    query = getattr(update, "callback_query", None)
+    return query.data if query and query.data else "<no-callback-data>"
 
 def admin_only(handler):
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
@@ -214,6 +223,7 @@ async def payroll_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 
 @admin_only
 async def admin_panel_handler(update, context):
+    logger.info("ADMIN MENU OPENED: user_id=%s", update.effective_user.id)
 
     text = (
         "⚙️ <b>Адмін-панель</b>:\n\n"
@@ -224,14 +234,19 @@ async def admin_panel_handler(update, context):
     if msg:
         await msg.reply_text(text, parse_mode="HTML", reply_markup=admin_panel_menu)  # тут може бути ReplyKeyboardMarkup
     else:
-        # ТУТ обовʼязково має бути InlineKeyboardMarkup!
-        await update.callback_query.edit_message_text(
-            text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup([])
+        query = update.callback_query
+        logger.info("ADMIN BUTTON CLICK: %s", _admin_callback_data(update))
+        await query.answer()
+        await query.message.reply_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=admin_panel_menu,
         )
 
 
 @admin_only
 async def admin_tov_handler(update, context):
+    logger.info("ADMIN HANDLER ENTER: admin_tov_handler")
     msg = getattr(update, 'message', None)
     text = "🏢 Менеджмент ТОВ-орендарів:\n\nОберіть дію:"
     reply_markup = admin_tov_menu
@@ -243,6 +258,7 @@ async def admin_tov_handler(update, context):
 # --- Список ТОВ (кнопка) ---
 @admin_only
 async def admin_tov_list_handler(update, context):
+    logger.info("ADMIN HANDLER ENTER: admin_tov_list_handler")
     companies = await get_companies()
     text = "<b>Список ТОВ-орендарів:</b>\nОберіть компанію для перегляду картки."
     if not companies:
@@ -266,6 +282,8 @@ async def admin_tov_list_handler(update, context):
 # --- Картка ТОВ (CallbackQuery) ---
 @admin_only
 async def admin_company_card_callback(update, context):
+    logger.info("ADMIN BUTTON CLICK: %s", _admin_callback_data(update))
+    logger.info("ADMIN HANDLER ENTER: admin_company_card_callback")
     query = update.callback_query
     company_id = int(query.data.split(":")[1])
     company = await get_company(company_id)
@@ -296,6 +314,8 @@ async def admin_company_card_callback(update, context):
 
 @admin_only
 async def company_delete_prompt(update, context):
+    logger.info("ADMIN BUTTON CLICK: %s", _admin_callback_data(update))
+    logger.info("ADMIN HANDLER ENTER: company_delete_prompt")
     query = update.callback_query
     company_id = int(query.data.split(":")[1])
     company = await get_company(company_id)
@@ -314,6 +334,8 @@ async def company_delete_prompt(update, context):
 
 @admin_only
 async def company_delete_confirm(update, context):
+    logger.info("ADMIN BUTTON CLICK: %s", _admin_callback_data(update))
+    logger.info("ADMIN HANDLER ENTER: company_delete_confirm")
     query = update.callback_query
     company_id = int(query.data.split(":")[1])
     company = await get_company(company_id)
@@ -330,6 +352,7 @@ async def company_delete_confirm(update, context):
 
 @admin_only
 async def admin_templates_handler(update, context):
+    logger.info("ADMIN HANDLER ENTER: admin_templates_handler")
     msg = getattr(update, 'message', None)
     if msg:
         await msg.reply_text("Менеджмент шаблонів договорів:", reply_markup=admin_templates_menu)
@@ -339,6 +362,9 @@ async def admin_templates_handler(update, context):
 
 @admin_only
 async def admin_users_handler(update, context):
+    logger.info("ADMIN HANDLER ENTER: admin_users_handler")
+    if getattr(update, "callback_query", None):
+        logger.info("ADMIN BUTTON CLICK: %s", _admin_callback_data(update))
     keyboard = [
         [InlineKeyboardButton("\U0001F4C4 Список користувачів", callback_data="user_list")],
         [InlineKeyboardButton("\u2795 Додати користувача", callback_data="user_add")],
@@ -363,6 +389,7 @@ async def admin_users_handler(update, context):
 
 @admin_only
 async def admin_delete_handler(update, context):
+    logger.info("ADMIN HANDLER ENTER: admin_delete_handler")
     await update.message.reply_text(
         "Розділ «Видалення об'єктів» у розробці.", reply_markup=admin_panel_menu
     )
@@ -370,12 +397,15 @@ async def admin_delete_handler(update, context):
 
 @admin_only
 async def admin_access_handler(update, context):
+    logger.info("ADMIN HANDLER ENTER: admin_access_handler")
     await update.message.reply_text(
         "Розділ «Права доступу» у розробці.", reply_markup=admin_panel_menu
     )
 
 @admin_only
 async def admin_user_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("ADMIN BUTTON CLICK: %s", _admin_callback_data(update))
+    logger.info("ADMIN HANDLER ENTER: admin_user_list")
     query = update.callback_query
     users = await get_users()
     lines = [
@@ -389,6 +419,8 @@ async def admin_user_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @admin_only
 async def add_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("ADMIN BUTTON CLICK: %s", _admin_callback_data(update))
+    logger.info("ADMIN FSM ENTER: add_user_start")
     query = update.callback_query
     await query.message.edit_text(
         "Введіть Telegram ID користувача:",
@@ -432,6 +464,8 @@ async def add_user_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @admin_only
 async def change_role_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("ADMIN BUTTON CLICK: %s", _admin_callback_data(update))
+    logger.info("ADMIN FSM ENTER: change_role_start")
     query = update.callback_query
     await query.message.edit_text(
         "Введіть Telegram ID користувача:",
@@ -478,6 +512,8 @@ async def change_role_finish(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 @admin_only
 async def block_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("ADMIN BUTTON CLICK: %s", _admin_callback_data(update))
+    logger.info("ADMIN FSM ENTER: block_user_start")
     query = update.callback_query
     await query.message.edit_text(
         "Введіть Telegram ID користувача:",
@@ -512,6 +548,8 @@ async def block_user_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @admin_only
 async def change_name_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("ADMIN BUTTON CLICK: %s", _admin_callback_data(update))
+    logger.info("ADMIN FSM ENTER: change_name_start")
     query = update.callback_query
     await query.message.edit_text(
         "Введіть Telegram ID користувача:",
@@ -555,6 +593,7 @@ async def change_name_finish(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 @admin_only
 async def admin_tov_edit_handler(update, context):
+    logger.info("ADMIN HANDLER ENTER: admin_tov_edit_handler")
     companies = await get_companies()
     text = "<b>Оберіть ТОВ для редагування:</b>"
     if not companies:
@@ -574,6 +613,7 @@ async def admin_tov_edit_handler(update, context):
 
 @admin_only
 async def admin_tov_delete_handler(update, context):
+    logger.info("ADMIN HANDLER ENTER: admin_tov_delete_handler")
     companies = await get_companies()
     text = "<b>Оберіть ТОВ для видалення:</b>"
     if not companies:
@@ -593,12 +633,22 @@ async def admin_tov_delete_handler(update, context):
 
 @admin_only
 async def to_admin_panel(update, context):
+    logger.info("ADMIN HANDLER ENTER: to_admin_panel")
     from keyboards.menu import admin_panel_menu
     msg = getattr(update, 'message', None)
     if msg:
         await msg.reply_text("⚙️ Адмін-панель:", reply_markup=admin_panel_menu)
     else:
-        await update.callback_query.edit_message_text("⚙️ Адмін-панель:", reply_markup=admin_panel_menu)
+        query = update.callback_query
+        logger.info("ADMIN BUTTON CLICK: %s", _admin_callback_data(update))
+        await query.answer()
+        await query.message.reply_text("⚙️ Адмін-панель:", reply_markup=admin_panel_menu)
+
+
+@admin_only
+async def admin_unhandled_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.warning("ADMIN CALLBACK UNHANDLED: %s", _admin_callback_data(update))
+    await update.callback_query.answer("⚠️ Дія недоступна або застаріла", show_alert=False)
 
 
 # --- Команди адміністрування користувачів ---

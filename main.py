@@ -53,6 +53,7 @@ from handlers.menu import (
     change_name_conv,
     company_delete_prompt,
     company_delete_confirm,
+    admin_unhandled_callback_handler,
 )
 from handlers.menu import (
     cmd_list_users, cmd_add_user, cmd_promote, cmd_demote, cmd_block, cmd_unblock
@@ -398,6 +399,7 @@ application.add_handler(CallbackQueryHandler(company_delete_prompt, pattern=r"^c
 application.add_handler(CallbackQueryHandler(company_delete_confirm, pattern=r"^company_delete_confirm:\d+$"))
 application.add_handler(CallbackQueryHandler(admin_tov_list_handler, pattern=r"^company_list$"))
 application.add_handler(CallbackQueryHandler(admin_panel_handler, pattern=r"^admin_panel$"))
+application.add_handler(CallbackQueryHandler(admin_unhandled_callback_handler, pattern=r"^(admin_.*|user_.*|company_.*)$"))
 
 
 @app.post(WEBHOOK_PATH)
