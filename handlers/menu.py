@@ -49,6 +49,7 @@ from dialogs.agreement_template import (
     template_card_cb, template_toggle_cb, template_delete_cb, template_list_cb,
     template_vars_cb, template_vars_categories_cb
 )
+from dialogs.payroll import payroll_registration_start
 
 (
     ADD_USER_ID,
@@ -75,6 +76,8 @@ def admin_only(handler):
     return wrapper
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if await payroll_registration_start(update, context):
+        return
     tg_id = update.effective_user.id
     username = update.effective_user.username
     user = await get_user_by_tg_id(tg_id)
@@ -340,6 +343,7 @@ async def admin_users_handler(update, context):
         [InlineKeyboardButton("\U0001F4C4 Список користувачів", callback_data="user_list")],
         [InlineKeyboardButton("\u2795 Додати користувача", callback_data="user_add")],
         [InlineKeyboardButton("\U0001F501 Змінити роль", callback_data="user_role")],
+        [InlineKeyboardButton("🔗 Запросити працівника", callback_data="empinvite:new")],
         [InlineKeyboardButton("✏️ Змінити ПІБ", callback_data="user_fullname")],
         [InlineKeyboardButton("\U0001F6AB Блокування", callback_data="user_block")],
         [InlineKeyboardButton("↩️ Адмін-панель", callback_data="admin_panel")]

@@ -1411,12 +1411,31 @@ Employee = sqlalchemy.Table(
     "employees",
     metadata,
     sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("user_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("user.id"), nullable=True),
     sqlalchemy.Column("full_name", sqlalchemy.String(255), nullable=False),
+    sqlalchemy.Column("phone", sqlalchemy.String(32)),
     sqlalchemy.Column("telegram_user_id", sqlalchemy.BigInteger, unique=True),
     sqlalchemy.Column("role_code", sqlalchemy.String(64), sqlalchemy.ForeignKey("employee_roles.code"), nullable=False),
     sqlalchemy.Column("is_active", sqlalchemy.Boolean, default=True),
+    sqlalchemy.Column("registration_status", sqlalchemy.String(32), default="approved"),
     sqlalchemy.Column("booking_enabled", sqlalchemy.Boolean, default=True),
     sqlalchemy.Column("notes", sqlalchemy.Text),
+    sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
+    sqlalchemy.Column("approved_at", sqlalchemy.DateTime, nullable=True),
+    sqlalchemy.Column("approved_by", sqlalchemy.BigInteger, nullable=True),
+)
+
+EmployeeInvite = sqlalchemy.Table(
+    "employee_invites",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("invite_token", sqlalchemy.String(128), unique=True, nullable=False),
+    sqlalchemy.Column("created_by", sqlalchemy.BigInteger, nullable=False),
+    sqlalchemy.Column("role_preselected", sqlalchemy.String(64), nullable=True),
+    sqlalchemy.Column("expires_at", sqlalchemy.DateTime, nullable=True),
+    sqlalchemy.Column("is_used", sqlalchemy.Boolean, default=False),
+    sqlalchemy.Column("used_by_telegram_id", sqlalchemy.BigInteger, nullable=True),
+    sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
 )
 
 PayrollPeriod = sqlalchemy.Table(
@@ -1552,6 +1571,7 @@ EmployeeTask = sqlalchemy.Table(
 DEFAULT_EMPLOYEE_ROLES = [
     {"code": "tractor_driver", "name": "Тракторист / комбайнер"},
     {"code": "operations_worker", "name": "Помічник / робота з пайовиками / операційний працівник"},
+    {"code": "land_manager", "name": "Землевпорядник"},
 ]
 
 DEFAULT_KEF_RULES = [
@@ -1632,6 +1652,10 @@ async def add_employee(data: dict):
     return await database.execute(query)
 
 
+async def get_employee_by_user_id(user_id: int):
+    return await database.fetch_one(Employee.select().where(Employee.c.user_id == user_id))
+
+
 async def get_employee_by_tg_id(tg_id: int):
     return await database.fetch_one(Employee.select().where(Employee.c.telegram_user_id == tg_id))
 
@@ -1640,11 +1664,64 @@ async def get_employee(employee_id: int):
     return await database.fetch_one(Employee.select().where(Employee.c.id == employee_id))
 
 
+async def update_employee(employee_id: int, data: dict):
+    await database.execute(Employee.update().where(Employee.c.id == employee_id).values(**data))
+
+
+async def upsert_employee_by_telegram_id(tg_id: int, data: dict):
+    employee = await get_employee_by_tg_id(tg_id)
+    if employee:
+        await update_employee(employee["id"], data)
+        return employee["id"]
+    return await add_employee(data)
+
+
 async def get_employees(active_only: bool | None = None):
     query = Employee.select().order_by(Employee.c.full_name)
     if active_only is not None:
         query = query.where(Employee.c.is_active == active_only)
     return await database.fetch_all(query)
+
+
+async def get_pending_employees():
+    return await database.fetch_all(
+        Employee.select()
+        .where(Employee.c.registration_status == "pending")
+        .order_by(Employee.c.id.desc())
+    )
+
+
+async def create_employee_invite(
+    created_by: int,
+    role_preselected: str | None = None,
+    expires_at: datetime | None = None,
+):
+    import secrets
+
+    token = secrets.token_urlsafe(16)
+    invite_id = await database.execute(
+        EmployeeInvite.insert().values(
+            invite_token=token,
+            created_by=created_by,
+            role_preselected=role_preselected,
+            expires_at=expires_at,
+            is_used=False,
+            created_at=datetime.utcnow(),
+        )
+    )
+    return invite_id, token
+
+
+async def get_employee_invite(token: str):
+    return await database.fetch_one(EmployeeInvite.select().where(EmployeeInvite.c.invite_token == token))
+
+
+async def mark_invite_used(invite_id: int, tg_id: int):
+    await database.execute(
+        EmployeeInvite.update()
+        .where(EmployeeInvite.c.id == invite_id)
+        .values(is_used=True, used_by_telegram_id=tg_id)
+    )
 
 
 async def add_work_log_entry(data: dict):
@@ -1935,4 +2012,42 @@ with engine.begin() as conn:
     ))
     conn.execute(sqlalchemy.text(
         'ALTER TABLE "payment" ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT \'paid\''
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "employees" ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES "user"(id)'
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "employees" ADD COLUMN IF NOT EXISTS phone VARCHAR(32)'
+    ))
+    conn.execute(sqlalchemy.text(
+        "ALTER TABLE \"employees\" ADD COLUMN IF NOT EXISTS registration_status VARCHAR(32) DEFAULT 'approved'"
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "employees" ADD COLUMN IF NOT EXISTS created_at TIMESTAMP'
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "employees" ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP'
+    ))
+    conn.execute(sqlalchemy.text(
+        'ALTER TABLE "employees" ADD COLUMN IF NOT EXISTS approved_by BIGINT'
+    ))
+    conn.execute(sqlalchemy.text(
+        "UPDATE employees SET created_at = NOW() WHERE created_at IS NULL"
+    ))
+    conn.execute(sqlalchemy.text(
+        "UPDATE employees SET registration_status = 'approved' WHERE registration_status IS NULL"
+    ))
+    conn.execute(sqlalchemy.text(
+        """
+        CREATE TABLE IF NOT EXISTS employee_invites (
+            id SERIAL PRIMARY KEY,
+            invite_token VARCHAR(128) UNIQUE NOT NULL,
+            created_by BIGINT NOT NULL,
+            role_preselected VARCHAR(64),
+            expires_at TIMESTAMP NULL,
+            is_used BOOLEAN DEFAULT FALSE,
+            used_by_telegram_id BIGINT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """
     ))

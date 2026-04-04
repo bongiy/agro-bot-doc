@@ -225,6 +225,21 @@ payroll_personal_menu = ReplyKeyboardMarkup(
     resize_keyboard=True,
 )
 
+payroll_personal_menu_land_manager = ReplyKeyboardMarkup(
+    [
+        ["📍 Я прибув", "🏁 Завершив роботу"],
+        ["📅 Поточний місяць", "🎯 Мої задачі"],
+        ["🧾 Мої результати"],
+        ["◀️ Назад"],
+    ],
+    resize_keyboard=True,
+)
+
+payroll_pending_menu = ReplyKeyboardMarkup(
+    [["ℹ️ Статус заявки"], ["◀️ Назад"]],
+    resize_keyboard=True,
+)
+
 # --- Адмін-панель ---
 admin_panel_menu = ReplyKeyboardMarkup(
     [
