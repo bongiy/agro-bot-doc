@@ -243,6 +243,7 @@ payroll_pending_menu = ReplyKeyboardMarkup(
 # --- Адмін-панель ---
 admin_panel_menu = ReplyKeyboardMarkup(
     [
+        ["🏢 ТОВ-орендарі"],
         ["👤 Менеджмент користувачів"],
         ["🧾 Шаблони документів"],
         ["🗑️ Видалення об'єктів", "🔐 Права доступу"],
