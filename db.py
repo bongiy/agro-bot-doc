@@ -1398,6 +1398,389 @@ CRMEvent = sqlalchemy.Table(
     sqlalchemy.Column("reminder_status", JSONB, default=dict),
 )
 
+# === Payroll / Облік ЗП ===
+EmployeeRole = sqlalchemy.Table(
+    "employee_roles",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("code", sqlalchemy.String(64), unique=True, nullable=False),
+    sqlalchemy.Column("name", sqlalchemy.String(255), nullable=False),
+)
+
+Employee = sqlalchemy.Table(
+    "employees",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("full_name", sqlalchemy.String(255), nullable=False),
+    sqlalchemy.Column("telegram_user_id", sqlalchemy.BigInteger, unique=True),
+    sqlalchemy.Column("role_code", sqlalchemy.String(64), sqlalchemy.ForeignKey("employee_roles.code"), nullable=False),
+    sqlalchemy.Column("is_active", sqlalchemy.Boolean, default=True),
+    sqlalchemy.Column("booking_enabled", sqlalchemy.Boolean, default=True),
+    sqlalchemy.Column("notes", sqlalchemy.Text),
+)
+
+PayrollPeriod = sqlalchemy.Table(
+    "payroll_periods",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("year", sqlalchemy.Integer, nullable=False),
+    sqlalchemy.Column("month", sqlalchemy.Integer, nullable=False),
+    sqlalchemy.Column("status", sqlalchemy.String(32), default="open"),
+    sqlalchemy.UniqueConstraint("year", "month", name="uq_payroll_period"),
+)
+
+OperationsCatalog = sqlalchemy.Table(
+    "operations_catalog",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("role_code", sqlalchemy.String(64), sqlalchemy.ForeignKey("employee_roles.code"), nullable=False),
+    sqlalchemy.Column("name", sqlalchemy.String(255), nullable=False),
+    sqlalchemy.Column("operation_type", sqlalchemy.String(64), nullable=False),
+    sqlalchemy.Column("rate_value", sqlalchemy.Numeric(12, 2), nullable=False),
+    sqlalchemy.Column("unit_type", sqlalchemy.String(32), nullable=False),
+    sqlalchemy.Column("is_active", sqlalchemy.Boolean, default=True),
+)
+
+KefRule = sqlalchemy.Table(
+    "kef_rules",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("min_hours", sqlalchemy.Numeric(6, 2), nullable=False),
+    sqlalchemy.Column("max_hours", sqlalchemy.Numeric(6, 2), nullable=False),
+    sqlalchemy.Column("kef_value", sqlalchemy.Numeric(6, 2), nullable=False),
+    sqlalchemy.Column("role_code", sqlalchemy.String(64), nullable=True),
+)
+
+BookingSettings = sqlalchemy.Table(
+    "booking_settings",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("booking_month_cost", sqlalchemy.Numeric(12, 2), nullable=False, default=21000),
+    sqlalchemy.Column("kef_money_value", sqlalchemy.Numeric(12, 2), nullable=False, default=1000),
+    sqlalchemy.Column("booking_required_kef", sqlalchemy.Numeric(6, 2), nullable=False, default=21),
+)
+
+WorkLog = sqlalchemy.Table(
+    "work_log",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("employee_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("employees.id"), nullable=False),
+    sqlalchemy.Column("period_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("payroll_periods.id"), nullable=False),
+    sqlalchemy.Column("date", sqlalchemy.Date, nullable=False),
+    sqlalchemy.Column("work_type", sqlalchemy.String(64), nullable=False),
+    sqlalchemy.Column("operation_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("operations_catalog.id"), nullable=True),
+    sqlalchemy.Column("hours_worked", sqlalchemy.Numeric(6, 2)),
+    sqlalchemy.Column("hectares", sqlalchemy.Numeric(10, 2)),
+    sqlalchemy.Column("machine_hours", sqlalchemy.Numeric(10, 2)),
+    sqlalchemy.Column("units_count", sqlalchemy.Numeric(10, 2)),
+    sqlalchemy.Column("payers_count", sqlalchemy.Integer),
+    sqlalchemy.Column("late_minutes", sqlalchemy.Integer, default=0),
+    sqlalchemy.Column("late_compensated", sqlalchemy.Boolean, default=False),
+    sqlalchemy.Column("manual_amount", sqlalchemy.Numeric(12, 2)),
+    sqlalchemy.Column("include_in_kef_mode", sqlalchemy.String(32), default="time"),
+    sqlalchemy.Column("comment", sqlalchemy.Text),
+    sqlalchemy.Column("source_type", sqlalchemy.String(32), default="manual"),
+    sqlalchemy.Column("source_id", sqlalchemy.Integer, nullable=True),
+    sqlalchemy.Column("created_by", sqlalchemy.BigInteger, nullable=True),
+    sqlalchemy.Column("kef_amount", sqlalchemy.Numeric(8, 2), default=0),
+    sqlalchemy.Column("salary_amount", sqlalchemy.Numeric(12, 2), default=0),
+)
+
+EmployeeMonthSummary = sqlalchemy.Table(
+    "employee_month_summary",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("employee_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("employees.id"), nullable=False),
+    sqlalchemy.Column("period_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("payroll_periods.id"), nullable=False),
+    sqlalchemy.Column("total_kef", sqlalchemy.Numeric(10, 2), default=0),
+    sqlalchemy.Column("kef_from_prev_month", sqlalchemy.Numeric(10, 2), default=0),
+    sqlalchemy.Column("kef_used_for_booking", sqlalchemy.Numeric(10, 2), default=0),
+    sqlalchemy.Column("kef_over", sqlalchemy.Numeric(10, 2), default=0),
+    sqlalchemy.Column("kef_shortage", sqlalchemy.Numeric(10, 2), default=0),
+    sqlalchemy.Column("kef_over_decision", sqlalchemy.String(32), default="no_decision"),
+    sqlalchemy.Column("kef_over_paid_amount", sqlalchemy.Numeric(12, 2), default=0),
+    sqlalchemy.Column("kef_to_next_month", sqlalchemy.Numeric(10, 2), default=0),
+    sqlalchemy.Column("booking_covered_amount", sqlalchemy.Numeric(12, 2), default=0),
+    sqlalchemy.Column("booking_uncovered_amount", sqlalchemy.Numeric(12, 2), default=0),
+    sqlalchemy.Column("salary_amount", sqlalchemy.Numeric(12, 2), default=0),
+    sqlalchemy.Column("bonus_amount", sqlalchemy.Numeric(12, 2), default=0),
+    sqlalchemy.Column("fine_amount", sqlalchemy.Numeric(12, 2), default=0),
+    sqlalchemy.Column("total_to_pay", sqlalchemy.Numeric(12, 2), default=0),
+    sqlalchemy.UniqueConstraint("employee_id", "period_id", name="uq_employee_month_summary"),
+)
+
+KefCarryoverHistory = sqlalchemy.Table(
+    "kef_carryover_history",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("employee_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("employees.id"), nullable=False),
+    sqlalchemy.Column("from_period_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("payroll_periods.id"), nullable=False),
+    sqlalchemy.Column("to_period_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("payroll_periods.id"), nullable=False),
+    sqlalchemy.Column("kef_amount", sqlalchemy.Numeric(10, 2), nullable=False),
+    sqlalchemy.Column("decision_type", sqlalchemy.String(32), nullable=False),
+    sqlalchemy.Column("created_at", sqlalchemy.DateTime, default=datetime.utcnow),
+)
+
+AttendanceLog = sqlalchemy.Table(
+    "attendance_log",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("employee_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("employees.id"), nullable=False),
+    sqlalchemy.Column("date", sqlalchemy.Date, nullable=False),
+    sqlalchemy.Column("arrived_at", sqlalchemy.DateTime, nullable=True),
+    sqlalchemy.Column("arrived_latitude", sqlalchemy.Numeric(10, 7), nullable=True),
+    sqlalchemy.Column("arrived_longitude", sqlalchemy.Numeric(10, 7), nullable=True),
+    sqlalchemy.Column("finished_at", sqlalchemy.DateTime, nullable=True),
+    sqlalchemy.Column("finished_latitude", sqlalchemy.Numeric(10, 7), nullable=True),
+    sqlalchemy.Column("finished_longitude", sqlalchemy.Numeric(10, 7), nullable=True),
+    sqlalchemy.UniqueConstraint("employee_id", "date", name="uq_employee_attendance_date"),
+)
+
+EmployeeTask = sqlalchemy.Table(
+    "employee_tasks",
+    metadata,
+    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True),
+    sqlalchemy.Column("employee_id", sqlalchemy.Integer, sqlalchemy.ForeignKey("employees.id"), nullable=False),
+    sqlalchemy.Column("title", sqlalchemy.String(255), nullable=False),
+    sqlalchemy.Column("description", sqlalchemy.Text),
+    sqlalchemy.Column("due_date", sqlalchemy.Date),
+    sqlalchemy.Column("status", sqlalchemy.String(32), default="new"),
+    sqlalchemy.Column("created_by", sqlalchemy.BigInteger, nullable=True),
+)
+
+
+DEFAULT_EMPLOYEE_ROLES = [
+    {"code": "tractor_driver", "name": "Тракторист / комбайнер"},
+    {"code": "operations_worker", "name": "Помічник / робота з пайовиками / операційний працівник"},
+]
+
+DEFAULT_KEF_RULES = [
+    {"min_hours": 0, "max_hours": 6, "kef_value": 0.5, "role_code": None},
+    {"min_hours": 6, "max_hours": 12, "kef_value": 1, "role_code": None},
+    {"min_hours": 12, "max_hours": 18, "kef_value": 1.5, "role_code": None},
+    {"min_hours": 18, "max_hours": 24, "kef_value": 2, "role_code": None},
+]
+
+DEFAULT_OPERATIONS = [
+    ("tractor_driver", "Оранка 5 корпусів", "field_piecework", 250, "hectare"),
+    ("tractor_driver", "Дискова Amazone Catros", "field_piecework", 150, "hectare"),
+    ("tractor_driver", "Дискова мала 3 м", "field_piecework", 250, "hectare"),
+    ("tractor_driver", "Культиватор Lemken Kompaktor 4 м", "field_piecework", 200, "hectare"),
+    ("tractor_driver", "Сівалка Kinze / пропашна 8 рядків", "field_piecework", 200, "hectare"),
+    ("tractor_driver", "Сівалка зернова Pottinger", "field_piecework", 200, "hectare"),
+    ("tractor_driver", "Обприскувач", "field_piecework", 45, "hectare"),
+    ("tractor_driver", "Розкидання добрив", "field_piecework", 50, "hectare"),
+    ("tractor_driver", "Обмолот на комбайні", "field_piecework", 200, "hectare"),
+    ("tractor_driver", "Перегрузчик зерна", "field_piecework", 250, "hour"),
+    ("operations_worker", "Набір нової землі", "contract_area_years", 200, "hectare_year"),
+    ("operations_worker", "Пролонгація договорів", "contract_count", 200, "count"),
+    ("operations_worker", "Видача орендної плати", "payers_count", 0, "payer"),
+]
+
+
+async def ensure_payroll_defaults():
+    for role in DEFAULT_EMPLOYEE_ROLES:
+        exists = await database.fetch_one(EmployeeRole.select().where(EmployeeRole.c.code == role["code"]))
+        if not exists:
+            await database.execute(EmployeeRole.insert().values(**role))
+
+    booking = await database.fetch_one(BookingSettings.select().limit(1))
+    if not booking:
+        await database.execute(
+            BookingSettings.insert().values(
+                booking_month_cost=21000,
+                kef_money_value=1000,
+                booking_required_kef=21,
+            )
+        )
+
+    existing_rules = await database.fetch_all(KefRule.select())
+    if not existing_rules:
+        for rule in DEFAULT_KEF_RULES:
+            await database.execute(KefRule.insert().values(**rule))
+
+    for role_code, name, op_type, rate_value, unit_type in DEFAULT_OPERATIONS:
+        query = OperationsCatalog.select().where(
+            (OperationsCatalog.c.role_code == role_code)
+            & (OperationsCatalog.c.name == name)
+            & (OperationsCatalog.c.operation_type == op_type)
+        )
+        if not await database.fetch_one(query):
+            await database.execute(
+                OperationsCatalog.insert().values(
+                    role_code=role_code,
+                    name=name,
+                    operation_type=op_type,
+                    rate_value=rate_value,
+                    unit_type=unit_type,
+                    is_active=True,
+                )
+            )
+
+
+async def get_or_create_payroll_period(year: int, month: int):
+    query = PayrollPeriod.select().where((PayrollPeriod.c.year == year) & (PayrollPeriod.c.month == month))
+    period = await database.fetch_one(query)
+    if period:
+        return period
+    period_id = await database.execute(PayrollPeriod.insert().values(year=year, month=month, status="open"))
+    return await database.fetch_one(PayrollPeriod.select().where(PayrollPeriod.c.id == period_id))
+
+
+async def add_employee(data: dict):
+    query = Employee.insert().values(**data)
+    return await database.execute(query)
+
+
+async def get_employee_by_tg_id(tg_id: int):
+    return await database.fetch_one(Employee.select().where(Employee.c.telegram_user_id == tg_id))
+
+
+async def get_employee(employee_id: int):
+    return await database.fetch_one(Employee.select().where(Employee.c.id == employee_id))
+
+
+async def get_employees(active_only: bool | None = None):
+    query = Employee.select().order_by(Employee.c.full_name)
+    if active_only is not None:
+        query = query.where(Employee.c.is_active == active_only)
+    return await database.fetch_all(query)
+
+
+async def add_work_log_entry(data: dict):
+    query = WorkLog.insert().values(**data)
+    return await database.execute(query)
+
+
+async def update_work_log_entry(entry_id: int, data: dict):
+    query = WorkLog.update().where(WorkLog.c.id == entry_id).values(**data)
+    await database.execute(query)
+
+
+async def get_work_log_entries(period_id: int | None = None, employee_id: int | None = None):
+    query = WorkLog.select().order_by(WorkLog.c.date.desc(), WorkLog.c.id.desc())
+    if period_id:
+        query = query.where(WorkLog.c.period_id == period_id)
+    if employee_id:
+        query = query.where(WorkLog.c.employee_id == employee_id)
+    return await database.fetch_all(query)
+
+
+async def add_employee_task(data: dict):
+    return await database.execute(EmployeeTask.insert().values(**data))
+
+
+async def get_employee_tasks(employee_id: int, active_only: bool = False):
+    query = EmployeeTask.select().where(EmployeeTask.c.employee_id == employee_id).order_by(EmployeeTask.c.due_date.asc())
+    if active_only:
+        query = query.where(EmployeeTask.c.status.in_(["new", "in_progress"]))
+    return await database.fetch_all(query)
+
+
+async def upsert_attendance_arrival(employee_id: int, work_date: date, lat: float, lon: float):
+    existing = await database.fetch_one(
+        AttendanceLog.select().where(
+            (AttendanceLog.c.employee_id == employee_id) & (AttendanceLog.c.date == work_date)
+        )
+    )
+    now = datetime.utcnow()
+    if existing:
+        await database.execute(
+            AttendanceLog.update().where(AttendanceLog.c.id == existing["id"]).values(
+                arrived_at=now,
+                arrived_latitude=lat,
+                arrived_longitude=lon,
+            )
+        )
+        return existing["id"]
+    return await database.execute(
+        AttendanceLog.insert().values(
+            employee_id=employee_id,
+            date=work_date,
+            arrived_at=now,
+            arrived_latitude=lat,
+            arrived_longitude=lon,
+        )
+    )
+
+
+async def upsert_attendance_finish(employee_id: int, work_date: date, lat: float, lon: float):
+    existing = await database.fetch_one(
+        AttendanceLog.select().where(
+            (AttendanceLog.c.employee_id == employee_id) & (AttendanceLog.c.date == work_date)
+        )
+    )
+    now = datetime.utcnow()
+    if existing:
+        await database.execute(
+            AttendanceLog.update().where(AttendanceLog.c.id == existing["id"]).values(
+                finished_at=now,
+                finished_latitude=lat,
+                finished_longitude=lon,
+            )
+        )
+        return existing["id"]
+    return await database.execute(
+        AttendanceLog.insert().values(
+            employee_id=employee_id,
+            date=work_date,
+            finished_at=now,
+            finished_latitude=lat,
+            finished_longitude=lon,
+        )
+    )
+
+
+async def get_attendance_by_employee(employee_id: int, limit: int = 31):
+    query = (
+        AttendanceLog.select()
+        .where(AttendanceLog.c.employee_id == employee_id)
+        .order_by(AttendanceLog.c.date.desc())
+        .limit(limit)
+    )
+    return await database.fetch_all(query)
+
+
+async def get_contract_source_rows(year: int, month: int):
+    query = (
+        sqlalchemy.select(
+            Contract.c.id.label("source_id"),
+            Contract.c.date_signed.label("event_date"),
+            Contract.c.payer_id,
+            Contract.c.duration_years,
+            Contract.c.status,
+            Contract.c.registration_date,
+            sqlalchemy.func.coalesce(
+                sqlalchemy.select(sqlalchemy.func.sum(LandPlot.c.area))
+                .select_from(ContractLandPlot.join(LandPlot, LandPlot.c.id == ContractLandPlot.c.land_plot_id))
+                .where(ContractLandPlot.c.contract_id == Contract.c.id)
+                .scalar_subquery(),
+                0,
+            ).label("area"),
+        )
+        .where(sqlalchemy.extract("year", Contract.c.date_signed) == year)
+        .where(sqlalchemy.extract("month", Contract.c.date_signed) == month)
+        .order_by(Contract.c.date_signed.desc())
+    )
+    return await database.fetch_all(query)
+
+
+async def get_lease_payment_source_rows(year: int, month: int):
+    query = (
+        sqlalchemy.select(
+            Payment.c.id.label("source_id"),
+            Payment.c.payment_date.label("event_date"),
+            Payment.c.amount,
+            Payment.c.agreement_id,
+            Contract.c.payer_id,
+        )
+        .select_from(Payment.join(Contract, Contract.c.id == Payment.c.agreement_id))
+        .where(sqlalchemy.extract("year", Payment.c.payment_date) == year)
+        .where(sqlalchemy.extract("month", Payment.c.payment_date) == month)
+        .order_by(Payment.c.payment_date.desc())
+    )
+    return await database.fetch_all(query)
+
 async def add_user(
     tg_id: int,
     username: str | None = None,
@@ -1553,4 +1936,3 @@ with engine.begin() as conn:
     conn.execute(sqlalchemy.text(
         'ALTER TABLE "payment" ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT \'paid\''
     ))
-

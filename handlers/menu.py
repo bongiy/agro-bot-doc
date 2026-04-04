@@ -31,6 +31,7 @@ from keyboards.menu import (
     crm_reminders_menu,
     crm_inbox_menu,
     crm_potential_menu,
+    payroll_menu,
 )
 from db import (
     get_companies,
@@ -201,6 +202,10 @@ async def inbox_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         f"Меню «{title}»",
         reply_markup=crm_inbox_menu,
     )
+
+
+async def payroll_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Меню «💼 Облік ЗП»", reply_markup=payroll_menu)
 
 # --- АДМІНПАНЕЛЬ ---
 
