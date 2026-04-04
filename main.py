@@ -166,23 +166,40 @@ app = FastAPI()
 application = Application.builder().token(TOKEN).build()
 DEFAULT_ADMIN_IDS = [int(i) for i in os.getenv("ADMIN_IDS", "370806943").split(",") if i]
 is_initialized = False
+is_started = False
+
+
+async def ensure_application_started():
+    global is_initialized, is_started
+    if not is_initialized:
+        await application.initialize()
+        is_initialized = True
+    if not is_started:
+        await application.start()
+        is_started = True
 
 @app.on_event("startup")
 async def on_startup():
-    global is_initialized
+    global is_initialized, is_started
     await database.connect()
     for admin_id in DEFAULT_ADMIN_IDS:
         await ensure_admin(admin_id)
     await ensure_payroll_defaults()
-    if not is_initialized:
-        await application.initialize()
+    if not is_initialized or not is_started:
+        await ensure_application_started()
         await application.bot.set_webhook(WEBHOOK_URL)
         start_reminder_tasks(application)
         is_initialized = True
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    global is_started
     await stop_reminder_tasks()
+    if is_started:
+        await application.stop()
+        is_started = False
+    if is_initialized:
+        await application.shutdown()
     await database.disconnect()
 
 # === Основні handlers ===
@@ -374,10 +391,9 @@ application.add_handler(CallbackQueryHandler(admin_panel_handler, pattern=r"^adm
 
 @app.post(WEBHOOK_PATH)
 async def telegram_webhook(request: Request):
-    global is_initialized
-    if not is_initialized:
-        await application.initialize()
-        is_initialized = True
+    global is_initialized, is_started
+    if not is_initialized or not is_started:
+        await ensure_application_started()
     data = await request.json()
     update = Update.de_json(data, application.bot)
     await application.process_update(update)

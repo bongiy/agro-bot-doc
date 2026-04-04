@@ -129,10 +129,15 @@ def _seconds_until(hour: int, minute: int) -> float:
 a_sync_tasks = []
 
 def start_reminder_tasks(app: Application):
-    loop = asyncio.get_event_loop()
-    a_sync_tasks.append(loop.create_task(_daily_loop(app)))
-    a_sync_tasks.append(loop.create_task(_one_hour_loop(app)))
-    a_sync_tasks.append(loop.create_task(_now_loop(app)))
+    if app.running:
+        a_sync_tasks.append(app.create_task(_daily_loop(app)))
+        a_sync_tasks.append(app.create_task(_one_hour_loop(app)))
+        a_sync_tasks.append(app.create_task(_now_loop(app)))
+        return
+
+    a_sync_tasks.append(asyncio.create_task(_daily_loop(app)))
+    a_sync_tasks.append(asyncio.create_task(_one_hour_loop(app)))
+    a_sync_tasks.append(asyncio.create_task(_now_loop(app)))
 
 
 async def stop_reminder_tasks():
@@ -159,4 +164,3 @@ async def _now_loop(app: Application):
     while True:
         await check_now(app)
         await asyncio.sleep(5 * 60)
-
