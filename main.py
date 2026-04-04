@@ -124,9 +124,16 @@ from dialogs.payroll import (
     payroll_finished_handler,
     payroll_location_handler,
     payroll_my_month_handler,
+    payroll_my_results_handler,
+    payroll_status_handler,
     payroll_add_employee_cmd,
     payroll_recalc_month_cmd,
     payroll_add_log_cmd,
+    payroll_registration_text_handler,
+    payroll_invite_create_handler,
+    payroll_invite_create_role_handler,
+    payroll_employee_approve_handler,
+    payroll_employee_reject_handler,
 )
 
 from dialogs.admin_tov import admin_tov_add_conv
@@ -230,8 +237,15 @@ application.add_handler(MessageHandler(filters.Regex("^👨‍💼 Особис�
 application.add_handler(MessageHandler(filters.Regex("^📍 Я прибув$"), payroll_arrived_handler))
 application.add_handler(MessageHandler(filters.Regex("^🏁 Завершив роботу$"), payroll_finished_handler))
 application.add_handler(MessageHandler(filters.Regex("^📅 Поточний місяць$"), payroll_my_month_handler))
+application.add_handler(MessageHandler(filters.Regex("^🧾 Мої результати$"), payroll_my_results_handler))
+application.add_handler(MessageHandler(filters.Regex("^ℹ️ Статус заявки$"), payroll_status_handler))
 application.add_handler(MessageHandler(filters.LOCATION, payroll_location_handler))
 application.add_handler(MessageHandler(filters.Regex("^🎯 Мої задачі$"), payroll_tasks_handler))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, payroll_registration_text_handler, block=False))
+application.add_handler(CallbackQueryHandler(payroll_invite_create_handler, pattern=r"^empinvite:new$"))
+application.add_handler(CallbackQueryHandler(payroll_invite_create_role_handler, pattern=r"^empinvite:create:"))
+application.add_handler(CallbackQueryHandler(payroll_employee_approve_handler, pattern=r"^empreg:approve:\\d+$"))
+application.add_handler(CallbackQueryHandler(payroll_employee_reject_handler, pattern=r"^empreg:reject:\\d+$"))
 
 # --- ПАЙОВИКИ: Підключаємо діалоги до підменю пайовиків
 application.add_handler(add_payer_conv)
