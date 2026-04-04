@@ -162,6 +162,17 @@ TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
+
+def build_webhook_url() -> str:
+    webhook_url = (WEBHOOK_URL or "").strip()
+    if not webhook_url:
+        raise RuntimeError("WEBHOOK_URL is not configured")
+
+    normalized = webhook_url.rstrip("/")
+    if normalized.endswith(WEBHOOK_PATH):
+        return normalized
+    return f"{normalized}{WEBHOOK_PATH}"
+
 app = FastAPI()
 application = Application.builder().token(TOKEN).build()
 DEFAULT_ADMIN_IDS = [int(i) for i in os.getenv("ADMIN_IDS", "370806943").split(",") if i]
@@ -187,7 +198,7 @@ async def on_startup():
     await ensure_payroll_defaults()
     if not is_initialized or not is_started:
         await ensure_application_started()
-        await application.bot.set_webhook(WEBHOOK_URL)
+        await application.bot.set_webhook(build_webhook_url())
         start_reminder_tasks(application)
         is_initialized = True
 
