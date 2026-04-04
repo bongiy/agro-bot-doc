@@ -34,6 +34,7 @@ from handlers.menu import (
     crm_events_handler,
     crm_reminders_handler,
     inbox_menu_handler,
+    payroll_menu_handler,
     admin_panel_handler,
     admin_tov_handler,
     admin_templates_handler,
@@ -110,6 +111,23 @@ from dialogs.edit_land_owner import edit_land_owner_conv
 from dialogs.add_docs_fsm import add_docs_conv, send_pdf, delete_pdf, confirm_delete_doc, cancel_delete_doc  # тільки FTP!
 from dialogs.post_creation import skip_add_docs
 from db import database, ensure_admin
+from db import ensure_payroll_defaults
+from dialogs.payroll import (
+    payroll_employees_handler,
+    payroll_worklog_handler,
+    payroll_accruals_handler,
+    payroll_rates_handler,
+    payroll_booking_handler,
+    payroll_tasks_handler,
+    payroll_personal_handler,
+    payroll_arrived_handler,
+    payroll_finished_handler,
+    payroll_location_handler,
+    payroll_my_month_handler,
+    payroll_add_employee_cmd,
+    payroll_recalc_month_cmd,
+    payroll_add_log_cmd,
+)
 
 from dialogs.admin_tov import admin_tov_add_conv
 from dialogs.edit_company import edit_company_conv
@@ -148,6 +166,7 @@ async def on_startup():
     await database.connect()
     for admin_id in DEFAULT_ADMIN_IDS:
         await ensure_admin(admin_id)
+    await ensure_payroll_defaults()
     if not is_initialized:
         await application.initialize()
         await application.bot.set_webhook(WEBHOOK_URL)
@@ -173,6 +192,7 @@ application.add_handler(MessageHandler(filters.Regex("^◀️ Назад$"), to_
 application.add_handler(MessageHandler(filters.Regex("^🌐 e-Землевпорядник$"), ezem_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^🧩 CRM$"), crm_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^📊 Звіти$"), reports_menu_handler))
+application.add_handler(MessageHandler(filters.Regex("^💼 Облік ЗП$"), payroll_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^🚛 Логістика$"), logistics_menu_handler))
 application.add_handler(MessageHandler(filters.Regex("^🤖 Розпізнавання документів$"), doc_recognition_handler))
 application.add_handler(MessageHandler(filters.Regex("^📁 Пайовики$"), payers_menu_handler))
@@ -195,6 +215,23 @@ application.add_handler(MessageHandler(filters.Regex("^📋 Журнал рей�
 application.add_handler(MessageHandler(filters.Regex("^🛻 Техніка$"), logistics_vehicles_handler))
 application.add_handler(MessageHandler(filters.Regex("^🧾 Контрагенти$"), logistics_counterparties_handler))
 application.add_handler(MessageHandler(filters.Regex("^📄 Шаблони ТТН$"), logistics_ttn_handler))
+
+# --- Payroll ---
+application.add_handler(CommandHandler("payroll_add_employee", payroll_add_employee_cmd))
+application.add_handler(CommandHandler("payroll_recalc_month", payroll_recalc_month_cmd))
+application.add_handler(CommandHandler("payroll_add_log", payroll_add_log_cmd))
+application.add_handler(MessageHandler(filters.Regex("^👤 Працівники$"), payroll_employees_handler))
+application.add_handler(MessageHandler(filters.Regex("^📘 Журнал робіт$"), payroll_worklog_handler))
+application.add_handler(MessageHandler(filters.Regex("^🧮 Нарахування$"), payroll_accruals_handler))
+application.add_handler(MessageHandler(filters.Regex("^⚙️ Операції і ставки$"), payroll_rates_handler))
+application.add_handler(MessageHandler(filters.Regex("^🪖 Бронювання / КЕФ$"), payroll_booking_handler))
+application.add_handler(MessageHandler(filters.Regex("^🎯 Задачі$"), payroll_tasks_handler))
+application.add_handler(MessageHandler(filters.Regex("^👨‍💼 Особистий кабінет$"), payroll_personal_handler))
+application.add_handler(MessageHandler(filters.Regex("^📍 Я прибув$"), payroll_arrived_handler))
+application.add_handler(MessageHandler(filters.Regex("^🏁 Завершив роботу$"), payroll_finished_handler))
+application.add_handler(MessageHandler(filters.Regex("^📅 Поточний місяць$"), payroll_my_month_handler))
+application.add_handler(MessageHandler(filters.LOCATION, payroll_location_handler))
+application.add_handler(MessageHandler(filters.Regex("^🎯 Мої задачі$"), payroll_tasks_handler))
 
 # --- ПАЙОВИКИ: Підключаємо діалоги до підменю пайовиків
 application.add_handler(add_payer_conv)
